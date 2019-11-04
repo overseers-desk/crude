@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pyatdw"
+version = "0.1.0"
+description = "Python CLI wrapper for the ATDW (Australian Tourism Data Warehouse) REST API"
+requires-python = ">=3.9"
+dependencies = [
+    "typer[all]>=0.9",
+    "requests>=2.31",
+    "tomli>=2.0; python_version < '3.11'",
+    "tomli_w>=1.0",
+]
+
+[project.scripts]
+atdw = "pyatdw.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
