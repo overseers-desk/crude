@@ -14,6 +14,32 @@ cp config.example.toml config.toml
 
 Edit `config.toml` with your username and password. The file is gitignored.
 
+### Claude Code skill (added 2026-03-26)
+
+If you use [Claude Code](https://claude.ai/code) and want Claude to invoke pyatdw commands without being told how, create a skill file at `~/.claude/skills/pyatdw/SKILL.md`:
+
+```
+---
+name: pyatdw
+description: Query and edit ATDW tourism listings via the pyatdw CLI. Use when the user asks about listings, searches, or edits on the Australian Tourism Data Warehouse.
+allowed-tools: Bash
+---
+
+pyatdw must be run from the `src/` directory of the repository:
+
+    cd /path/to/pyatdw/src && python3 -m pyatdw <command>
+
+Commands: login, listings, listing <id>, search [--type] [--city] [--state] [--name] [--limit], edit <id> <field> <value>.
+
+Add --json to any read command for machine-readable output.
+
+Configuration lives in config.toml one level above src/. Credentials are set there; the token is cached automatically and renewed when it expires.
+
+Consult docs/manual.md for the full flag reference and docs/APIs.md for the underlying API.
+```
+
+Replace `/path/to/pyatdw` with the actual path on your machine. The skill is then available to all projects; Claude will load it automatically when the conversation touches ATDW or this tool.
+
 ## Dependencies
 
 Python 3.8+.
