@@ -150,10 +150,13 @@ def listing(
     client = _make_client(config)
 
     try:
-        item = client.get_listing(listing_id)
-    except Exception as e:
-        typer.echo(f"Error fetching listing {listing_id}: {e}", err=True)
-        raise typer.Exit(1)
+        item = client.get_own_listing(listing_id)
+    except Exception:
+        try:
+            item = client.get_published_listing(listing_id)
+        except Exception as e:
+            typer.echo(f"Error fetching listing {listing_id}: {e}", err=True)
+            raise typer.Exit(1)
 
     if output_json:
         typer.echo(json.dumps(item, indent=2))

@@ -111,14 +111,27 @@ class ATDWClient:
             return result
         return result
 
-    def get_listing(self, listing_id: str) -> dict:
-        """Return a single listing with common relations included."""
+    def get_own_listing(self, listing_id: str) -> dict:
+        """Return an owned listing with relations (admin view, including drafts).
+
+        Only works for listings belonging to the authenticated organisation.
+        For external listings, use get_published_listing().
+        """
         params = {
             "filter[include][0]": "stoOrganisation",
             "filter[include][1]": "contributingOrganisation",
             "filter[include][2]": "publishedListing",
         }
         return self._get(f"/listings/{listing_id}", params=params)
+
+    def get_published_listing(self, listing_id: str) -> dict:
+        """Return any listing's published data (read-only, any authenticated user).
+
+        Works for both owned and external listings. Returns name, description,
+        productContacts, socialExternalReferences, physicalAddress, etc.
+        Does not return draft content or admin-only fields.
+        """
+        return self._get(f"/listings/{listing_id}/publishedListing")
 
     def patch_listing(self, listing_id: str, fields: dict) -> dict:
         """PATCH a listing with only the changed fields."""

@@ -58,9 +58,11 @@ python3 -m pyatdw listings --json
 
 ### `atdw listing ID [--json]`
 
-Shows key fields of a single listing in a two-column table (Field / Value). Includes relations: `stoOrganisation`, `contributingOrganisation`, `publishedListing`.
+Shows key fields of a single listing in a two-column table (Field / Value). Works for both owned listings and external listings (other operators).
 
-In addition to the core listing fields, the command also fetches and displays:
+For owned listings, uses the admin endpoint (`GET /api/listings/:id`) which includes draft content, relations, and admin fields. For external listings, automatically uses the published endpoint (`GET /api/listings/:id/publishedListing`) which returns name, description, contacts, and address but not admin-only fields.
+
+In addition to the core listing fields, the command also fetches and displays (owned listings only):
 
 - **Media Count** — number of images attached to the listing
 - **Services Count** — number of sub-services
@@ -72,6 +74,11 @@ python3 -m pyatdw listing 6568273cc9320b7770116404 --json
 ```
 
 With `--json`, only the main listing object is printed (sub-resource counts are not included, as they require separate API calls).
+
+**Python client:** Two methods with distinct semantics:
+
+- `client.get_own_listing(id)` — admin view of an owned listing (401 for external listings)
+- `client.get_published_listing(id)` — read-only view of any published listing
 
 ### `atdw edit ID FIELD VALUE`
 
