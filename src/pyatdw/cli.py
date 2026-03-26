@@ -45,8 +45,8 @@ def _get_token(config: dict) -> str:
         token = TOKEN_PATH.read_text().strip()
         if token:
             return token
-    username = config.get("auth", {}).get("username")
-    password = config.get("auth", {}).get("password")
+    username = config.get("atdw", {}).get("username")
+    password = config.get("atdw", {}).get("password")
     if username and password:
         from pyatdw.auth import atdw_login
         typer.echo("No cached token found — logging in automatically...", err=True)
@@ -68,8 +68,8 @@ def _make_client(config: dict):
     from pyatdw.client import ATDWClient
     token = _get_token(config)
     credentials = {
-        "username": config.get("auth", {}).get("username"),
-        "password": config.get("auth", {}).get("password"),
+        "username": config.get("atdw", {}).get("username"),
+        "password": config.get("atdw", {}).get("password"),
     }
     return ATDWClient(token, credentials=credentials)
 
@@ -82,11 +82,11 @@ def login():
     config_path = _find_config()
     config = _read_config(config_path)
 
-    auth = config.get("auth", {})
+    auth = config.get("atdw", {})
     username = auth.get("username")
     password = auth.get("password")
     if not username or not password:
-        typer.echo("Error: config.toml must contain [auth] username and password.", err=True)
+        typer.echo("Error: config.toml must contain [atdw] username and password.", err=True)
         raise typer.Exit(1)
 
     typer.echo(f"Logging in as {username} ...")

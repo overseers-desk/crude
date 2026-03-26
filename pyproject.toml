@@ -16,6 +16,7 @@ dependencies = [
 
 [project.scripts]
 atdw = "pyatdw.cli:app"
+skal = "pyskal.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]
