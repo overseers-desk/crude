@@ -1,0 +1,9 @@
+crude (1.0.0) unstable; urgency=medium
+
+  * Initial release. Unified command-line clients for ATDW, Skal, and Rezdy
+    under a crude-<site> <resource> <verb> grammar.
+  * Installs three binaries: crude-atdw (ATDW tourism listings), crude-skal
+    (Skal Australia member portal), and crude-rezdy (Rezdy products,
+    availability, and bookings).
+
+ -- Weiwu Zhang <a@colourful.land>  Mon, 25 May 2026 18:13:37 +0200

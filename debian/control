@@ -1,0 +1,31 @@
+Source: crude
+Section: utils
+Priority: optional
+Maintainer: Weiwu Zhang <a@colourful.land>
+Build-Depends:
+ debhelper-compat (= 13),
+ dh-python,
+ pybuild-plugin-pyproject,
+ python3-all,
+ python3-setuptools,
+Standards-Version: 4.6.2
+Homepage: https://github.com/SmartLayer/crude
+Rules-Requires-Root: no
+
+Package: crude
+Architecture: all
+Depends:
+ ${python3:Depends},
+ ${misc:Depends},
+ python3 (>= 3.9),
+ python3-typer,
+ python3-requests,
+ python3-tomli-w,
+Description: CRUD-style command-line clients for sites without a public API
+ crude provides command-line clients for reading and editing your own
+ records on sites that lack a usable public API, under one predictable
+ <site> <resource> <verb> grammar.
+ .
+ Three sites ship in this release, each as its own binary: crude-atdw
+ (ATDW tourism listings), crude-skal (Skal Australia member portal), and
+ crude-rezdy (Rezdy products, availability, and bookings).

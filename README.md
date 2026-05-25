@@ -26,11 +26,22 @@ Each site reads its own section (`[atdw]`, `[skal]`) from the one file. The CLIs
 
 ### Install
 
+Homebrew (macOS or Linux):
+
+```
+brew tap SmartLayer/crude https://github.com/SmartLayer/crude
+brew install crude
+```
+
+Debian or Ubuntu: download `crude_1.0.0_all.deb` from the releases page and install it with `sudo apt install ./crude_1.0.0_all.deb`.
+
+From source with pip:
+
 ```
 pip install -e .
 ```
 
-This puts `crude-atdw` and `crude-skal` on your PATH. (During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` and `python3 -m crude_skal <command>`.)
+Any of these put `crude-atdw`, `crude-skal`, and `crude-rezdy` on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`).
 
 ### Claude Code skills
 

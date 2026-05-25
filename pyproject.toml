@@ -4,9 +4,18 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crude"
-version = "0.1.0"
-description = "CRUD-Engine: a lightweight CLI for read/write access to one's own data on sites without a usable public API (ATDW, Skål)"
+version = "1.0.0"
+description = "CRUD-Engine: a lightweight CLI for read/write access to one's own data on sites without a usable public API (ATDW, Skål, Rezdy)"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
 dependencies = [
     "typer[all]>=0.9",
     "requests>=2.31",
@@ -18,6 +27,10 @@ dependencies = [
 crude-atdw = "crude_atdw.cli:app"
 crude-skal = "crude_skal.cli:app"
 crude-rezdy = "crude_rezdy.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/SmartLayer/crude"
+Issues = "https://github.com/SmartLayer/crude/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
