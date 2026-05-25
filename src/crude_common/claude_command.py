@@ -1,10 +1,15 @@
-"""Install and freshness-check the crude skill for Claude Code.
+"""Install and freshness-check the crude command for Claude Code.
 
-One skill, covering every site crude supports, is written to
-``~/.claude/skills/crude/SKILL.md`` with a ``version:`` stamp in its
-frontmatter. Each site CLI registers an ``install-claude-command`` subcommand
-that writes it, and a startup nudge that points the agent at that subcommand
-when the skill is missing or its stamp differs from the running tool.
+This installs a Claude Code *command* (``~/.claude/commands/crude.md``), not a
+skill. A user's skills directory is frequently a version-controlled, curated
+collection, so a CLI writing into it would pollute that repository; the
+commands directory is the conventional home for a tool to register itself.
+One command, covering every site crude supports, is written with a ``version:``
+stamp in its frontmatter. Each site CLI registers an ``install-claude-command``
+subcommand that writes it, and a startup nudge that points the agent at that
+subcommand when the command is missing or its stamp differs from the running
+tool. A same-named skill, if the user has one, supersedes the command and
+silences the nudge.
 """
 
 from __future__ import annotations
@@ -12,12 +17,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-SKILL_NAME = "crude"
+COMMAND_NAME = "crude"
 
-# The skill body. The description lists the sites crude supports and stays
+# The command body. The description lists the sites crude supports and stays
 # short, so an agent reaches for it when those sites come up; how to drive the
 # CLIs is the body below, not the description. render() splices the version in.
-SKILL = """---
+COMMAND = """---
 name: crude
 description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), and rezdy.com (products, availability, bookings).
 allowed-tools: Bash
@@ -65,24 +70,25 @@ For one day's bookings, set --from and --to to that day's bounds. Availability t
 """
 
 
+def command_file() -> Path:
+    return Path.home() / ".claude" / "commands" / f"{COMMAND_NAME}.md"
+
+
 def skill_dir() -> Path:
-    return Path.home() / ".claude" / "skills" / SKILL_NAME
-
-
-def skill_file() -> Path:
-    return skill_dir() / "SKILL.md"
+    """A skill of the same name, if the user keeps one, supersedes the command."""
+    return Path.home() / ".claude" / "skills" / COMMAND_NAME
 
 
 def render(version: str) -> str:
-    """Return the skill text with a version stamp as the first frontmatter field."""
-    if SKILL.startswith("---\n"):
-        return "---\nversion: " + version + "\n" + SKILL[4:]
-    return SKILL
+    """Return the command text with a version stamp as the first frontmatter field."""
+    if COMMAND.startswith("---\n"):
+        return "---\nversion: " + version + "\n" + COMMAND[4:]
+    return COMMAND
 
 
 def installed_version() -> Optional[str]:
-    """Return the version stamped in the installed skill, or None."""
-    f = skill_file()
+    """Return the version stamped in the installed command, or None."""
+    f = command_file()
     if not f.exists():
         return None
     for line in f.read_text().splitlines():
@@ -92,16 +98,19 @@ def installed_version() -> Optional[str]:
 
 
 def registration_status(version: str, prog: str) -> Optional[str]:
-    """Return an agent-directed nudge if the skill is missing or stale, else None.
+    """Return an agent-directed nudge if the command is missing or stale, else None.
 
-    Silent when Claude Code is not installed (no ~/.claude). Staleness is an
-    exact stamp mismatch against the running tool's version.
+    Silent when Claude Code is not installed (no ~/.claude) or when a same-named
+    skill supersedes the command. Staleness is an exact stamp mismatch against
+    the running tool's version.
     """
     if not (Path.home() / ".claude").exists():
         return None
-    if not skill_file().exists():
+    if skill_dir().exists():
+        return None
+    if not command_file().exists():
         return (
-            "crude skill not installed in Claude Code. "
+            "crude command not installed in Claude Code. "
             f"Run `{prog} install-claude-command` to install it, "
             "then continue with the user's request."
         )
@@ -109,7 +118,7 @@ def registration_status(version: str, prog: str) -> Optional[str]:
     if installed != version:
         label = installed if installed else "unknown"
         return (
-            f"crude skill is at version {label}, tool is {version}. "
+            f"crude command is at version {label}, tool is {version}. "
             f"Run `{prog} install-claude-command` to update it, "
             "then continue with the user's request."
         )
@@ -117,12 +126,11 @@ def registration_status(version: str, prog: str) -> Optional[str]:
 
 
 def run_install(version: str, prog: str) -> None:
-    """Write (or update) the skill, prompting before replacing a different version."""
+    """Write (or update) the command, prompting before replacing a different version."""
     import typer
 
-    d = skill_dir()
-    f = skill_file()
-    d.mkdir(parents=True, exist_ok=True)
+    f = command_file()
+    f.parent.mkdir(parents=True, exist_ok=True)
 
     if f.exists():
         installed = installed_version()
@@ -130,7 +138,7 @@ def run_install(version: str, prog: str) -> None:
         if installed == version:
             typer.echo(f"Already at {version}: {f}")
             return
-        if not typer.confirm(f"crude skill already installed ({label}). Replace with {version}?"):
+        if not typer.confirm(f"crude command already installed ({label}). Replace with {version}?"):
             typer.echo("Aborted.")
             raise typer.Exit(1)
 

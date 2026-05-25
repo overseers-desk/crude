@@ -43,9 +43,9 @@ pip install -e .
 
 Any of these put `crude-atdw`, `crude-skal`, and `crude-rezdy` on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`).
 
-### Claude Code skill
+### Claude Code command
 
-Run `crude-atdw install-claude-command` (or `crude-skal` / `crude-rezdy`) to install a single Claude Code skill at `~/.claude/skills/crude/SKILL.md` covering all three sites. The CLIs print a one-line reminder to stderr when that skill is missing or out of date, so an agent knows to (re)install it.
+Run `crude-atdw install-claude-command` (or `crude-skal` / `crude-rezdy`) to install a Claude Code command at `~/.claude/commands/crude.md` covering all three sites. The CLIs print a one-line reminder to stderr when that command is missing or out of date, so an agent knows to (re)install it.
 
 ## Dependencies
 
