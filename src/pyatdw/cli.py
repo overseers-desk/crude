@@ -236,8 +236,17 @@ def edit(
     config = _read_config(config_path)
     client = _make_client(config)
 
+    # If value looks like JSON (array or object), parse it so the API
+    # receives the correct type instead of a raw string.
+    parsed_value: object = value
+    if value.lstrip().startswith(("[", "{")):
+        try:
+            parsed_value = json.loads(value)
+        except json.JSONDecodeError:
+            pass  # fall through — send as string
+
     try:
-        result = client.patch_listing(listing_id, {field: value})
+        result = client.patch_listing(listing_id, {field: parsed_value})
     except Exception as e:
         typer.echo(f"Error patching listing {listing_id}: {e}", err=True)
         raise typer.Exit(1)
