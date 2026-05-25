@@ -103,6 +103,13 @@ def _fmt_m2o(value) -> str:
     return str(value)
 
 
+def _s(value) -> str:
+    """Coerce a field value to str, treating None/False as empty."""
+    if value is None or value is False:
+        return ""
+    return str(value)
+
+
 @app.command()
 def login():
     """Authenticate using credentials from config.toml and cache the session."""
@@ -166,12 +173,12 @@ def members(
 
     for item in items:
         table.add_row(
-            str(item.get("id", "")),
-            item.get("name", ""),
-            item.get("work_email", "") or "",
-            item.get("work_city", "") or "",
+            _s(item.get("id")),
+            _s(item.get("name")),
+            _s(item.get("work_email")),
+            _s(item.get("work_city")),
             _fmt_m2o(item.get("entity_id")),
-            item.get("state", ""),
+            _s(item.get("state")),
         )
 
     console.print(table)
@@ -294,12 +301,12 @@ def search(
 
     for item in items:
         table.add_row(
-            str(item.get("id", "")),
-            item.get("name", ""),
-            item.get("work_email", "") or "",
-            item.get("work_city", "") or "",
+            _s(item.get("id")),
+            _s(item.get("name")),
+            _s(item.get("work_email")),
+            _s(item.get("work_city")),
             _fmt_m2o(item.get("entity_id")),
-            item.get("state", ""),
+            _s(item.get("state")),
         )
 
     console.print(table)
@@ -332,9 +339,9 @@ def clubs(
 
     for item in items:
         table.add_row(
-            str(item.get("id", "")),
-            item.get("name", ""),
-            str(item.get("member_count", "")),
+            _s(item.get("id")),
+            _s(item.get("name")),
+            _s(item.get("member_count")),
         )
 
     console.print(table)
@@ -370,11 +377,11 @@ def events(
 
     for item in items:
         table.add_row(
-            str(item.get("id", "")),
-            item.get("name", ""),
-            str(item.get("date_begin", "") or ""),
-            str(item.get("location", "") or ""),
-            item.get("state", ""),
+            _s(item.get("id")),
+            _s(item.get("name")),
+            _s(item.get("date_begin")),
+            _s(item.get("location")),
+            _s(item.get("state")),
         )
 
     console.print(table)

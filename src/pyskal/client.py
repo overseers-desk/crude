@@ -61,6 +61,16 @@ class SkalClient:
             raise RuntimeError(f"Odoo error {err.get('code')}: {err.get('message')}")
         return data.get("result")
 
+    @staticmethod
+    def _normalise_record(record: dict) -> dict:
+        """Replace Odoo's ``False`` sentinels with ``None``.
+
+        Odoo returns ``false`` (Python ``False``) for empty many2one fields
+        and unset string/date fields instead of ``null``.  Normalising here
+        keeps all downstream code (JSON output, table rendering) clean.
+        """
+        return {k: (None if v is False else v) for k, v in record.items()}
+
     def _search_read(
         self,
         model: str,
@@ -76,7 +86,9 @@ class SkalClient:
             args=[domain],
             kwargs={"fields": fields, "limit": limit, "offset": offset, "order": order},
         )
-        return result if result is not None else []
+        if not result:
+            return []
+        return [self._normalise_record(r) for r in result]
 
     def verify_session(self) -> bool:
         """Return True if the current session_id is authenticated."""
