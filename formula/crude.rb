@@ -12,6 +12,14 @@ class Crude < Formula
 
   depends_on "python@3.13"
 
+  # On recent macOS, Homebrew's bottled python@3.13 pyexpat fails to load the
+  # system libexpat (missing _XML_SetAllocTrackerActivationThreshold), which
+  # breaks pip during venv setup. Pull in Homebrew's expat and point the
+  # runtime at it.
+  on_macos do
+    depends_on "expat"
+  end
+
   resource "annotated-doc" do
     url "https://files.pythonhosted.org/packages/57/ba/046ceea27344560984e26a590f90bc7f4a75b06701f653222458922b558c/annotated_doc-0.0.4.tar.gz"
     sha256 "fbcda96e87e9c92ad167c2e53839e57503ecfda18804ea28102353485033faa4"
@@ -83,7 +91,22 @@ class Crude < Formula
   end
 
   def install
+    if OS.mac?
+      ENV.prepend "DYLD_LIBRARY_PATH", Formula["expat"].opt_lib, ":"
+    end
+
     virtualenv_install_with_resources
+
+    if OS.mac?
+      # Wrap each binary so the bottled python's pyexpat resolves against
+      # Homebrew's expat instead of the system one.
+      %w[crude-atdw crude-skal crude-rezdy].each do |exe|
+        target = libexec/"bin/#{exe}"
+        (bin/exe).unlink if (bin/exe).exist?
+        (bin/exe).write_env_script target,
+          DYLD_LIBRARY_PATH: "#{Formula["expat"].opt_lib}:$DYLD_LIBRARY_PATH"
+      end
+    end
   end
 
   test do
