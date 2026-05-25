@@ -1,11 +1,11 @@
 [build-system]
 requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.backends.legacy:build"
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "pyatdw"
+name = "crude"
 version = "0.1.0"
-description = "Python CLI wrapper for the ATDW (Australian Tourism Data Warehouse) REST API"
+description = "CRUD-Engine: a lightweight CLI for read/write access to one's own data on sites without a usable public API (ATDW, Skål)"
 requires-python = ">=3.9"
 dependencies = [
     "typer[all]>=0.9",
@@ -15,8 +15,8 @@ dependencies = [
 ]
 
 [project.scripts]
-atdw = "pyatdw.cli:app"
-skal = "pyskal.cli:app"
+crude-atdw = "crude_atdw.cli:app"
+crude-skal = "crude_skal.cli:app"
 
 [tool.setuptools.packages.find]
 where = ["src"]

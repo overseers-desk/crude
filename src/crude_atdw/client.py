@@ -10,7 +10,7 @@ import requests
 
 API_BASE = "https://atlas.atdw-online.com.au/api"
 ORG_ID = "656826d85c376a10511493fd"
-TOKEN_PATH = Path(tempfile.gettempdir()) / "pyatdw_token"
+TOKEN_PATH = Path(tempfile.gettempdir()) / "crude_atdw_token"
 
 
 class ATDWClient:
@@ -34,7 +34,7 @@ class ATDWClient:
         password = self._credentials.get("password")
         if not username or not password:
             return False
-        from pyatdw.auth import atdw_login
+        from crude_atdw.auth import atdw_login
         try:
             new_token = atdw_login(username, password)
             self._update_token(new_token)
@@ -68,10 +68,10 @@ class ATDWClient:
     # Listings
     # ------------------------------------------------------------------
 
-    def list_listings(self, org_id: str = ORG_ID) -> list:
-        """Return all listings for the given organisation (non-INACTIVE only)."""
+    def list_listings(self, org_id: str = ORG_ID, limit: int = 20, skip: int = 0) -> list:
+        """Return listings for the given organisation (non-INACTIVE only)."""
         filter_obj = {
-            "limit": 100,
+            "limit": limit,
             "where": {
                 "and": [
                     {"owningOrganisation": org_id},
@@ -81,7 +81,7 @@ class ATDWClient:
             },
             "include": ["contributingOrganisation", "media", "services"],
             "scope": {"media": {"favourite": True}},
-            "skip": 0,
+            "skip": skip,
             "order": "slug ASC",
         }
         return self._get("/listings", params={"filter": json.dumps(filter_obj)})

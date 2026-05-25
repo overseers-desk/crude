@@ -1,5 +1,6 @@
-"""Typer CLI entry point for pyskal."""
+"""Typer CLI for the Skål Australia member portal: crude-skal."""
 
+import os
 import sys
 import json
 from pathlib import Path
@@ -9,12 +10,22 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(help="Python CLI wrapper for the Skål Australia member portal.")
+app = typer.Typer(help="crude-skal — Skål Australia member portal.")
+member_app = typer.Typer(help="Skål members.")
+club_app = typer.Typer(help="Skål clubs.")
+event_app = typer.Typer(help="Skål events.")
+app.add_typer(member_app, name="member")
+app.add_typer(club_app, name="club")
+app.add_typer(event_app, name="event")
 console = Console()
 
 
 def _find_config() -> Path:
-    """Locate config.toml: project root (this file's parents) or CWD."""
+    """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""
+    xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    xdg_candidate = Path(xdg) / "crude" / "config.toml"
+    if xdg_candidate.exists():
+        return xdg_candidate
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "config.toml"
@@ -23,7 +34,10 @@ def _find_config() -> Path:
     cwd_candidate = Path.cwd() / "config.toml"
     if cwd_candidate.exists():
         return cwd_candidate
-    typer.echo("Error: config.toml not found. Expected in project root or CWD.", err=True)
+    typer.echo(
+        "Error: config.toml not found. Expected at ~/.config/crude/config.toml, project root, or CWD.",
+        err=True,
+    )
     raise typer.Exit(1)
 
 
@@ -46,7 +60,7 @@ def _write_config(config_path: Path, config: dict) -> None:
 
 def _get_session(config: dict) -> str:
     """Return a session_id from temp file, config.toml, or auto-login."""
-    from pyskal.client import SESSION_PATH
+    from crude_skal.client import SESSION_PATH
 
     if SESSION_PATH.exists():
         session_id = SESSION_PATH.read_text().strip()
@@ -61,7 +75,7 @@ def _get_session(config: dict) -> str:
     username = config.get("skal", {}).get("username")
     password = config.get("skal", {}).get("password")
     if username and password:
-        from pyskal.auth import skal_login
+        from crude_skal.auth import skal_login
         typer.echo("No cached session found — logging in automatically...", err=True)
         try:
             session_id = skal_login(username, password)
@@ -72,14 +86,14 @@ def _get_session(config: dict) -> str:
         return session_id
 
     typer.echo(
-        "No cached session and no credentials found. Run `skal login` first.",
+        "No cached session and no credentials found. Run `crude-skal login` first.",
         err=True,
     )
     raise typer.Exit(1)
 
 
 def _make_client(config: dict):
-    from pyskal.client import SkalClient
+    from crude_skal.client import SkalClient
     session_id = _get_session(config)
     credentials = {
         "username": config.get("skal", {}).get("username"),
@@ -89,7 +103,7 @@ def _make_client(config: dict):
     if not client.verify_session():
         typer.echo("Session expired — logging in automatically...", err=True)
         if not client._try_refresh():
-            typer.echo("Error: could not refresh session. Run `skal login` first.", err=True)
+            typer.echo("Error: could not refresh session. Run `crude-skal login` first.", err=True)
             raise typer.Exit(1)
     return client
 
@@ -113,8 +127,8 @@ def _s(value) -> str:
 @app.command()
 def login():
     """Authenticate using credentials from config.toml and cache the session."""
-    from pyskal.auth import skal_login
-    from pyskal.client import SESSION_PATH
+    from crude_skal.auth import skal_login
+    from crude_skal.client import SESSION_PATH
 
     config_path = _find_config()
     config = _read_config(config_path)
@@ -136,25 +150,53 @@ def login():
     SESSION_PATH.write_text(session_id)
 
     # Write back to config.toml so the session persists across installs
-    config["skal"]["session_id"] = session_id
+    config.setdefault("skal", {})["session_id"] = session_id
     _write_config(config_path, config)
 
     typer.echo(f"Login successful. Session cached in {SESSION_PATH}")
     typer.echo(f"Session ID: {session_id[:16]}...")
 
 
-@app.command()
-def members(
-    limit: int = typer.Option(100, "--limit", help="Maximum number of members to return."),
+@member_app.command("list")
+def list_(
+    name: Optional[str] = typer.Option(None, "--name", help="Filter by name (case-insensitive contains)."),
+    city: Optional[str] = typer.Option(None, "--city", help="Filter by city (case-insensitive contains)."),
+    club: Optional[int] = typer.Option(None, "--club", help="Filter by club ID (e.g. 330 for Melbourne)."),
+    email: Optional[str] = typer.Option(None, "--email", help="Filter by email (exact match)."),
+    member_state: Optional[str] = typer.Option(None, "--state", help="Member state (draft/unpaid/done/club_change). Default: excludes 'done'."),
+    limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
-    """List current Australian members (excludes departed)."""
+    """List current Australian members.
+
+    With no filters this returns the current member roster (excluding departed).
+    Any filter flag narrows the search.
+    """
     config_path = _find_config()
     config = _read_config(config_path)
     client = _make_client(config)
 
+    has_filter = any(v is not None for v in (name, city, club, email, member_state))
+
     try:
-        items = client.list_members(limit=limit)
+        if has_filter:
+            domain = [["national_committee_id", "=", 1000]]
+            if name is not None:
+                domain.append(["name", "ilike", name])
+            if city is not None:
+                domain.append(["work_city", "ilike", city])
+            if club is not None:
+                domain.append(["entity_id", "=", club])
+            if email is not None:
+                domain.append(["work_email", "=", email])
+            if member_state is not None:
+                domain.append(["state", "=", member_state])
+            else:
+                domain.append(["state", "not in", ["done"]])
+            items = client.search_members(domain, limit=limit, offset=offset)
+        else:
+            items = client.list_members(limit=limit, offset=offset)
     except Exception as e:
         typer.echo(f"Error fetching members: {e}", err=True)
         raise typer.Exit(1)
@@ -185,8 +227,8 @@ def members(
     typer.echo(f"\n{len(items)} member(s) found.")
 
 
-@app.command()
-def member(
+@member_app.command("get")
+def get(
     member_id: int = typer.Argument(..., help="Member Odoo integer ID (e.g. 184914)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
@@ -251,70 +293,8 @@ def member(
     console.print(table)
 
 
-@app.command()
-def search(
-    name: Optional[str] = typer.Option(None, "--name", help="Filter by name (case-insensitive contains)."),
-    city: Optional[str] = typer.Option(None, "--city", help="Filter by city (case-insensitive contains)."),
-    club: Optional[int] = typer.Option(None, "--club", help="Filter by club ID (e.g. 330 for Melbourne)."),
-    email: Optional[str] = typer.Option(None, "--email", help="Filter by email (exact match)."),
-    member_state: Optional[str] = typer.Option(None, "--state", help="Member state (draft/unpaid/done/club_change). Default: excludes 'done'."),
-    limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
-    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
-):
-    """Search Australian members with optional filters."""
-    config_path = _find_config()
-    config = _read_config(config_path)
-    client = _make_client(config)
-
-    domain = [["national_committee_id", "=", 1000]]
-
-    if name is not None:
-        domain.append(["name", "ilike", name])
-    if city is not None:
-        domain.append(["work_city", "ilike", city])
-    if club is not None:
-        domain.append(["entity_id", "=", club])
-    if email is not None:
-        domain.append(["work_email", "=", email])
-    if member_state is not None:
-        domain.append(["state", "=", member_state])
-    else:
-        domain.append(["state", "not in", ["done"]])
-
-    try:
-        items = client.search_members(domain, limit=limit)
-    except Exception as e:
-        typer.echo(f"Error searching members: {e}", err=True)
-        raise typer.Exit(1)
-
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold green")
-    table.add_column("ID", style="dim")
-    table.add_column("Name")
-    table.add_column("Email")
-    table.add_column("City")
-    table.add_column("Club")
-    table.add_column("State")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("name")),
-            _s(item.get("work_email")),
-            _s(item.get("work_city")),
-            _fmt_m2o(item.get("entity_id")),
-            _s(item.get("state")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} member(s) found.")
-
-
-@app.command()
-def clubs(
+@club_app.command("list")
+def list_clubs(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List all Australian Skål clubs."""
@@ -348,8 +328,8 @@ def clubs(
     typer.echo(f"\n{len(items)} club(s) found.")
 
 
-@app.command()
-def events(
+@event_app.command("list")
+def list_events(
     limit: int = typer.Option(20, "--limit", help="Maximum number of events to return."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):

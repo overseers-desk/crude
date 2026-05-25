@@ -1,5 +1,6 @@
-"""Typer CLI entry point for pyatdw."""
+"""Typer CLI for the ATDW (Australian Tourism Data Warehouse) site: crude-atdw."""
 
+import os
 import sys
 import json
 from pathlib import Path
@@ -10,12 +11,18 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(help="Python CLI wrapper for the ATDW REST API.")
+app = typer.Typer(help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.")
+listing_app = typer.Typer(help="ATDW listings.")
+app.add_typer(listing_app, name="listing")
 console = Console()
 
 
 def _find_config() -> Path:
-    """Locate config.toml: project root (this file's parents) or CWD."""
+    """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""
+    xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    xdg_candidate = Path(xdg) / "crude" / "config.toml"
+    if xdg_candidate.exists():
+        return xdg_candidate
     here = Path(__file__).resolve()
     for parent in here.parents:
         candidate = parent / "config.toml"
@@ -24,7 +31,10 @@ def _find_config() -> Path:
     cwd_candidate = Path.cwd() / "config.toml"
     if cwd_candidate.exists():
         return cwd_candidate
-    typer.echo("Error: config.toml not found. Expected in project root or CWD.", err=True)
+    typer.echo(
+        "Error: config.toml not found. Expected at ~/.config/crude/config.toml, project root, or CWD.",
+        err=True,
+    )
     raise typer.Exit(1)
 
 
@@ -41,7 +51,7 @@ def _read_config(config_path: Path) -> dict:
 
 def _get_token(config: dict) -> str:
     """Return cached token from temp file, or auto-login if credentials are present."""
-    from pyatdw.client import TOKEN_PATH
+    from crude_atdw.client import TOKEN_PATH
     if TOKEN_PATH.exists():
         token = TOKEN_PATH.read_text().strip()
         if token:
@@ -49,7 +59,7 @@ def _get_token(config: dict) -> str:
     username = config.get("atdw", {}).get("username")
     password = config.get("atdw", {}).get("password")
     if username and password:
-        from pyatdw.auth import atdw_login
+        from crude_atdw.auth import atdw_login
         typer.echo("No cached token found — logging in automatically...", err=True)
         try:
             token = atdw_login(username, password)
@@ -59,14 +69,14 @@ def _get_token(config: dict) -> str:
         TOKEN_PATH.write_text(token)
         return token
     typer.echo(
-        "No cached token and no credentials found. Run `atdw login` first.",
+        "No cached token and no credentials found. Run `crude-atdw login` first.",
         err=True,
     )
     raise typer.Exit(1)
 
 
 def _make_client(config: dict):
-    from pyatdw.client import ATDWClient
+    from crude_atdw.client import ATDWClient
     token = _get_token(config)
     credentials = {
         "username": config.get("atdw", {}).get("username"),
@@ -78,7 +88,7 @@ def _make_client(config: dict):
 @app.command()
 def login():
     """Authenticate using credentials from config.toml and cache the JWT token."""
-    from pyatdw.auth import atdw_login
+    from crude_atdw.auth import atdw_login
 
     config_path = _find_config()
     config = _read_config(config_path)
@@ -97,23 +107,53 @@ def login():
         typer.echo(f"Login failed: {e}", err=True)
         raise typer.Exit(1)
 
-    from pyatdw.client import TOKEN_PATH
+    from crude_atdw.client import TOKEN_PATH
     TOKEN_PATH.write_text(token)
     typer.echo(f"Login successful. Token cached in {TOKEN_PATH}")
     typer.echo(f"Token (first 40 chars): {token[:40]}...")
 
 
-@app.command()
-def listings(
+@listing_app.command("list")
+def list_(
+    scope: str = typer.Option("own", "--scope", help="own (your organisation) or all (every visible listing)."),
+    listing_type: Optional[str] = typer.Option(None, "--type", help="Filter by listingType (e.g. tour, attraction)."),
+    city: Optional[str] = typer.Option(None, "--city", help="Filter by city/suburb."),
+    state: Optional[str] = typer.Option(None, "--state", help="Filter by state."),
+    status: Optional[str] = typer.Option(None, "--status", help="Filter by status (default excludes INACTIVE)."),
+    name: Optional[str] = typer.Option(None, "--name", help="Filter by name (regex/like match)."),
+    limit: int = typer.Option(20, "--limit", help="Maximum number of results to return."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
-    """List all listings for the organisation."""
+    """List listings.
+
+    With no filters this returns your organisation's own listings. Any filter
+    flag, or --scope all, switches to the all-visible search endpoint.
+    """
     config_path = _find_config()
     config = _read_config(config_path)
     client = _make_client(config)
 
+    has_filter = any(v is not None for v in (listing_type, city, state, status, name))
+
     try:
-        items = client.list_listings()
+        if has_filter or scope == "all":
+            where_clauses = []
+            if listing_type is not None:
+                where_clauses.append({"listingType": listing_type})
+            if city is not None:
+                where_clauses.append({"physicalAddress.city_suburb": city})
+            if state is not None:
+                where_clauses.append({"physicalAddress.state": state})
+            if name is not None:
+                where_clauses.append({"name": {"regexp": f"/{name}/i"}})
+            if status is not None:
+                where_clauses.append({"status": status})
+            else:
+                where_clauses.append({"status": {"neq": "INACTIVE"}})
+            items = client.search_listings(where_clauses, limit=limit, skip=offset)
+        else:
+            items = client.list_listings(limit=limit, skip=offset)
     except Exception as e:
         typer.echo(f"Error fetching listings: {e}", err=True)
         raise typer.Exit(1)
@@ -140,8 +180,8 @@ def listings(
     typer.echo(f"\n{len(items)} listing(s) found.")
 
 
-@app.command()
-def listing(
+@listing_app.command("get")
+def get(
     listing_id: str = typer.Argument(..., help="Listing ID"),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
@@ -226,13 +266,13 @@ def listing(
     console.print(table)
 
 
-@app.command()
-def edit(
+@listing_app.command("update")
+def update(
     listing_id: str = typer.Argument(..., help="Listing ID"),
     field: str = typer.Argument(..., help="Field name to update (e.g. description)"),
     value: str = typer.Argument(..., help="New value for the field"),
 ):
-    """PATCH a single field on a listing."""
+    """Update a single field on a listing (PATCH)."""
     config_path = _find_config()
     config = _read_config(config_path)
     client = _make_client(config)
@@ -256,7 +296,7 @@ def edit(
     typer.echo(f"  {field} = {str(result.get(field, ''))[:200]}")
 
 
-@app.command()
+@listing_app.command("submit")
 def submit(
     listing_id: str = typer.Argument(..., help="Listing ID to submit for review"),
 ):
@@ -306,75 +346,6 @@ def submit(
 
     new_status = result.get("status", "(unknown)")
     typer.echo(f'Submitted "{name}" for review. New status: {new_status}')
-
-
-@app.command()
-def search(
-    listing_type: Optional[str] = typer.Option(None, "--type", help="Filter by listingType (e.g. tour, attraction)."),
-    city: Optional[str] = typer.Option(None, "--city", help="Filter by city/suburb."),
-    state: Optional[str] = typer.Option(None, "--state", help="Filter by state."),
-    status: Optional[str] = typer.Option(None, "--status", help="Filter by status (default excludes INACTIVE)."),
-    name: Optional[str] = typer.Option(None, "--name", help="Filter by name (regex/like match)."),
-    limit: int = typer.Option(20, "--limit", help="Maximum number of results to return."),
-    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
-):
-    """Search across all visible listings using optional filters."""
-    config_path = _find_config()
-    config = _read_config(config_path)
-    client = _make_client(config)
-
-    # Build LoopBack where clauses from provided flags
-    where_clauses = []
-
-    if listing_type is not None:
-        where_clauses.append({"listingType": listing_type})
-
-    if city is not None:
-        where_clauses.append({"physicalAddress.city_suburb": city})
-
-    if state is not None:
-        where_clauses.append({"physicalAddress.state": state})
-
-    if name is not None:
-        where_clauses.append({"name": {"regexp": f"/{name}/i"}})
-
-    # Status: if --status is explicitly given, filter to that status;
-    # otherwise exclude INACTIVE by default.
-    if status is not None:
-        where_clauses.append({"status": status})
-    else:
-        where_clauses.append({"status": {"neq": "INACTIVE"}})
-
-    # If no clauses at all (shouldn't happen given default status clause), pass an empty and
-    if not where_clauses:
-        where_clauses.append({"status": {"neq": "INACTIVE"}})
-
-    try:
-        items = client.search_listings(where_clauses, limit=limit)
-    except Exception as e:
-        typer.echo(f"Error searching listings: {e}", err=True)
-        raise typer.Exit(1)
-
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold green")
-    table.add_column("ID", style="dim")
-    table.add_column("Type")
-    table.add_column("Slug")
-    table.add_column("Status")
-
-    for item in items:
-        table.add_row(
-            item.get("id", ""),
-            item.get("listingType", ""),
-            item.get("slug", ""),
-            item.get("status", ""),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} listing(s) found.")
 
 
 if __name__ == "__main__":

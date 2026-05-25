@@ -1,48 +1,43 @@
-# pyatdw
+# crude
 
-The Australian Tourism Data Warehouse (ATDW) provides a web interface for tourism operators to manage their listings — descriptions, photos, opening hours, contact details, and so on. The interface is adequate for occasional manual edits, but it does not lend itself to bulk operations, scripted updates, or integration with other tools. pyatdw is a command-line client that talks directly to the ATDW REST API, so that listings can be queried and edited from the terminal or from automated workflows.
+CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and-write access to one's own data on sites that lack a usable public API. Each site is reached by reverse-engineering its login and calling its internal endpoints, and every site is driven through one predictable command surface:
 
-The tool is deliberately narrow. It authenticates, lists, shows, searches, and edits listings. It does not attempt to replicate every feature of the web interface.
+```
+crude-<site> <resource> <verb> [id] [flags]
+```
+
+Two sites ship today, each as its own console binary:
+
+- `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
+- `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
+
+The tools are deliberately narrow. They authenticate, list, show, search, and edit your own records; they do not replicate every feature of the underlying web interfaces.
 
 ## Setup
 
-Copy the example config and fill in your ATDW credentials:
+Copy the example config and fill in your credentials:
 
 ```
-cp config.example.toml config.toml
+cp config.example.toml ~/.config/crude/config.toml
 ```
 
-Edit `config.toml` with your username and password. The file is gitignored.
+Each site reads its own section (`[atdw]`, `[skal]`) from the one file. The CLIs look for `~/.config/crude/config.toml` first, then fall back to a `config.toml` in the repository root or the current directory for development. Config files are gitignored.
 
-### Claude Code skill (added 2026-03-26)
-
-If you use [Claude Code](https://claude.ai/code) and want Claude to invoke pyatdw commands without being told how, create a skill file at `~/.claude/skills/pyatdw/SKILL.md`:
+### Install
 
 ```
----
-name: pyatdw
-description: Query and edit ATDW tourism listings via the pyatdw CLI. Use when the user asks about listings, searches, or edits on the Australian Tourism Data Warehouse.
-allowed-tools: Bash
----
-
-pyatdw must be run from the `src/` directory of the repository:
-
-    cd /path/to/pyatdw/src && python3 -m pyatdw <command>
-
-Commands: login, listings, listing <id>, search [--type] [--city] [--state] [--name] [--limit], edit <id> <field> <value>.
-
-Add --json to any read command for machine-readable output.
-
-Configuration lives in config.toml one level above src/. Credentials are set there; the token is cached automatically and renewed when it expires.
-
-Consult docs/manual.md for the full flag reference and docs/APIs.md for the underlying API.
+pip install -e .
 ```
 
-Replace `/path/to/pyatdw` with the actual path on your machine. The skill is then available to all projects; Claude will load it automatically when the conversation touches ATDW or this tool.
+This puts `crude-atdw` and `crude-skal` on your PATH. (During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` and `python3 -m crude_skal <command>`.)
+
+### Claude Code skills
+
+The skills `atdw-online.com.au` and `australia.skal.org` let Claude Code drive these tools without being told how. They are installed separately under `~/.claude/skills/`.
 
 ## Dependencies
 
-Python 3.8+.
+Python 3.9+.
 
 **Ubuntu/Debian:**
 
@@ -52,84 +47,81 @@ sudo apt-get install python3-typer python3-rich python3-requests python3-tomli p
 
 `python3-tomli-w` is in the `universe` repository; enable it with `sudo apt-get install software-properties-common && sudo add-apt-repository universe` if the package is not found.
 
-**OS X** — these packages are not in Homebrew; use pip:
+**OS X**: these packages are not in Homebrew, so use pip:
 
 ```
 pip3 install "typer[all]" requests tomli tomli-w
 ```
 
-## Usage
-
-Run from the `src/` directory:
-
-```
-cd src
-python3 -m pyatdw <command>
-```
+## ATDW usage (`crude-atdw`)
 
 ### Login
 
 ```
-python3 -m pyatdw login
+crude-atdw login
 ```
 
-Reads credentials from `config.toml`, authenticates via the ATDW OAuth2 flow, and caches the JWT token. The token lasts approximately 7 hours. If it expires, any subsequent command will re-authenticate automatically using the stored credentials.
+Reads credentials from config, authenticates via the ATDW OAuth2 flow, and caches the JWT token (valid about 7 hours). If it expires, any subsequent command re-authenticates automatically.
 
-### List own listings
-
-```
-python3 -m pyatdw listings
-```
-
-Returns a table of all non-inactive listings belonging to the organisation:
+### List and search listings
 
 ```
- ID                         Type        Slug                          Status
- 69b14f64d5bb6b47750392c1   event       cowboys-&-country             ACTIVE
- 6568273cc9320b7770116404   foodDrink   historic-rivermill            ACTIVE
- 6903586bb6fc9ea77eaaed84   attraction  historic-rivermill            ACTIVE
- 696600aa66821ba339fb2b05   accommodation historic-rivermill-farmstay DRAFTINPROG
- 67891ac1f4c999b32e8d8672   event       pisco-sour-day-...            EXPIRED
+crude-atdw listing list
+crude-atdw listing list --scope all --type tour --limit 5
+crude-atdw listing list --scope all --city "Gold Coast"
+crude-atdw listing list --scope all --name "beach"
 ```
+
+With no filters, `listing list` returns your organisation's own listings. Any filter flag (`--type`, `--city`, `--state`, `--status`, `--name`), or `--scope all`, switches to the all-visible search across every listing. `--limit`, `--offset`, and `--json` apply throughout.
 
 ### Show a single listing
 
 ```
-python3 -m pyatdw listing 6568273cc9320b7770116404
+crude-atdw listing get 6568273cc9320b7770116404
 ```
 
 Displays key fields (name, type, status, description, dates) plus media count, services count, and tags.
 
-### Search across all listings
+### Update a listing field
 
 ```
-python3 -m pyatdw search --type tour --limit 5
-python3 -m pyatdw search --city "Gold Coast" --limit 5
-python3 -m pyatdw search --name "rivermill"
-python3 -m pyatdw search --type tour --city "Gold Coast" --state QLD
-```
-
-Searches are not restricted to the owning organisation. Flags can be combined freely; omitted flags impose no constraint. Available filters: `--type`, `--city`, `--state`, `--status`, `--name` (regex), `--limit`.
-
-### Edit a listing field
-
-```
-python3 -m pyatdw edit 6568273cc9320b7770116404 description "New description text"
+crude-atdw listing update 6568273cc9320b7770116404 description "New description text"
 ```
 
 Sends a PATCH with only the named field. Works for any string field in the data model (`description`, `shortDescription`, `name`, etc.).
 
-### JSON output
-
-All read commands accept `--json` to emit raw JSON instead of a formatted table, for machine consumption:
+### Submit for review
 
 ```
-python3 -m pyatdw listings --json
-python3 -m pyatdw listing 6568273cc9320b7770116404 --json
-python3 -m pyatdw search --city "Gold Coast" --json
+crude-atdw listing submit 69b14f64d5bb6b47750392c1
+```
+
+Submits a `DRAFT`/`DRAFTINPROG` listing for ATDW review.
+
+## Skål usage (`crude-skal`)
+
+```
+crude-skal login
+crude-skal member list
+crude-skal member list --city "Gold Coast" --limit 5
+crude-skal member get 184914
+crude-skal club list
+crude-skal event list
+```
+
+With no filters, `member list` returns the current Australian member roster. Filter flags (`--name`, `--city`, `--club`, `--email`, `--state`) narrow the search.
+
+### JSON output
+
+All read commands accept `--json` to emit raw JSON instead of a formatted table:
+
+```
+crude-atdw listing list --json
+crude-skal member get 184914 --json
 ```
 
 ## Further reference
 
-- `docs/manual.md` — full command reference with flag tables and filter syntax
-- `docs/APIs.md` — reverse-engineered ATDW API reference
+- `docs/manual.md`: full ATDW command reference with flag tables and filter syntax
+- `docs/APIs.md`: reverse-engineered ATDW API reference
+- `docs/skal-api.md`: Skål portal API reference and club IDs

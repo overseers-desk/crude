@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 
 API_BASE = "https://australia.skal.org"
-SESSION_PATH = Path(tempfile.gettempdir()) / "pyskal_session"
+SESSION_PATH = Path(tempfile.gettempdir()) / "crude_skal_session"
 AU_NC_ID = 1000
 
 
@@ -33,7 +33,7 @@ class SkalClient:
         password = self._credentials.get("password")
         if not username or not password:
             return False
-        from pyskal.auth import skal_login
+        from crude_skal.auth import skal_login
         try:
             new_session = skal_login(username, password)
             self._update_session(new_session)

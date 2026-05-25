@@ -1,3 +1,11 @@
+# crude configuration. Copy to ~/.config/crude/config.toml (or the repo root for
+# development) and fill in your credentials. One file holds every site's section.
+
 [atdw]
 username = "your-email@example.com"
 password = "your-password"
+
+[skal]
+username = "your-email@example.com"
+password = "your-password"
+# session_id is written back here automatically after `crude-skal login`.
