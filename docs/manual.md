@@ -90,6 +90,18 @@ python3 -m pyatdw edit 6568273cc9320b7770116404 description "New description tex
 
 Works for any string field in the listing data model: `description`, `shortDescription`, `name`, `slug`, etc.
 
+### `atdw submit ID`
+
+Submits a listing for ATDW review. Only works on listings with status `DRAFT` or `DRAFTINPROG`. After ATDW approves the listing, its status changes to `ACTIVE`.
+
+This is needed whenever a previously published listing has been edited (which reverts it to `DRAFTINPROG`) or when a new listing is ready for review.
+
+```
+python3 -m pyatdw submit 69b14f64d5bb6b47750392c1
+```
+
+If the listing is already `ACTIVE`, the command reports this and exits without making a request.
+
 ### `atdw search [OPTIONS]`
 
 Searches across all visible listings (not restricted to the owning organisation). All flags are optional and can be combined. Omitted flags are not included in the filter.

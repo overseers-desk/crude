@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 from typing import Optional
 
+import requests
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -253,6 +254,58 @@ def edit(
 
     typer.echo(f"Successfully patched listing {listing_id}.")
     typer.echo(f"  {field} = {str(result.get(field, ''))[:200]}")
+
+
+@app.command()
+def submit(
+    listing_id: str = typer.Argument(..., help="Listing ID to submit for review"),
+):
+    """Submit a draft listing for ATDW review (DRAFTINPROG -> ACTIVE)."""
+    config_path = _find_config()
+    config = _read_config(config_path)
+    client = _make_client(config)
+
+    # Fetch current status so we can give a meaningful message
+    try:
+        item = client.get_own_listing(listing_id)
+    except Exception as e:
+        typer.echo(f"Error fetching listing {listing_id}: {e}", err=True)
+        raise typer.Exit(1)
+
+    status = item.get("status", "")
+    name = item.get("name", listing_id)
+
+    if status == "ACTIVE":
+        typer.echo(f'Listing "{name}" is already ACTIVE — nothing to submit.')
+        return
+
+    if status not in ("DRAFT", "DRAFTINPROG"):
+        typer.echo(
+            f'Listing "{name}" has status {status} — only DRAFT/DRAFTINPROG listings can be submitted.',
+            err=True,
+        )
+        raise typer.Exit(1)
+
+    try:
+        result = client.submit(listing_id)
+    except requests.exceptions.HTTPError as e:
+        typer.echo(f"Error submitting listing {listing_id}: {e}", err=True)
+        # Surface the API validation errors if present
+        if e.response is not None:
+            try:
+                body = e.response.json()
+                error_msg = body.get("error", {}).get("message", "")
+                if error_msg:
+                    typer.echo(f"ATDW says: {error_msg}", err=True)
+            except Exception:
+                pass
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error submitting listing {listing_id}: {e}", err=True)
+        raise typer.Exit(1)
+
+    new_status = result.get("status", "(unknown)")
+    typer.echo(f'Submitted "{name}" for review. New status: {new_status}')
 
 
 @app.command()
