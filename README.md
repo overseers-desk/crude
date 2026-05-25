@@ -6,10 +6,11 @@ CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and
 crude-<site> <resource> <verb> [id] [flags]
 ```
 
-Two sites ship today, each as its own console binary:
+Three sites ship today, each as its own console binary:
 
 - `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
+- `crude-rezdy`: Rezdy Supplier API for products, availability, and bookings (REST, API key).
 
 The tools are deliberately narrow. They authenticate, list, show, search, and edit your own records; they do not replicate every feature of the underlying web interfaces.
 
@@ -111,6 +112,20 @@ crude-skal event list
 
 With no filters, `member list` returns the current Australian member roster. Filter flags (`--name`, `--city`, `--club`, `--email`, `--state`) narrow the search.
 
+## Rezdy usage (`crude-rezdy`)
+
+Rezdy authenticates with a Supplier API key, set in the `[rezdy]` section of the config; there is no login step.
+
+```
+crude-rezdy product list --search "kayak" --limit 10
+crude-rezdy product get P12345
+crude-rezdy availability list --product P12345 --from "2026-05-25 00:00:00" --to "2026-05-31 23:59:59"
+crude-rezdy booking list --status CONFIRMED --product P12345
+crude-rezdy booking get R123456
+```
+
+For a single day's bookings, set the tour-time bounds to that day: `crude-rezdy booking list --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z`. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
+
 ### JSON output
 
 All read commands accept `--json` to emit raw JSON instead of a formatted table:
@@ -118,6 +133,7 @@ All read commands accept `--json` to emit raw JSON instead of a formatted table:
 ```
 crude-atdw listing list --json
 crude-skal member get 184914 --json
+crude-rezdy booking list --json
 ```
 
 ## Further reference

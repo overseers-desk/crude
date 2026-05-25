@@ -9,3 +9,7 @@ password = "your-password"
 username = "your-email@example.com"
 password = "your-password"
 # session_id is written back here automatically after `crude-skal login`.
+
+[rezdy]
+api_key = "your-rezdy-supplier-api-key"
+# environment = "production"  # or "staging"; defaults to production
