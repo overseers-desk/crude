@@ -19,6 +19,23 @@ app.add_typer(club_app, name="club")
 app.add_typer(event_app, name="event")
 console = Console()
 
+from crude_common import __version__ as _SKILL_VERSION
+from crude_common import claude_command as _claude
+
+
+@app.callback()
+def _root(ctx: typer.Context):
+    if ctx.invoked_subcommand != "install-claude-command":
+        nudge = _claude.registration_status(_SKILL_VERSION, "crude-skal")
+        if nudge:
+            typer.echo(nudge, err=True)
+
+
+@app.command("install-claude-command")
+def install_claude_command():
+    """Install or update the crude skill for Claude Code."""
+    _claude.run_install(_SKILL_VERSION, "crude-skal")
+
 
 def _find_config() -> Path:
     """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""

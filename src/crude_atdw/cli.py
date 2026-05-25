@@ -16,6 +16,23 @@ listing_app = typer.Typer(help="ATDW listings.")
 app.add_typer(listing_app, name="listing")
 console = Console()
 
+from crude_common import __version__ as _SKILL_VERSION
+from crude_common import claude_command as _claude
+
+
+@app.callback()
+def _root(ctx: typer.Context):
+    if ctx.invoked_subcommand != "install-claude-command":
+        nudge = _claude.registration_status(_SKILL_VERSION, "crude-atdw")
+        if nudge:
+            typer.echo(nudge, err=True)
+
+
+@app.command("install-claude-command")
+def install_claude_command():
+    """Install or update the crude skill for Claude Code."""
+    _claude.run_install(_SKILL_VERSION, "crude-atdw")
+
 
 def _find_config() -> Path:
     """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""
