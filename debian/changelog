@@ -1,3 +1,16 @@
+crude (1.0.2) unstable; urgency=medium
+
+  * crude-rezdy booking: add `cancellations` subcommand — filters by
+    cancellation date (dateUpdated) with columns for product, session,
+    paid/total, refund count, and internal notes.
+  * crude-rezdy booking list: add --updated-from / --updated-to (client-side
+    filter on dateUpdated) and --all (auto-pagination); improve default table
+    to show product, session date, paid/total, and last-updated date.
+  * crude-rezdy: add paginate() to the API client for auto-pagination.
+  * Claude command updated to document new subcommand and flags.
+
+ -- Weiwu Zhang <a@colourful.land>  Fri, 30 May 2026 00:00:00 +0200
+
 crude (1.0.1) unstable; urgency=medium
 
   * Internal refactor: shared config discovery, config reading, and Claude Code

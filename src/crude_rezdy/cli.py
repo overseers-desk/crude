@@ -39,6 +39,32 @@ def _customer_name(booking: dict) -> str:
     return name or _s(customer.get("email"))
 
 
+def _normalize_date(s: str) -> str:
+    """Accept YYYY-MM-DD or full ISO 8601; return a comparable ISO string."""
+    if s and len(s) == 10:
+        return s + "T00:00:00Z"
+    return s
+
+
+def _normalize_date_end(s: str) -> str:
+    """For --to bare dates, include the full day."""
+    if s and len(s) == 10:
+        return s + "T23:59:59Z"
+    return s
+
+
+def _refund_count(booking: dict) -> int:
+    return sum(
+        1 for p in booking.get("payments", [])
+        if p.get("amount", 0) < 0 or "REFUND" in p.get("type", "").upper()
+    )
+
+
+def _first_item(booking: dict) -> dict:
+    items = booking.get("items") or []
+    return items[0] if items else {}
+
+
 def _render_record(item: dict) -> None:
     """Print a record's scalar top-level fields as a Field/Value table.
 
@@ -173,33 +199,46 @@ def list_bookings(
     to: Optional[str] = typer.Option(None, "--to", help="Tour starts before or on this time (ISO 8601)."),
     created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this date (ISO 8601)."),
     created_to: Optional[str] = typer.Option(None, "--created-to", help="Created on or before this date (ISO 8601)."),
+    updated_from: Optional[str] = typer.Option(None, "--updated-from", help="Last updated on or after this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
+    updated_to: Optional[str] = typer.Option(None, "--updated-to", help="Last updated on or before this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages automatically (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List bookings.
 
     For a single day's bookings, set --from and --to to that day's start and
     end (e.g. --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z).
+    Use --updated-from / --updated-to to filter by when the booking was last
+    modified (e.g. when it was cancelled).
     """
     config = _read_config(_find_config())
     client = _make_client(config)
 
+    kwargs = dict(
+        order_status=status,
+        search=search,
+        product_code=product,
+        min_tour_start=from_,
+        max_tour_start=to,
+        min_date_created=created_from,
+        max_date_created=created_to,
+    )
+
     try:
-        items = client.list_bookings(
-            order_status=status,
-            search=search,
-            product_code=product,
-            min_tour_start=from_,
-            max_tour_start=to,
-            min_date_created=created_from,
-            max_date_created=created_to,
-            limit=limit,
-            offset=offset,
-        )
+        if fetch_all:
+            items = client.paginate(limit=100, **kwargs)
+        else:
+            items = client.list_bookings(limit=limit, offset=offset, **kwargs)
     except Exception as e:
         typer.echo(f"Error fetching bookings: {e}", err=True)
         raise typer.Exit(1)
+
+    if updated_from:
+        items = [b for b in items if b.get("dateUpdated", "") >= _normalize_date(updated_from)]
+    if updated_to:
+        items = [b for b in items if b.get("dateUpdated", "") <= _normalize_date_end(updated_to)]
 
     if output_json:
         typer.echo(json.dumps(items, indent=2))
@@ -209,21 +248,89 @@ def list_bookings(
     table.add_column("Order", style="dim")
     table.add_column("Status")
     table.add_column("Customer")
-    table.add_column("Total", justify="right")
-    table.add_column("Created")
+    table.add_column("Product")
+    table.add_column("Session")
+    table.add_column("Paid/Total", justify="right")
+    table.add_column("Updated")
 
     for item in items:
-        total = f"{_s(item.get('totalAmount'))} {_s(item.get('totalCurrency'))}".strip()
+        first = _first_item(item)
+        paid_total = f"{_s(item.get('totalPaid'))}/{_s(item.get('totalAmount'))} {_s(item.get('totalCurrency'))}".strip()
         table.add_row(
             _s(item.get("orderNumber")),
             _s(item.get("status")),
             _customer_name(item),
-            total,
-            _s(item.get("dateCreated")),
+            _s(first.get("productName", ""))[:35],
+            _s(first.get("startTimeLocal", ""))[:16],
+            paid_total,
+            _s(item.get("dateUpdated", ""))[:10],
         )
 
     console.print(table)
     typer.echo(f"\n{len(items)} booking(s) found.")
+
+
+@booking_app.command("cancellations")
+def list_cancellations(
+    from_: Optional[str] = typer.Option(None, "--from", help="Cancellations on or after this date (YYYY-MM-DD)."),
+    to: Optional[str] = typer.Option(None, "--to", help="Cancellations on or before this date (YYYY-MM-DD)."),
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results (ignored when --all is set)."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages automatically."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List cancelled bookings, filtered by when the cancellation occurred.
+
+    --from and --to filter against the cancellation date (dateUpdated), not the
+    session date. Use --all to ensure no results are missed.
+    """
+    config = _read_config(_find_config())
+    client = _make_client(config)
+
+    try:
+        if fetch_all:
+            items = client.paginate(limit=100, order_status="CANCELLED")
+        else:
+            items = client.list_bookings(order_status="CANCELLED", limit=limit)
+    except Exception as e:
+        typer.echo(f"Error fetching cancellations: {e}", err=True)
+        raise typer.Exit(1)
+
+    if from_:
+        items = [b for b in items if b.get("dateUpdated", "") >= _normalize_date(from_)]
+    if to:
+        items = [b for b in items if b.get("dateUpdated", "") <= _normalize_date_end(to)]
+
+    if output_json:
+        typer.echo(json.dumps(items, indent=2))
+        return
+
+    table = Table(show_header=True, header_style="bold red")
+    table.add_column("Order", style="dim")
+    table.add_column("Customer")
+    table.add_column("Product")
+    table.add_column("Session")
+    table.add_column("Cancelled On")
+    table.add_column("Paid/Total", justify="right")
+    table.add_column("Refunds", justify="right")
+    table.add_column("Notes")
+
+    for item in items:
+        first = _first_item(item)
+        paid_total = f"{_s(item.get('totalPaid'))}/{_s(item.get('totalAmount'))} {_s(item.get('totalCurrency'))}".strip()
+        notes = (item.get("internalNotes") or "").strip()
+        table.add_row(
+            _s(item.get("orderNumber")),
+            _customer_name(item),
+            _s(first.get("productName", ""))[:35],
+            _s(first.get("startTimeLocal", ""))[:16],
+            _s(item.get("dateUpdated", ""))[:10],
+            paid_total,
+            str(_refund_count(item)),
+            notes[:60],
+        )
+
+    console.print(table)
+    typer.echo(f"\n{len(items)} cancellation(s) found.")
 
 
 @booking_app.command("get")

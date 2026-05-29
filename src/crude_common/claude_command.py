@@ -68,9 +68,13 @@ Rezdy Supplier API. API key in `[rezdy]` (`api_key`, optional `environment`); th
     crude-rezdy product list [--search] [--limit] [--offset]
     crude-rezdy product get <code>
     crude-rezdy availability list --product <code> --from "<YYYY-MM-DD HH:mm:ss>" --to "<...>" [--min-availability] [--limit]
-    crude-rezdy booking list [--status] [--search] [--product] [--from] [--to] [--created-from] [--created-to] [--limit] [--offset]
+    crude-rezdy booking list [--status] [--search] [--product] [--from] [--to] [--created-from] [--created-to] [--updated-from] [--updated-to] [--limit] [--offset] [--all]
+    crude-rezdy booking cancellations [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit] [--all]
     crude-rezdy booking get <orderno>
 
+`booking cancellations` filters by when the cancellation occurred (dateUpdated), not the session date. Use --from/--to with YYYY-MM-DD dates.
+--updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
+--all on either command fetches all pages automatically (default limit is otherwise applied).
 For one day's bookings, set --from and --to to that day's bounds. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
 """
 

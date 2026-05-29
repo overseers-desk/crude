@@ -55,3 +55,29 @@ def test_rezdy_lists_one_product(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("productCode")
+
+
+@pytest.mark.live
+def test_rezdy_lists_cancelled_bookings(crude_config):
+    if not crude_config.get("rezdy", {}).get("api_key"):
+        pytest.skip("no [rezdy] api_key in config")
+    from crude_rezdy.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.list_bookings(order_status="CANCELLED", limit=5)
+    assert isinstance(items, list)
+    for b in items:
+        assert b.get("status") == "CANCELLED"
+
+
+@pytest.mark.live
+def test_rezdy_paginate(crude_config):
+    if not crude_config.get("rezdy", {}).get("api_key"):
+        pytest.skip("no [rezdy] api_key in config")
+    from crude_rezdy.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.paginate(limit=10, order_status="CANCELLED")
+    assert isinstance(items, list)
+    single_page = client.list_bookings(order_status="CANCELLED", limit=10)
+    assert len(items) >= len(single_page)

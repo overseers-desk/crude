@@ -122,3 +122,14 @@ class RezdyClient:
     def get_booking(self, order_number: str) -> dict:
         """Return a single booking by order number (e.g. 'R123456')."""
         return self._get(f"/bookings/{order_number}").get("booking", {})
+
+    def paginate(self, limit: int = 100, **kwargs) -> list:
+        """Fetch all pages from list_bookings, incrementing offset until a short page."""
+        results, offset = [], 0
+        while True:
+            page = self.list_bookings(limit=limit, offset=offset, **kwargs)
+            results.extend(page)
+            if len(page) < limit:
+                break
+            offset += limit
+        return results
