@@ -28,9 +28,20 @@ crude-atdw = "crude_atdw.cli:app"
 crude-skal = "crude_skal.cli:app"
 crude-rezdy = "crude_rezdy.cli:app"
 
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
 [project.urls]
 Homepage = "https://github.com/SmartLayer/crude"
 Issues = "https://github.com/SmartLayer/crude/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-m 'not live'"
+markers = [
+    "live: hits real site APIs; needs a crude config and `-m live` to run.",
+]
