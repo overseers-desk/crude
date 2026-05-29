@@ -16,7 +16,7 @@ listing_app = typer.Typer(help="ATDW listings.")
 app.add_typer(listing_app, name="listing")
 console = Console()
 
-register_claude_command(app, "crude-atdw")
+register_claude_command(app)
 
 
 def _get_token(config: dict) -> str:

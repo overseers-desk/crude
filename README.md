@@ -45,7 +45,7 @@ Any of these put `crude-atdw`, `crude-skal`, and `crude-rezdy` on your PATH. Dur
 
 ### Claude Code command
 
-Run `crude-atdw install-claude-command` (or `crude-skal` / `crude-rezdy`) to install a Claude Code command at `~/.claude/commands/crude.md` covering all three sites. The CLIs print a one-line reminder to stderr when that command is missing or out of date, so an agent knows to (re)install it.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all three sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal` / `crude-rezdy`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 

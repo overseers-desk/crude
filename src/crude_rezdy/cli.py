@@ -19,7 +19,7 @@ app.add_typer(availability_app, name="availability")
 app.add_typer(booking_app, name="booking")
 console = Console()
 
-register_claude_command(app, "crude-rezdy")
+register_claude_command(app)
 
 
 def _make_client(config: dict):

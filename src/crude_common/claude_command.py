@@ -1,29 +1,28 @@
-"""Install and freshness-check the crude command for Claude Code.
+"""Install and keep current the crude command for Claude Code.
 
 This installs a Claude Code *command* (``~/.claude/commands/crude.md``), not a
 skill. A user's skills directory is frequently a version-controlled, curated
-collection, so a CLI writing into it would pollute that repository; the
-commands directory is the conventional home for a tool to register itself.
-One command, covering every site crude supports, is written with a ``version:``
-stamp in its frontmatter. Each site CLI registers an ``install-claude-command``
-subcommand that writes it, and a startup nudge that points the agent at that
-subcommand when the command is missing or its stamp differs from the running
-tool. A same-named skill, if the user has one, supersedes the command and
-silences the nudge.
+collection, so a CLI writing into it would pollute that repository; the commands
+directory is the conventional home for a tool to register itself. The ``COMMAND``
+text below is the single source for the command's content. Each site CLI keeps
+the installed file equal to it: on every run, when the file is missing or differs
+from ``COMMAND``, it is rewritten. "Current" means byte-for-byte equal to
+``COMMAND``, so there is no version stamp to maintain and no per-release judgement
+about whether the command changed. A same-named skill, if the user keeps one,
+supersedes the command and the refresh leaves it alone.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional
 
 import typer
 
 COMMAND_NAME = "crude"
 
-# The command body. The description lists the sites crude supports and stays
-# short, so an agent reaches for it when those sites come up; how to drive the
-# CLIs is the body below, not the description. render() splices the version in.
+# The command body and the single source of its content. The description lists
+# the sites crude supports and stays short, so an agent reaches for it when those
+# sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
 description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), and rezdy.com (products, availability, bookings).
@@ -81,89 +80,48 @@ def skill_dir() -> Path:
     return Path.home() / ".claude" / "skills" / COMMAND_NAME
 
 
-def render(version: str) -> str:
-    """Return the command text with a version stamp as the first frontmatter field."""
-    if COMMAND.startswith("---\n"):
-        return "---\nversion: " + version + "\n" + COMMAND[4:]
-    return COMMAND
+def _superseded() -> bool:
+    """True when Claude Code is absent, or a same-named skill supersedes the command."""
+    return not (Path.home() / ".claude").exists() or skill_dir().exists()
 
 
-def installed_version() -> Optional[str]:
-    """Return the version stamped in the installed command, or None."""
+def refresh() -> None:
+    """Rewrite the command file when it is missing or differs from COMMAND.
+
+    Idempotent and silent. Does nothing when Claude Code is not installed or a
+    same-named skill supersedes the command. "Out of date" is content inequality
+    with COMMAND, so no version field is needed.
+    """
+    if _superseded():
+        return
     f = command_file()
-    if not f.exists():
-        return None
-    for line in f.read_text().splitlines():
-        if line.startswith("version:"):
-            return line.split(":", 1)[1].strip()
-    return None
+    if f.exists() and f.read_text() == COMMAND:
+        return
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(COMMAND)
 
 
-def registration_status(version: str, prog: str) -> Optional[str]:
-    """Return an agent-directed nudge if the command is missing or stale, else None.
+def register_claude_command(app) -> None:
+    """Attach the auto-refresh callback and the install-claude-command subcommand.
 
-    Silent when Claude Code is not installed (no ~/.claude) or when a same-named
-    skill supersedes the command. Staleness is an exact stamp mismatch against
-    the running tool's version.
+    The callback keeps ``~/.claude/commands/crude.md`` equal to COMMAND on every
+    invocation; the subcommand does the same write explicitly, with feedback.
     """
-    if not (Path.home() / ".claude").exists():
-        return None
-    if skill_dir().exists():
-        return None
-    if not command_file().exists():
-        return (
-            "crude command not installed in Claude Code. "
-            f"Run `{prog} install-claude-command` to install it, "
-            "then continue with the user's request."
-        )
-    installed = installed_version()
-    if installed != version:
-        label = installed if installed else "unknown"
-        return (
-            f"crude command is at version {label}, tool is {version}. "
-            f"Run `{prog} install-claude-command` to update it, "
-            "then continue with the user's request."
-        )
-    return None
-
-
-def register_claude_command(app, prog: str) -> None:
-    """Attach the freshness nudge and the install-claude-command subcommand to a CLI.
-
-    Every site CLI registers the same pair: a root callback that warns (on stderr)
-    when the installed Claude Code command is missing or stale, and an
-    ``install-claude-command`` subcommand that (re)writes it. Only ``prog`` (the
-    binary name, e.g. ``crude-atdw``) differs between sites.
-    """
-    from crude_common import __version__ as version
 
     @app.callback()
-    def _root(ctx: typer.Context):
-        if ctx.invoked_subcommand != "install-claude-command":
-            nudge = registration_status(version, prog)
-            if nudge:
-                typer.echo(nudge, err=True)
+    def _root():
+        refresh()
 
     @app.command("install-claude-command")
     def install_claude_command():
-        """Install or update the crude command for Claude Code."""
-        run_install(version, prog)
-
-
-def run_install(version: str, prog: str) -> None:
-    """Write (or update) the command, prompting before replacing a different version."""
-    f = command_file()
-    f.parent.mkdir(parents=True, exist_ok=True)
-
-    if f.exists():
-        installed = installed_version()
-        label = installed if installed else "unknown version"
-        if installed == version:
-            typer.echo(f"Already at {version}: {f}")
+        """(Re)write the crude command for Claude Code."""
+        if _superseded():
+            typer.echo(
+                "Skipped: Claude Code is not installed, or a same-named skill "
+                "supersedes the command."
+            )
             return
-        if not typer.confirm(f"crude command already installed ({label}). Replace with {version}?"):
-            typer.echo("Aborted.")
-            raise typer.Exit(1)
-
-    f.write_text(render(version))
-    typer.echo(f"Installed {version}: {f}")
+        f = command_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(COMMAND)
+        typer.echo(f"Installed: {f}")

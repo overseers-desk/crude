@@ -20,7 +20,7 @@ app.add_typer(club_app, name="club")
 app.add_typer(event_app, name="event")
 console = Console()
 
-register_claude_command(app, "crude-skal")
+register_claude_command(app)
 
 
 def _write_config(config_path: Path, config: dict) -> None:
