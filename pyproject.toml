@@ -24,6 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
+crude = "crude_common.launcher:app"
 crude-atdw = "crude_atdw.cli:app"
 crude-skal = "crude_skal.cli:app"
 crude-rezdy = "crude_rezdy.cli:app"

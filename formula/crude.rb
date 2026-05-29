@@ -100,7 +100,7 @@ class Crude < Formula
     if OS.mac?
       # Wrap each binary so the bottled python's pyexpat resolves against
       # Homebrew's expat instead of the system one.
-      %w[crude-atdw crude-skal crude-rezdy].each do |exe|
+      %w[crude crude-atdw crude-skal crude-rezdy].each do |exe|
         target = libexec/"bin/#{exe}"
         (bin/exe).unlink if (bin/exe).exist?
         (bin/exe).write_env_script target,

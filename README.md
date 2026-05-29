@@ -12,6 +12,8 @@ Three sites ship today, each as its own console binary:
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
 - `crude-rezdy`: Rezdy Supplier API for products, availability, and bookings (REST, API key).
 
+Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
+
 The tools are deliberately narrow. They authenticate, list, show, search, and edit your own records; they do not replicate every feature of the underlying web interfaces.
 
 ## Setup
@@ -41,7 +43,7 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude-atdw`, `crude-skal`, and `crude-rezdy` on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`).
+Any of these put `crude` and the three site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 

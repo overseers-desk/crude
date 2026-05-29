@@ -18,7 +18,11 @@ from pathlib import Path
 
 import typer
 
+from crude_common import version as crude_version
+
 COMMAND_NAME = "crude"
+
+VERSION_HELP = "Show the crude version and exit."
 
 # The command body and the single source of its content. The description lists
 # the sites crude supports and stays short, so an agent reaches for it when those
@@ -101,16 +105,23 @@ def refresh() -> None:
     f.write_text(COMMAND)
 
 
-def register_claude_command(app) -> None:
-    """Attach the auto-refresh callback and the install-claude-command subcommand.
+def version_callback(value: bool) -> None:
+    """Eager ``--version`` handler shared by every crude CLI: print and exit.
 
-    The callback keeps ``~/.claude/commands/crude.md`` equal to COMMAND on every
-    invocation; the subcommand does the same write explicitly, with feedback.
+    Wired into each app's root callback so ``crude`` and the site binaries all
+    report the same number, sourced once from package metadata.
     """
+    if value:
+        typer.echo(crude_version())
+        raise typer.Exit()
 
-    @app.callback()
-    def _root():
-        refresh()
+
+def add_install_command(app) -> None:
+    """Attach the install-claude-command subcommand to ``app``.
+
+    Separate from the root callback so the crude umbrella, which needs its own
+    callback to list the site commands, can still register the subcommand.
+    """
 
     @app.command("install-claude-command")
     def install_claude_command():
@@ -125,3 +136,23 @@ def register_claude_command(app) -> None:
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_text(COMMAND)
         typer.echo(f"Installed: {f}")
+
+
+def register_claude_command(app) -> None:
+    """Attach the shared root callback and the install-claude-command subcommand.
+
+    The root callback keeps ``~/.claude/commands/crude.md`` equal to COMMAND on
+    every invocation and handles the shared ``--version`` flag; the subcommand does
+    the same write explicitly, with feedback. Used by the site CLIs; the crude
+    umbrella wires its own callback and calls ``add_install_command`` directly.
+    """
+
+    @app.callback()
+    def _root(
+        version: bool = typer.Option(
+            None, "--version", callback=version_callback, is_eager=True, help=VERSION_HELP
+        ),
+    ):
+        refresh()
+
+    add_install_command(app)
