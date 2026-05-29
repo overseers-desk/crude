@@ -1,7 +1,5 @@
 """Typer CLI for the Skål Australia member portal: crude-skal."""
 
-import os
-import sys
 import json
 from pathlib import Path
 from typing import Optional
@@ -9,6 +7,9 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.table import Table
+
+from crude_common.claude_command import register_claude_command
+from crude_common.config import find_config as _find_config, read_config as _read_config, s as _s
 
 app = typer.Typer(help="crude-skal — Skål Australia member portal.")
 member_app = typer.Typer(help="Skål members.")
@@ -19,54 +20,7 @@ app.add_typer(club_app, name="club")
 app.add_typer(event_app, name="event")
 console = Console()
 
-from crude_common import __version__ as _SKILL_VERSION
-from crude_common import claude_command as _claude
-
-
-@app.callback()
-def _root(ctx: typer.Context):
-    if ctx.invoked_subcommand != "install-claude-command":
-        nudge = _claude.registration_status(_SKILL_VERSION, "crude-skal")
-        if nudge:
-            typer.echo(nudge, err=True)
-
-
-@app.command("install-claude-command")
-def install_claude_command():
-    """Install or update the crude skill for Claude Code."""
-    _claude.run_install(_SKILL_VERSION, "crude-skal")
-
-
-def _find_config() -> Path:
-    """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""
-    xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    xdg_candidate = Path(xdg) / "crude" / "config.toml"
-    if xdg_candidate.exists():
-        return xdg_candidate
-    here = Path(__file__).resolve()
-    for parent in here.parents:
-        candidate = parent / "config.toml"
-        if candidate.exists():
-            return candidate
-    cwd_candidate = Path.cwd() / "config.toml"
-    if cwd_candidate.exists():
-        return cwd_candidate
-    typer.echo(
-        "Error: config.toml not found. Expected at ~/.config/crude/config.toml, project root, or CWD.",
-        err=True,
-    )
-    raise typer.Exit(1)
-
-
-def _read_config(config_path: Path) -> dict:
-    if sys.version_info >= (3, 11):
-        import tomllib
-        with open(config_path, "rb") as f:
-            return tomllib.load(f)
-    else:
-        import tomli
-        with open(config_path, "rb") as f:
-            return tomli.load(f)
+register_claude_command(app, "crude-skal")
 
 
 def _write_config(config_path: Path, config: dict) -> None:
@@ -129,13 +83,6 @@ def _fmt_m2o(value) -> str:
     """Format an Odoo many2one field (returned as [id, name]) to a string."""
     if isinstance(value, (list, tuple)) and len(value) == 2:
         return str(value[1])
-    if value is None or value is False:
-        return ""
-    return str(value)
-
-
-def _s(value) -> str:
-    """Coerce a field value to str, treating None/False as empty."""
     if value is None or value is False:
         return ""
     return str(value)

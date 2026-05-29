@@ -17,6 +17,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+import typer
+
 COMMAND_NAME = "crude"
 
 # The command body. The description lists the sites crude supports and stays
@@ -125,10 +127,31 @@ def registration_status(version: str, prog: str) -> Optional[str]:
     return None
 
 
+def register_claude_command(app, prog: str) -> None:
+    """Attach the freshness nudge and the install-claude-command subcommand to a CLI.
+
+    Every site CLI registers the same pair: a root callback that warns (on stderr)
+    when the installed Claude Code command is missing or stale, and an
+    ``install-claude-command`` subcommand that (re)writes it. Only ``prog`` (the
+    binary name, e.g. ``crude-atdw``) differs between sites.
+    """
+    from crude_common import __version__ as version
+
+    @app.callback()
+    def _root(ctx: typer.Context):
+        if ctx.invoked_subcommand != "install-claude-command":
+            nudge = registration_status(version, prog)
+            if nudge:
+                typer.echo(nudge, err=True)
+
+    @app.command("install-claude-command")
+    def install_claude_command():
+        """Install or update the crude command for Claude Code."""
+        run_install(version, prog)
+
+
 def run_install(version: str, prog: str) -> None:
     """Write (or update) the command, prompting before replacing a different version."""
-    import typer
-
     f = command_file()
     f.parent.mkdir(parents=True, exist_ok=True)
 
