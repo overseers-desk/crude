@@ -1,3 +1,13 @@
+crude (1.0.1) unstable; urgency=medium
+
+  * Internal refactor: shared config discovery, config reading, and Claude Code
+    command registration moved into crude_common, removing duplication across
+    the three site CLIs. No change to commands or behaviour.
+  * Add a live smoke-test suite (pytest, opt-in "live" marker) covering one
+    listing call per site.
+
+ -- Weiwu Zhang <a@colourful.land>  Fri, 29 May 2026 15:38:19 +0200
+
 crude (1.0.0) unstable; urgency=medium
 
   * Initial release. Unified command-line clients for ATDW, Skal, and Rezdy
