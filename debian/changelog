@@ -5,8 +5,10 @@ crude (1.0.1) unstable; urgency=medium
     the three site CLIs. No change to commands or behaviour.
   * Add a live smoke-test suite (pytest, opt-in "live" marker) covering one
     listing call per site.
+  * Claude Code command: install and keep ~/.claude/commands/crude.md current
+    automatically on every run; drop the version stamp and the staleness check.
 
- -- Weiwu Zhang <a@colourful.land>  Fri, 29 May 2026 15:38:19 +0200
+ -- Weiwu Zhang <a@colourful.land>  Fri, 29 May 2026 16:21:37 +0200
 
 crude (1.0.0) unstable; urgency=medium
 
