@@ -35,7 +35,7 @@ brew tap SmartLayer/crude https://github.com/SmartLayer/crude
 brew install crude
 ```
 
-Debian or Ubuntu: download `crude_1.0.1_all.deb` from the releases page and install it with `sudo apt install ./crude_1.0.1_all.deb`.
+Debian or Ubuntu: download the `.deb` from the releases page and install it with `sudo apt install ./crude_*_all.deb`.
 
 From source with pip:
 
