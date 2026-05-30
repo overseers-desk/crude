@@ -29,13 +29,13 @@ VERSION_HELP = "Show the crude version and exit."
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), and rezdy.com (products, availability, bookings).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), and deputy.com (rostering, timesheets, leave, employees).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`). Add `--json` to any read command for machine-readable output.
 
 ## crude-atdw (atdw-online.com.au)
 
@@ -76,6 +76,30 @@ Rezdy Supplier API. API key in `[rezdy]` (`api_key`, optional `environment`); th
 --updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
 --all on either command fetches all pages automatically (default limit is otherwise applied).
 For one day's bookings, set --from and --to to that day's bounds. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
+
+## crude-deputy (deputy.com)
+
+Deputy rostering, timesheets, leave. Permanent token in `[deputy]` (`deputy_api_token`, `deputy_install`, `deputy_geo`); there is no login step.
+
+    crude-deputy me
+    crude-deputy employee list [--limit] [--all]
+    crude-deputy employee get <id>
+    crude-deputy roster list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--area <id>] [--employee <id>] [--limit] [--all]
+    crude-deputy area list          # area == OperationalUnit
+    crude-deputy timesheet list [--from] [--to] [--employee <id>] [--all]
+    crude-deputy leave list [--employee <id>] [--all]
+
+Deputy's Resource API is uniform across ~60 objects, so any object is reachable generically:
+
+    crude-deputy resource list <Object> [--limit] [--start] [--all]
+    crude-deputy resource get <Object> <id>
+    crude-deputy resource query <Object> [--where "Field op value" ...] [--sort "Field:asc|desc"] [--join Name ...] [--max] [--all]
+    crude-deputy resource info <Object>
+    crude-deputy resource create <Object> (--data '<json>' | -f file | stdin)
+    crude-deputy resource update <Object> <id> (--data '<json>' | -f file | stdin)
+    crude-deputy resource delete <Object> <id> [--yes]
+
+`<Object>` is the literal Deputy object name (Employee, Roster, OperationalUnit, Timesheet, Leave, Memo, ...); there is no list-all endpoint, so consult Deputy's docs or use `resource <Object> info` to discover fields. --where operators: eq ne gt ge lt le lk nk in nn is ns (in/nn take a comma-separated value); --json-query passes a full Deputy QUERY body. delete is irreversible and prompts unless --yes.
 """
 
 

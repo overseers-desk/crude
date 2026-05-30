@@ -81,3 +81,28 @@ def test_rezdy_paginate(crude_config):
     assert isinstance(items, list)
     single_page = client.list_bookings(order_status="CANCELLED", limit=10)
     assert len(items) >= len(single_page)
+
+
+@pytest.mark.live
+def test_deputy_me(crude_config):
+    if not crude_config.get("deputy", {}).get("deputy_api_token"):
+        pytest.skip("no [deputy] credentials in config")
+    from crude_deputy.cli import _make_client
+
+    client = _make_client(crude_config)
+    me = client.me()
+    assert isinstance(me, dict)
+    assert me.get("Id") or me.get("UserId")
+
+
+@pytest.mark.live
+def test_deputy_lists_one_employee(crude_config):
+    if not crude_config.get("deputy", {}).get("deputy_api_token"):
+        pytest.skip("no [deputy] credentials in config")
+    from crude_deputy.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.list_resource("Employee", max_=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("Id")
