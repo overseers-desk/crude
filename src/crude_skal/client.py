@@ -7,9 +7,21 @@ from pathlib import Path
 
 import requests
 
+from crude_common.config import account as _account
+
 API_BASE = "https://australia.skal.org"
-SESSION_PATH = Path(tempfile.gettempdir()) / "crude_skal_session"
 AU_NC_ID = 1000
+
+
+def session_path() -> Path:
+    """Temp file caching the session cookie, namespaced by the selected account.
+
+    The default account keeps the bare ``crude_skal_session`` name; a named
+    account gets a suffix so two accounts never share a session.
+    """
+    name = "crude_skal_session"
+    a = _account()
+    return Path(tempfile.gettempdir()) / (f"{name}_{a}" if a else name)
 
 
 class SkalClient:
@@ -25,7 +37,7 @@ class SkalClient:
     def _update_session(self, session_id: str) -> None:
         """Replace the session cookie and persist to temp file."""
         self.session.cookies.set("session_id", session_id, domain="australia.skal.org")
-        SESSION_PATH.write_text(session_id)
+        session_path().write_text(session_id)
 
     def _try_refresh(self) -> bool:
         """Attempt to re-authenticate using stored credentials. Returns True on success."""

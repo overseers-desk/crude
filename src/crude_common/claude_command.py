@@ -15,14 +15,21 @@ supersedes the command and the refresh leaves it alone.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 
 from crude_common import version as crude_version
+from crude_common.config import set_account
 
 COMMAND_NAME = "crude"
 
 VERSION_HELP = "Show the crude version and exit."
+
+ACCOUNT_HELP = (
+    "Select a named account from this site's config (a [site.<name>] subtable); "
+    "omit for the site's default account."
+)
 
 # The command body and the single source of its content. The description lists
 # the sites crude supports and stays short, so an agent reaches for it when those
@@ -36,6 +43,8 @@ allowed-tools: Bash
 # crude
 
 crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`). Add `--json` to any read command for machine-readable output.
+
+A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
 ## crude-atdw (atdw-online.com.au)
 
@@ -63,7 +72,7 @@ Member `--state` values: active, draft, unpaid, done, club_change (default exclu
 
 ## crude-rezdy (rezdy.com)
 
-Rezdy Supplier API. API key in `[rezdy]` (`api_key`, optional `environment`); there is no login step.
+Rezdy Supplier API. API key in `[rezdy]` (`api_key`, required `timezone` as an IANA name, optional `environment`); there is no login step. rezdy reads every typed date as the account's operational day, so any command errors if `timezone` is missing.
 
     crude-rezdy product list [--search] [--limit] [--offset]
     crude-rezdy product get <code>
@@ -74,6 +83,7 @@ Rezdy Supplier API. API key in `[rezdy]` (`api_key`, optional `environment`); th
 
 `booking cancellations` filters by when the cancellation occurred (dateUpdated), not the session date. Use --from/--to with YYYY-MM-DD dates.
 --updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
+These two filters compare against a UTC instant; crude reads the typed date as the account's operational day (the required `timezone`) and converts to UTC, so a boundary date is not off by one.
 --all on either command fetches all pages automatically (default limit is otherwise applied).
 For one day's bookings, set --from and --to to that day's bounds. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
 
@@ -180,7 +190,11 @@ def register_claude_command(app) -> None:
         version: bool = typer.Option(
             None, "--version", callback=version_callback, is_eager=True, help=VERSION_HELP
         ),
+        account: Optional[str] = typer.Option(
+            None, "--account", "-a", envvar="CRUDE_ACCOUNT", help=ACCOUNT_HELP
+        ),
     ):
+        set_account(account)
         refresh()
 
     add_install_command(app)

@@ -9,7 +9,12 @@ from rich.console import Console
 from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
-from crude_common.config import find_config as _find_config, read_config as _read_config
+from crude_common.config import (
+    account as _account,
+    find_config as _find_config,
+    read_config as _read_config,
+    resolve_account as _resolve_account,
+)
 
 app = typer.Typer(help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.")
 listing_app = typer.Typer(help="ATDW listings.")
@@ -21,13 +26,15 @@ register_claude_command(app)
 
 def _get_token(config: dict) -> str:
     """Return cached token from temp file, or auto-login if credentials are present."""
-    from crude_atdw.client import TOKEN_PATH
-    if TOKEN_PATH.exists():
-        token = TOKEN_PATH.read_text().strip()
+    from crude_atdw.client import token_path
+    cache = token_path()
+    if cache.exists():
+        token = cache.read_text().strip()
         if token:
             return token
-    username = config.get("atdw", {}).get("username")
-    password = config.get("atdw", {}).get("password")
+    atdw = _resolve_account(config, "atdw", _account())
+    username = atdw.get("username")
+    password = atdw.get("password")
     if username and password:
         from crude_atdw.auth import atdw_login
         typer.echo("No cached token found — logging in automatically...", err=True)
@@ -36,7 +43,7 @@ def _get_token(config: dict) -> str:
         except Exception as e:
             typer.echo(f"Auto-login failed: {e}", err=True)
             raise typer.Exit(1)
-        TOKEN_PATH.write_text(token)
+        cache.write_text(token)
         return token
     typer.echo(
         "No cached token and no credentials found. Run `crude-atdw login` first.",
@@ -48,9 +55,10 @@ def _get_token(config: dict) -> str:
 def _make_client(config: dict):
     from crude_atdw.client import ATDWClient
     token = _get_token(config)
+    atdw = _resolve_account(config, "atdw", _account())
     credentials = {
-        "username": config.get("atdw", {}).get("username"),
-        "password": config.get("atdw", {}).get("password"),
+        "username": atdw.get("username"),
+        "password": atdw.get("password"),
     }
     return ATDWClient(token, credentials=credentials)
 
@@ -63,7 +71,7 @@ def login():
     config_path = _find_config()
     config = _read_config(config_path)
 
-    auth = config.get("atdw", {})
+    auth = _resolve_account(config, "atdw", _account())
     username = auth.get("username")
     password = auth.get("password")
     if not username or not password:
@@ -77,9 +85,10 @@ def login():
         typer.echo(f"Login failed: {e}", err=True)
         raise typer.Exit(1)
 
-    from crude_atdw.client import TOKEN_PATH
-    TOKEN_PATH.write_text(token)
-    typer.echo(f"Login successful. Token cached in {TOKEN_PATH}")
+    from crude_atdw.client import token_path
+    cache = token_path()
+    cache.write_text(token)
+    typer.echo(f"Login successful. Token cached in {cache}")
     typer.echo(f"Token (first 40 chars): {token[:40]}...")
 
 

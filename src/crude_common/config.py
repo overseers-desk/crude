@@ -10,8 +10,24 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 import typer
+
+# The account selected for this invocation, set by the shared root callback from
+# --account/-a (or $CRUDE_ACCOUNT). None means the default account: the bare
+# [site] section's own keys. Process-global because each crude binary runs as one
+# process and the callback fires before any command reads config.
+_account: Optional[str] = None
+
+
+def set_account(name: Optional[str]) -> None:
+    global _account
+    _account = name
+
+
+def account() -> Optional[str]:
+    return _account
 
 
 def find_config() -> Path:
@@ -44,6 +60,40 @@ def read_config(config_path: Path) -> dict:
         import tomli
         with open(config_path, "rb") as f:
             return tomli.load(f)
+
+
+def resolve_account(config: dict, site: str, name: Optional[str]) -> dict:
+    """Return the credential fields for one account of ``site``.
+
+    A site section holds the default account as scalar keys and named accounts as
+    subtables, so a config can carry several accounts on the same site (different
+    countries, timezones, credentials)::
+
+        [rezdy]            # default account
+        api_key = "AU-key"
+
+        [rezdy.es]         # named account "es"
+        api_key = "ES-key"
+
+    With ``name`` None the default account is returned: the section's scalar keys
+    only (subtables stripped out), so an existing flat config is unchanged. With a
+    name, the matching subtable is returned. A scalar key is a default-account
+    field, never an account, so an account name that collides with a field name
+    (rezdy ``api_key``, deputy ``deputy_install``, ...) is simply not found.
+    """
+    section = config.get(site, {})
+    named = {k: v for k, v in section.items() if isinstance(v, dict)}
+    if name is None:
+        return {k: v for k, v in section.items() if not isinstance(v, dict)}
+    if name not in named:
+        available = ", ".join(sorted(named)) or "(none defined)"
+        typer.echo(
+            f"Error: no account named '{name}' under [{site}]. "
+            f"Named accounts: {available}.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    return named[name]
 
 
 def s(value) -> str:

@@ -8,9 +8,22 @@ from pathlib import Path
 
 import requests
 
+from crude_common.config import account as _account
+
 API_BASE = "https://atlas.atdw-online.com.au/api"
 ORG_ID = "656826d85c376a10511493fd"
-TOKEN_PATH = Path(tempfile.gettempdir()) / "crude_atdw_token"
+
+
+def token_path() -> Path:
+    """Temp file caching the JWT, namespaced by the selected account.
+
+    The default account keeps the bare ``crude_atdw_token`` name, so an existing
+    cache survives the move to multi-account; a named account gets a suffix so two
+    accounts never read each other's token.
+    """
+    name = "crude_atdw_token"
+    a = _account()
+    return Path(tempfile.gettempdir()) / (f"{name}_{a}" if a else name)
 
 
 class ATDWClient:
@@ -26,7 +39,7 @@ class ATDWClient:
     def _update_token(self, token: str) -> None:
         """Replace the bearer token in the session and persist to temp file."""
         self.session.headers.update({"Authorization": f"Bearer {token}"})
-        TOKEN_PATH.write_text(token)
+        token_path().write_text(token)
 
     def _try_refresh(self) -> bool:
         """Attempt to re-authenticate using stored credentials. Returns True on success."""

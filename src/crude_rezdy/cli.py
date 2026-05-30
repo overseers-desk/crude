@@ -1,14 +1,22 @@
 """Typer CLI for the Rezdy Supplier API: crude-rezdy."""
 
 import json
+from datetime import datetime, time, timezone as _utc
 from typing import Optional
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
-from crude_common.config import find_config as _find_config, read_config as _read_config, s as _s
+from crude_common.config import (
+    account as _account,
+    find_config as _find_config,
+    read_config as _read_config,
+    resolve_account as _resolve_account,
+    s as _s,
+)
 
 app = typer.Typer(help="crude-rezdy — Rezdy Supplier API (products, availability, bookings).")
 product_app = typer.Typer(help="Rezdy products.")
@@ -22,35 +30,69 @@ console = Console()
 register_claude_command(app)
 
 
+def _parse_timezone(rezdy: dict) -> ZoneInfo:
+    """Return the account's timezone as a ZoneInfo, erroring if unset or unknown.
+
+    A timezone is a required field on a rezdy account: every date a user types is
+    meant as that account's operational day, so crude needs the zone to read it
+    correctly. The requirement is enforced wherever a rezdy client is built, not
+    deferred to a particular filter, since date-bearing queries are plentiful and
+    a missing zone is a config error regardless of which one is run.
+    """
+    name = rezdy.get("timezone")
+    if not name:
+        which = f"[rezdy.{_account()}]" if _account() else "[rezdy]"
+        typer.echo(
+            f"Error: {which} must set a timezone (IANA name, e.g. "
+            f"\"Australia/Brisbane\"); rezdy reads typed dates as the account's "
+            f"operational day.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        typer.echo(f"Error: unknown timezone '{name}' in rezdy config.", err=True)
+        raise typer.Exit(1)
+
+
 def _make_client(config: dict):
     from crude_rezdy.client import RezdyClient
-    rezdy = config.get("rezdy", {})
+    rezdy = _resolve_account(config, "rezdy", _account())
     api_key = rezdy.get("api_key")
     if not api_key:
         typer.echo("Error: config.toml must contain [rezdy] api_key.", err=True)
         raise typer.Exit(1)
+    _parse_timezone(rezdy)  # required field; fail early if missing or unknown
     environment = rezdy.get("environment", "production")
     return RezdyClient(api_key, environment=environment)
+
+
+def _account_timezone(config: dict) -> ZoneInfo:
+    """The selected rezdy account's timezone, for the client-side instant filters."""
+    return _parse_timezone(_resolve_account(config, "rezdy", _account()))
+
+
+def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
+    """Map a typed --from/--to into a UTC instant for comparison with dateUpdated.
+
+    A bare YYYY-MM-DD is read as the start (or, for --to, the end) of that day in
+    the account's zone, then converted to UTC and rendered as a ...Z string, so a
+    lexicographic compare against Rezdy's ...Z dateUpdated is correct. A value that
+    already carries a time is passed through unchanged.
+    """
+    if date_str and len(date_str) == 10:
+        y, m, d = (int(p) for p in date_str.split("-"))
+        bound = time(23, 59, 59) if end else time(0, 0, 0)
+        local = datetime(y, m, d, bound.hour, bound.minute, bound.second, tzinfo=tz)
+        return local.astimezone(_utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return date_str
 
 
 def _customer_name(booking: dict) -> str:
     customer = booking.get("customer") or {}
     name = " ".join(p for p in (customer.get("firstName"), customer.get("lastName")) if p)
     return name or _s(customer.get("email"))
-
-
-def _normalize_date(s: str) -> str:
-    """Accept YYYY-MM-DD or full ISO 8601; return a comparable ISO string."""
-    if s and len(s) == 10:
-        return s + "T00:00:00Z"
-    return s
-
-
-def _normalize_date_end(s: str) -> str:
-    """For --to bare dates, include the full day."""
-    if s and len(s) == 10:
-        return s + "T23:59:59Z"
-    return s
 
 
 def _refund_count(booking: dict) -> int:
@@ -235,10 +277,14 @@ def list_bookings(
         typer.echo(f"Error fetching bookings: {e}", err=True)
         raise typer.Exit(1)
 
-    if updated_from:
-        items = [b for b in items if b.get("dateUpdated", "") >= _normalize_date(updated_from)]
-    if updated_to:
-        items = [b for b in items if b.get("dateUpdated", "") <= _normalize_date_end(updated_to)]
+    if updated_from or updated_to:
+        tz = _account_timezone(config)
+        if updated_from:
+            lo = _day_bound_utc(updated_from, tz, end=False)
+            items = [b for b in items if b.get("dateUpdated", "") >= lo]
+        if updated_to:
+            hi = _day_bound_utc(updated_to, tz, end=True)
+            items = [b for b in items if b.get("dateUpdated", "") <= hi]
 
     if output_json:
         typer.echo(json.dumps(items, indent=2))
@@ -295,10 +341,14 @@ def list_cancellations(
         typer.echo(f"Error fetching cancellations: {e}", err=True)
         raise typer.Exit(1)
 
-    if from_:
-        items = [b for b in items if b.get("dateUpdated", "") >= _normalize_date(from_)]
-    if to:
-        items = [b for b in items if b.get("dateUpdated", "") <= _normalize_date_end(to)]
+    if from_ or to:
+        tz = _account_timezone(config)
+        if from_:
+            lo = _day_bound_utc(from_, tz, end=False)
+            items = [b for b in items if b.get("dateUpdated", "") >= lo]
+        if to:
+            hi = _day_bound_utc(to, tz, end=True)
+            items = [b for b in items if b.get("dateUpdated", "") <= hi]
 
     if output_json:
         typer.echo(json.dumps(items, indent=2))

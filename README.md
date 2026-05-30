@@ -26,6 +26,8 @@ cp config.example.toml ~/.config/crude/config.toml
 
 Each site reads its own section (`[atdw]`, `[skal]`) from the one file. The CLIs look for `~/.config/crude/config.toml` first, then fall back to a `config.toml` in the repository root or the current directory for development. Config files are gitignored.
 
+A site can carry more than one account. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one, selected with `--account/-a` (or `$CRUDE_ACCOUNT`) before the resource. One example is a Rezdy venue in Australia and another in Spain, each with its own key and timezone. See `config.example.toml`.
+
 ### Install
 
 Homebrew (macOS or Linux):
@@ -127,7 +129,7 @@ With no filters, `member list` returns the current Australian member roster. Fil
 
 ## Rezdy usage (`crude-rezdy`)
 
-Rezdy authenticates with a Supplier API key, set in the `[rezdy]` section of the config; there is no login step.
+Rezdy authenticates with a Supplier API key, set in the `[rezdy]` section of the config; there is no login step. The section also requires a `timezone` (IANA name, e.g. `Australia/Brisbane`): rezdy reads every typed date as that account's operational day, so any rezdy command errors if the field is missing.
 
 ```
 crude-rezdy product list --search "kayak" --limit 10
@@ -138,6 +140,8 @@ crude-rezdy booking get R123456
 ```
 
 For a single day's bookings, set the tour-time bounds to that day: `crude-rezdy booking list --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z`. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
+
+`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter client-side against the cancellation/update instant, which Rezdy records in UTC. crude reads the typed date as the account's operational day (the `timezone` above) and converts to UTC for the comparison, so a date typed at the day boundary is not filed a day off.
 
 ### JSON output
 

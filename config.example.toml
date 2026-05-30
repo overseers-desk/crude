@@ -8,8 +8,23 @@ password = "your-password"
 [skal]
 username = "your-email@example.com"
 password = "your-password"
-# session_id is written back here automatically after `crude-skal login`.
+# session_id is cached automatically after `crude-skal login`.
 
 [rezdy]
 api_key = "your-rezdy-supplier-api-key"
+timezone = "Australia/Brisbane"  # required (IANA name): rezdy reads every typed
+                                 # date as this account's operational day.
 # environment = "production"  # or "staging"; defaults to production
+
+# Multiple accounts on one site
+# -----------------------------
+# The bare [site] section above is the "default" account. Hold a second account on
+# the same site (different country, credentials, timezone) as a [site.<name>]
+# subtable, and select it with --account/-a before the resource (or $CRUDE_ACCOUNT):
+#
+#   crude-rezdy booking cancellations --from 2026-05-03               # default account
+#   crude-rezdy --account es booking cancellations --from 2026-05-03  # the [rezdy.es] account
+#
+# [rezdy.es]
+# api_key = "your-spain-rezdy-supplier-api-key"
+# timezone = "Europe/Madrid"  # required, as on the default account

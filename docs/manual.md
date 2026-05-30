@@ -34,6 +34,8 @@ password = "your-password"
 
 Credentials are never hard-coded or passed as flags. The JWT token is not stored in this file; it is cached to a temporary file (`crude_atdw_token` in the system temp directory) by the `login` command and on automatic re-authentication.
 
+A second ATDW account can live in a `[atdw.<name>]` subtable and is selected with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`); see the repository `README.md` for the shared multi-account model. Each account caches its own token: the default account keeps the bare `crude_atdw_token` filename, a named account uses `crude_atdw_token_<name>`.
+
 ## Auto-login
 
 If no cached token is present, or if an API call returns 401 (token expired), the CLI re-authenticates using the `username` and `password` from the `[atdw]` section, refreshes the cached token, and retries the request. No manual step is needed. The token is valid for roughly 7 hours.

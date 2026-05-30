@@ -16,7 +16,13 @@ from rich.console import Console
 from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
-from crude_common.config import find_config as _find_config, read_config as _read_config, s as _s
+from crude_common.config import (
+    account as _account,
+    find_config as _find_config,
+    read_config as _read_config,
+    resolve_account as _resolve_account,
+    s as _s,
+)
 
 app = typer.Typer(help="crude-deputy — Deputy rostering, timesheets, leave, employees.")
 employee_app = typer.Typer(help="Deputy employees.")
@@ -41,7 +47,7 @@ _OPERATORS = {"eq", "ne", "gt", "ge", "lt", "le", "lk", "nk", "in", "nn", "is", 
 
 def _make_client(config: dict):
     from crude_deputy.client import DeputyClient
-    deputy = config.get("deputy", {})
+    deputy = _resolve_account(config, "deputy", _account())
     token = deputy.get("deputy_api_token")
     install = deputy.get("deputy_install")
     geo = deputy.get("deputy_geo")

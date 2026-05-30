@@ -9,7 +9,13 @@ from rich.console import Console
 from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
-from crude_common.config import find_config as _find_config, read_config as _read_config, s as _s
+from crude_common.config import (
+    account as _account,
+    find_config as _find_config,
+    read_config as _read_config,
+    resolve_account as _resolve_account,
+    s as _s,
+)
 
 app = typer.Typer(help="crude-skal — Skål Australia member portal.")
 member_app = typer.Typer(help="Skål members.")
@@ -31,20 +37,22 @@ def _write_config(config_path: Path, config: dict) -> None:
 
 def _get_session(config: dict) -> str:
     """Return a session_id from temp file, config.toml, or auto-login."""
-    from crude_skal.client import SESSION_PATH
+    from crude_skal.client import session_path
+    cache = session_path()
 
-    if SESSION_PATH.exists():
-        session_id = SESSION_PATH.read_text().strip()
+    if cache.exists():
+        session_id = cache.read_text().strip()
         if session_id:
             return session_id
 
-    session_id = config.get("skal", {}).get("session_id", "")
+    skal = _resolve_account(config, "skal", _account())
+    session_id = skal.get("session_id", "")
     if session_id:
-        SESSION_PATH.write_text(session_id)
+        cache.write_text(session_id)
         return session_id
 
-    username = config.get("skal", {}).get("username")
-    password = config.get("skal", {}).get("password")
+    username = skal.get("username")
+    password = skal.get("password")
     if username and password:
         from crude_skal.auth import skal_login
         typer.echo("No cached session found — logging in automatically...", err=True)
@@ -53,7 +61,7 @@ def _get_session(config: dict) -> str:
         except Exception as e:
             typer.echo(f"Auto-login failed: {e}", err=True)
             raise typer.Exit(1)
-        SESSION_PATH.write_text(session_id)
+        cache.write_text(session_id)
         return session_id
 
     typer.echo(
@@ -66,9 +74,10 @@ def _get_session(config: dict) -> str:
 def _make_client(config: dict):
     from crude_skal.client import SkalClient
     session_id = _get_session(config)
+    skal = _resolve_account(config, "skal", _account())
     credentials = {
-        "username": config.get("skal", {}).get("username"),
-        "password": config.get("skal", {}).get("password"),
+        "username": skal.get("username"),
+        "password": skal.get("password"),
     }
     client = SkalClient(session_id, credentials=credentials)
     if not client.verify_session():
@@ -92,12 +101,11 @@ def _fmt_m2o(value) -> str:
 def login():
     """Authenticate using credentials from config.toml and cache the session."""
     from crude_skal.auth import skal_login
-    from crude_skal.client import SESSION_PATH
 
     config_path = _find_config()
     config = _read_config(config_path)
 
-    skal = config.get("skal", {})
+    skal = _resolve_account(config, "skal", _account())
     username = skal.get("username")
     password = skal.get("password")
     if not username or not password:
@@ -111,13 +119,18 @@ def login():
         typer.echo(f"Login failed: {e}", err=True)
         raise typer.Exit(1)
 
-    SESSION_PATH.write_text(session_id)
+    from crude_skal.client import session_path
+    cache = session_path()
+    cache.write_text(session_id)
 
-    # Write back to config.toml so the session persists across installs
-    config.setdefault("skal", {})["session_id"] = session_id
+    # Write back to config.toml so the session persists across installs, into the
+    # selected account's subtable when one is named, else the bare [skal] section.
+    section = config.setdefault("skal", {})
+    target = section.setdefault(_account(), {}) if _account() else section
+    target["session_id"] = session_id
     _write_config(config_path, config)
 
-    typer.echo(f"Login successful. Session cached in {SESSION_PATH}")
+    typer.echo(f"Login successful. Session cached in {cache}")
     typer.echo(f"Session ID: {session_id[:16]}...")
 
 
