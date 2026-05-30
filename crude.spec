@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.0.2
+Version:        1.1.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -22,10 +22,11 @@ crude provides command-line clients for reading and editing your own
 records on sites that lack a usable public API, under one predictable
 <site> <resource> <verb> grammar.
 
-Three sites ship in this release, each as its own binary: crude-atdw
-(ATDW tourism listings), crude-skal (Skal Australia member portal), and
-crude-rezdy (Rezdy products, availability, and bookings). The crude command
-lists them and carries the shared --version and install-claude-command flags.
+Four sites ship as their own binaries: crude-atdw (ATDW tourism listings),
+crude-skal (Skal Australia member portal), crude-rezdy (Rezdy products,
+availability, and bookings), and crude-deputy (Deputy workforce management).
+The crude command lists them and carries the shared --version and
+install-claude-command flags.
 
 %prep
 %autosetup -n %{name}-%{version}
@@ -51,7 +52,8 @@ for spec in \
     crude:crude_common.launcher \
     crude-atdw:crude_atdw.cli \
     crude-skal:crude_skal.cli \
-    crude-rezdy:crude_rezdy.cli; do
+    crude-rezdy:crude_rezdy.cli \
+    crude-deputy:crude_deputy.cli; do
     name=${spec%%:*}
     module=${spec##*:}
     cat > %{buildroot}/usr/bin/${name} << ENTRY
@@ -69,10 +71,22 @@ done
 /usr/bin/crude-atdw
 /usr/bin/crude-skal
 /usr/bin/crude-rezdy
+/usr/bin/crude-deputy
 /usr/lib/python*/site-packages/crude_*/
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Sat May 30 2026 Weiwu Zhang <a@colourful.land> - 1.1.0-1
+- Add crude-deputy: command-line client for Deputy workforce management.
+  Curated sub-apps for employee, roster, area, timesheet, and leave; a generic
+  resource sub-app reaches any Deputy object with QUERY operators, schema info,
+  and full CRUD; /me shows the token owner.
+- Multi-account support across all site CLIs: the bare [site] section is the
+  default account, [site.<name>] subtables are named accounts, selected with
+  --account/-a or $CRUDE_ACCOUNT.
+- crude-rezdy: timezone is now a required config field; date filters convert
+  the typed day to UTC before comparing against Rezdy's dateUpdated timestamps.
+
 * Sat May 30 2026 Weiwu Zhang <a@colourful.land> - 1.0.2-1
 - crude-rezdy booking: new cancellations subcommand, filtering by
   cancellation date (dateUpdated), with columns for product, session,

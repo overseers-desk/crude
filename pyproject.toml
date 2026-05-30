@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crude"
-version = "1.0.2"
+version = "1.1.0"
 description = "CRUD-Engine: a lightweight CLI for read/write access to one's own data on sites without a usable public API (ATDW, Skål, Rezdy)"
 readme = "README.md"
 license = {text = "MIT"}

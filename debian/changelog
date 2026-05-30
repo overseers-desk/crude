@@ -1,3 +1,17 @@
+crude (1.1.0) unstable; urgency=medium
+
+  * Add crude-deputy: command-line client for Deputy workforce management.
+    Curated sub-apps for employee, roster, area, timesheet, and leave; a
+    generic resource sub-app reaches any Deputy object with QUERY operators,
+    schema info, and full CRUD; `me` shows the token owner.
+  * Multi-account support across all site CLIs: the bare [site] section is the
+    default account, [site.<name>] subtables are named accounts, selected with
+    --account / -a or $CRUDE_ACCOUNT.
+  * crude-rezdy: timezone is now a required config field; date filters convert
+    the typed day to UTC before comparing against Rezdy's dateUpdated timestamps.
+
+ -- Weiwu Zhang <a@colourful.land>  Sat, 30 May 2026 00:00:00 +0200
+
 crude (1.0.2) unstable; urgency=medium
 
   * crude-rezdy booking: add `cancellations` subcommand — filters by

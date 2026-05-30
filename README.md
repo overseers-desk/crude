@@ -6,11 +6,12 @@ CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and
 crude-<site> <resource> <verb> [id] [flags]
 ```
 
-Three sites ship today, each as its own console binary:
+Four sites ship today, each as its own console binary:
 
 - `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
 - `crude-rezdy`: Rezdy Supplier API for products, availability, and bookings (REST, API key).
+- `crude-deputy`: Deputy workforce management: employees, rosters, timesheets, leave, and a generic resource sub-app for any Deputy object (REST, permanent API token).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -45,11 +46,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the three site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the four site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all three sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal` / `crude-rezdy`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all four sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 

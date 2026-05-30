@@ -26,7 +26,8 @@ Description: CRUD-style command-line clients for sites without a public API
  records on sites that lack a usable public API, under one predictable
  <site> <resource> <verb> grammar.
  .
- Three sites ship in this release, each as its own binary: crude-atdw
- (ATDW tourism listings), crude-skal (Skal Australia member portal), and
- crude-rezdy (Rezdy products, availability, and bookings). The crude command
- lists them and carries the shared --version and install-claude-command flags.
+ Four sites ship as their own binaries: crude-atdw (ATDW tourism listings),
+ crude-skal (Skal Australia member portal), crude-rezdy (Rezdy products,
+ availability, and bookings), and crude-deputy (Deputy workforce management).
+ The crude command lists them and carries the shared --version and
+ install-claude-command flags.
