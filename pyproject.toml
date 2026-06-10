@@ -29,6 +29,7 @@ crude-atdw = "crude_atdw.cli:app"
 crude-skal = "crude_skal.cli:app"
 crude-rezdy = "crude_rezdy.cli:app"
 crude-deputy = "crude_deputy.cli:app"
+crude-sonas = "crude_sonas.cli:app"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

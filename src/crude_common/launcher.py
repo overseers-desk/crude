@@ -1,8 +1,8 @@
 """The crude umbrella command: an index of the per-site CLIs.
 
 crude has no resources of its own. Run with no arguments it lists the site
-commands (crude-atdw, crude-skal, crude-rezdy, crude-deputy) and the shared flags; each site is
-a binary driven directly. It carries the same --version, --help, and
+commands (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas) and the shared flags;
+each site is a binary driven directly. It carries the same --version, --help, and
 install-claude-command surface as the site CLIs.
 """
 
@@ -18,7 +18,7 @@ from crude_common.claude_command import (
 )
 
 app = typer.Typer(
-    help="crude — index of the per-site CLIs (crude-atdw, crude-skal, crude-rezdy, crude-deputy).",
+    help="crude — index of the per-site CLIs (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas).",
 )
 
 # (binary, one-line description) for the no-argument listing. This is the index
@@ -29,6 +29,7 @@ SITES = [
     ("crude-skal", "Skal Australia member portal (australia.skal.org)"),
     ("crude-rezdy", "Rezdy products, availability, bookings (rezdy.com)"),
     ("crude-deputy", "Deputy rostering, timesheets, leave (deputy.com)"),
+    ("crude-sonas", "Sonas wedding-venue software (app.sonas.events)"),
 ]
 
 

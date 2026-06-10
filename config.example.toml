@@ -16,6 +16,13 @@ timezone = "Australia/Brisbane"  # required (IANA name): rezdy reads every typed
                                  # date as this account's operational day.
 # environment = "production"  # or "staging"; defaults to production
 
+[sonas]
+username = "your-email@example.com"
+password_hash = "sha256-hex-of-your-password"  # printf '%s' 'PASSWORD' | sha256sum | cut -d' ' -f1
+# fingerprint = "..."  # optional device id (Meteor fpIds); a default is built in. A new
+#                      # device triggers a one-time verification email; see docs/sonas.md.
+# tenant = "..."       # optional; auto-discovered from your user record otherwise.
+
 # Multiple accounts on one site
 # -----------------------------
 # The bare [site] section above is the "default" account. Hold a second account on
