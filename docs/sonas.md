@@ -20,8 +20,8 @@ confirmed; **[bundle]** = read from the minified client bundle, not yet run.
 Working and verified **[live]**:
 
 - DDP transport (TLS websocket), connect handshake.
-- Custom accounts-password login (`fpPassword` digest + `fpIds` fingerprint),
-  device-verification handling, Meteor resume-token caching.
+- Login (customised Meteor accounts-password with a device fingerprint),
+  device-verification handling, and resume-token caching.
 - Tenant selection.
 - Read: `crude-sonas event list` / `event get` via `eventsByDateRange`.
 - Write: `eventUpdateGeneralSection` (a reversible spelling edit on a test event,
@@ -62,50 +62,19 @@ built from `added`/`changed`/`removed` messages (minimongo-style).
 
 ---
 
-## 3. Authentication
+## 3. Authentication (built; reference only)
 
-Sonas customised Meteor `accounts-password`. The `login` DDP method takes a single
-object argument:
+Login is implemented and verified in `auth.py` and `SonasClient._ensure`
+(`client.py`); an implementer adding resources reuses it untouched. At a high
+level it is a customised Meteor accounts-password login carrying a device
+fingerprint, with the Meteor resume token cached in a temp file and reused. Read
+the code for the wire details.
 
-```json
-{ "user": {"email": "<email>"},
-  "fpPassword": {"digest": "<sha256-hex-of-password>", "algorithm": "sha-256"},
-  "fpIds": ["<device-fingerprint>"] }
-```
-
-- The password field is renamed **`fpPassword`** (a vanilla `password` field is
-  rejected with `403 Login forbidden`). Its value is the standard Meteor
-  `{digest, algorithm}`: the lowercase hex SHA-256 of the plaintext. The plaintext
-  never crosses the wire, so the client only ever needs the digest
-  (`printf '%s' 'PASSWORD' | sha256sum | cut -d' ' -f1`). The server bcrypts the
-  digest, so the digest is password-equivalent for this site.
-- **`fpIds`** is a required non-empty device fingerprint (empty → `login-error: No
-  fingerprint received`). Any stable string works; it is not a secret. crude uses a
-  built-in default (`DEFAULT_FINGERPRINT`), overridable via `[sonas] fingerprint`.
-- `user` may be `{"email": ...}` or `{"username": ...}`.
-- On success the result is `{id, token, tokenExpires:{$date}}`. Cache `token` and
-  resume with `login({"resume": token})` to avoid re-sending the password each run.
-
-**Device verification (one-time per fingerprint+location).** A fingerprint the
-server has not seen returns:
-
-```
-verification-error: "We have sent you an email with a link to verify this
-location & device ... valid for 4 hours."
-```
-
-Sonas emails a link `https://api.sonas.events/login/validate/<token>`. Opening it
-(a plain GET; `302 → /sign-in?verified=true`) trusts that fingerprint, and the
-same login then succeeds with no email. Trust appears keyed to fingerprint +
-account + source IP, so a changed IP may re-challenge. `sonas_login` in
-`auth.py` detects this error and prints actionable guidance.
-
-There is a `too-many-requests` login rate limiter (`error.details.timeToReset`
-seconds); resume tokens avoid hammering it.
-
-OAuth and 2FA exist in the bundle (`registerCodeVerifier` PKCE for OAuth services;
-`loginWithPasswordAnd2faCode` for accounts with 2FA enabled) but are not needed
-for a password account without 2FA.
+One operational note worth knowing while developing: a login from a device
+fingerprint or network the server has not seen returns a `verification-error` and
+emails a one-time link; opening it once trusts that device, after which logins
+resume silently. `sonas_login` detects this and prints guidance. A
+`too-many-requests` rate limiter also exists, which the cached resume token avoids.
 
 ---
 
@@ -377,7 +346,7 @@ subscriptions, writes are method calls via `SonasClient.call(method, arg)`.
 - `client.py`: DDP transport (free functions) plus `SonasClient` (session, creds,
   tenant, resource methods). `SonasClient.call(method, arg)` is the write primitive;
   `list_events`/`get_event` show the read pattern and the unsub discipline.
-- `auth.py`: `sonas_login` (fpPassword + fpIds, verification-error guidance) and
+- `auth.py`: `sonas_login` (login plus device-verification guidance) and
   `sonas_resume`.
 - `cli.py`: Typer app, `register_claude_command`, `_make_client`, render helpers.
 
@@ -403,12 +372,10 @@ Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
 
 ## 12. Setup
 
-1. `[sonas]` config: `username` (login email), `password_hash`
-   (`printf '%s' 'PASSWORD' | sha256sum | cut -d' ' -f1`). Optional `fingerprint`
-   (a default is built in), optional `tenant` (auto-discovered otherwise).
-2. First run from a new machine/fingerprint triggers the device-verification email
-   (§3). Open the link once; subsequent runs resume silently from the cached token
-   (`/tmp/crude_sonas_token[_<account>]`).
+1. Fill in the `[sonas]` section following `config.example.toml`.
+2. The first run from a new device or network triggers the one-time
+   device-verification email (§3); open the link once, and later runs resume from
+   the cached token.
 
 ---
 
