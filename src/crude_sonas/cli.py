@@ -39,6 +39,14 @@ invoice_app = typer.Typer(help="An event's financial records: proformas, invoice
 app.add_typer(invoice_app, name="invoice")
 service_booking_app = typer.Typer(help="An event's bookings of catalog services.")
 app.add_typer(service_booking_app, name="service-booking")
+message_app = typer.Typer(help="An event's messages (email and internal).")
+app.add_typer(message_app, name="message")
+document_app = typer.Typer(help="An event's document files.")
+app.add_typer(document_app, name="document")
+terms_app = typer.Typer(help="An event's terms-and-conditions records.")
+app.add_typer(terms_app, name="terms")
+activity_app = typer.Typer(help="An event's activity log (system and staff entries).")
+app.add_typer(activity_app, name="activity")
 console = Console()
 
 register_claude_command(app)
@@ -1161,6 +1169,139 @@ def service_booking_confirm(
     _do_call("eventConfirmServiceBooking", {"eventId": event_id, "bookingId": booking_id},
              f"confirm service booking {booking_id}",
              confirm=f"Confirm service booking {booking_id}?", yes=yes)
+
+
+# ----------------------------------------------------------------------
+# message / document / terms / activity
+# ----------------------------------------------------------------------
+
+# Message and terms enums (docs/sonas.md §7).
+MESSAGE_STATUS = {0: "Incoming", 1: "Received", 2: "Outgoing", 3: "Sent",
+                  4: "Delivered", 7: "Opened", 9: "Draft"}
+MESSAGE_TRANSPORT = {0: "Internal", 1: "Email"}
+TERMS_STATUS = {0: "Waiting", 1: "Accepted", 2: "Rejected"}
+
+
+@message_app.command("list")
+def message_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's messages (eventMessages publication, collection
+    `messages`; the pub also carries the attachment `files` docs, listed by
+    `document list`)."""
+    client = _client()
+    try:
+        messages = client.read_pub("eventMessages", [event_id], collection="messages")
+    except Exception as e:
+        typer.echo(f"Error fetching messages: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    messages.sort(key=lambda m: (m.get("createdAt") or {}).get("$date", 0)
+                  if isinstance(m.get("createdAt"), dict) else 0)
+    if not output_json:
+        _name_enums(messages, {"status": MESSAGE_STATUS, "transport": MESSAGE_TRANSPORT})
+    _emit(messages, output_json, columns=[
+        ("Id", "_id"), ("Created", "createdAt"), ("Status", "status"),
+        ("Transport", "transport"), ("Author", "author"), ("Subject", "subject"),
+    ], what="message")
+
+
+@document_app.command("list")
+def document_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's document files (eventDocs publication, collection
+    `files`; its second parameter is the event doc's `documents` id array,
+    fetched here via eventBasicInfo, as the app does)."""
+    client = _client()
+    try:
+        basic = client.read_pub("eventBasicInfo", [event_id])
+        event = next((d for d in basic if d["_collection"] == "events"), {})
+        files = client.read_pub("eventDocs", [event_id, event.get("documents") or []],
+                                collection="files")
+    except Exception as e:
+        typer.echo(f"Error fetching documents: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    _emit(files, output_json, columns=[
+        ("Id", "_id"), ("Name", "displayName"), ("Type", "type"),
+        ("Content-Type", "contentType"), ("Size", "size"), ("Created", "createdAt"),
+    ], what="document")
+
+
+@terms_app.command("list")
+def terms_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's terms-and-conditions records (eventTermsAndConditions
+    publication, collection `terms-and-conditions`)."""
+    client = _client()
+    try:
+        terms = client.read_pub("eventTermsAndConditions", [event_id],
+                                collection="terms-and-conditions")
+    except Exception as e:
+        typer.echo(f"Error fetching terms: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        _name_enums(terms, {"status": TERMS_STATUS})
+    _emit(terms, output_json, columns=[
+        ("Id", "_id"), ("Name", "name"), ("Status", "status"),
+        ("Required", "required"), ("Answered by", "answeredByName"),
+        ("Answered", "answeredAt"),
+    ], what="terms record")
+
+
+@activity_app.command("list")
+def activity_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    limit: int = typer.Option(50, "--limit", help="Newest entries to fetch."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's activity log (eventActivities publication, collection
+    `activities`). Entries carry a readable `text`; `verified` shows the
+    verification date, empty for unverified."""
+    client = _client()
+    try:
+        acts = client.read_pub("eventActivities", [event_id, limit],
+                               collection="activities")
+    except Exception as e:
+        typer.echo(f"Error fetching activities: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    acts.sort(key=lambda a: (a.get("createdAt") or {}).get("$date", 0)
+              if isinstance(a.get("createdAt"), dict) else 0)
+    _emit(acts, output_json, columns=[
+        ("Id", "_id"), ("Created", "createdAt"), ("Text", "text"),
+        ("Section", "section"), ("Verified", "verifiedDate"),
+    ], what="activity")
+
+
+@activity_app.command("verify")
+def activity_verify(
+    activity_id: str = typer.Argument(..., help="Activity id (from `activity list`)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Mark one activity as verified (eventVerifyActivity)."""
+    _do_call("eventVerifyActivity", {"activityId": activity_id},
+             f"verify activity {activity_id}", output_json=output_json)
+
+
+@activity_app.command("verify-all")
+def activity_verify_all(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Mark all of an event's activities as verified (eventVerifyAllActivities)."""
+    _do_call("eventVerifyAllActivities", {"eventId": event_id},
+             f"verify all activities on {event_id}", output_json=output_json)
 
 
 if __name__ == "__main__":

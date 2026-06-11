@@ -147,11 +147,15 @@ any statically greppable `subscribe(` call, found by watching the page's WS
 frames per §6.4), `eventCustomersInfo(eventId)`, `eventCosts(eventId)`,
 `eventTransactions(eventId)` **[live]** (collection `transactions`),
 `eventFinancialRecords(eventId)` **[live]** (collection `financial-records`),
-`eventTermsAndConditions(eventId)`,
+`eventTermsAndConditions(eventId)` **[live]** (collection `terms-and-conditions`),
 `eventServiceBookings(eventId)` **[live]** (multi-cursor: collection
 `service-bookings` plus the referenced `services` docs),
-`eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
-`eventTables(eventId)`, `eventMessages(eventId)`, `eventActivities(eventId, limit)`,
+`eventDocs(eventId, documents)` **[live]** (collection `files`; the second
+param is the event doc's `documents` id array, carried by `eventBasicInfo`
+but not by `eventsByDateRange`), `eventLayouts(eventId)`,
+`eventTables(eventId)`, `eventMessages(eventId)` **[live]** (collection
+`messages` plus the attachment `files` docs),
+`eventActivities(eventId, limit)` **[live]** (collection `activities`),
 `eventActivitiesCount(eventId)`, `guests(eventId)` **[live]** (collection `guests`),
 `enquiryData(eventId)`, `tastingBookingsForEvent(eventId)`, `eventPricesAndDrinks(eventId)`.
 
@@ -319,10 +323,16 @@ Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessag
 `eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`,
 `eventMarkMessageAsOpened({eventId, messageId})`.
 
-Activities (write): `eventAddCalledClientActivity({eventId, noteText})`,
-`eventVerifyActivity({activityId})`, `eventVerifyAllActivities({eventId})`,
-`tenantVerifyActivities(...)`. Reads: the `SystemActivities` table → `activitiesWithExtra`
-data pub; the selector for unverified activities is `{verifiedById: null}`.
+Activities: one doc per entry in collection `activities` (readable `text`,
+`section`, integer `type` code, `verifiedById`/`verifiedDate`), served by
+`eventActivities(eventId, limit)`. An actor's own activities arrive already
+verified, so a flip false→true was not demonstrable on the harness. Writes:
+`eventAddCalledClientActivity({eventId, noteText?})`,
+`eventVerifyActivity({activityId})` **[live]** (re-stamps `verifiedDate`),
+`eventVerifyAllActivities({eventId})` **[live]** (accepted; targets unverified
+entries), `tenantVerifyActivities(...)`. Tenant-wide reads: the
+`SystemActivities` table → `activitiesWithExtra` data pub; the selector for
+unverified activities is `{verifiedById: null}`.
 
 Export: `exportEvents({clientSelector, extension, mode})`, `tenantImportEvents({entries, detail})`.
 
@@ -417,6 +427,9 @@ types: 2 Corporate, 5 Party, 7 Conference, etc.). `isWedding()` ⊇ {0,1,10,13,1
 4 DirectDebit, 5 EscrowAccount, 6 OnlineBankTransfer, 100 Other.
 `CalendarEventType`: 0 ShowAround, 1 Meeting, 2 Holiday, 3 OpenDay, 5 ItemDelivery,
 6 Tasting, 7 Maintenance, 8 PhotoShoot, 9 Accommodation, 10 Ceremony, 11 InternalMeeting, 100 RegularEvent.
+`MessageStatus`: 0 Incoming, 1 Received, 2 Outgoing, 3 Sent, 4 Delivered, 7 Opened, 9 Draft.
+`MessageTransport`: 0 Internal, 1 Email.
+`TermsAndConditionsStatus`: 0 Waiting, 1 Accepted, 2 Rejected.
 `ServiceBooking status`: 1 Pending, 2 Booked, 3 Cancelled.
 `AuditLogType` (collection `audit-logs`, field `type`): 1 Insert, 2 Update, 3 Delete.
 `EventGuestTypeEnum` (strings): Adult, Teenager, Child, Infant, Supplier; the
@@ -447,6 +460,17 @@ Financial-record document (from `eventFinancialRecords`): `type`, `status`,
 `reference` (e.g. `INV-HR-000018`), `date`/`dueDate`, `entries` (line items
 with `transactionId` and tax/discount breakdown), `subTotals`, `totalAmount`,
 `totalPaid`, `clientId`.
+
+Message document (from `eventMessages`): `status`, `transport`, `author`,
+`subject`, `bodyPreview`, `sender`/`recipient`/`otherRecipients`, `inReplyToId`,
+`attachments` (file ids), `log`, `externalId`, `categories`, `tags`.
+
+Terms record (from `eventTermsAndConditions`): `name`, `required`, `status`,
+`category`, `type`, `channel`, `answeredAt`/`answeredBy`/`answeredByName`.
+
+File document (from `eventDocs` and `eventMessages`): `name`/`displayName`,
+`type` (the container kind, e.g. `messages`, `documents`), `contentType`,
+`size`, `containerId`, `references`, `status`.
 
 ---
 
@@ -488,16 +512,18 @@ sub-apps `guest` (`list`, `add`, `update`, `delete`, `set-numbers`), `timeline`
 `edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers); and the
 finance reads `transaction list <eventId>` and `invoice list <eventId>` /
 `get <eventId> <recordId>` (financial records), verified against a live event's
-finance data; and `service-booking` (`list`, `add`, `edit`, `cancel` trialed on
-the harness; `confirm` ships unverified, §6.1).
+finance data; `service-booking` (`list`, `add`, `edit`, `cancel` trialed on
+the harness; `confirm` ships unverified, §6.1); the per-event reads
+`message list`, `document list`, `terms list` (verified on a live event); and
+`activity` (`list`, `verify`, `verify-all`, trialed on the harness's own
+activities).
 
 **T1, operational (read + write):**
 - `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
 - `invoice` (financial-record) writes: `pdf`.
-- `message`: `list <eventId>`, `send --template`.
-- `document`: `list <eventId>`, `add`, `delete`.
-- `terms`: `list <eventId>`, `accept`, `pdf`.
-- `activity`: `list <eventId>`, `verify <activityId>`, `verify-all <eventId>`.
+- `message` writes: `send --template`.
+- `document` writes: `add`, `delete`.
+- `terms` writes: `accept`, `pdf`.
 
 **T2, scheduling:** `availability list`, `appointment list|create|update|delete`
 (calendar-event), `tasting list|book|cancel`.

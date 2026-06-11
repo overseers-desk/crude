@@ -148,6 +148,12 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas service-booking edit <eventId> <bookingId> --option <optionId[:qty]> [--data '<json>']
     crude-sonas service-booking cancel <eventId> <bookingId> [--yes]
     crude-sonas service-booking confirm <eventId> <bookingId> [--yes]  # unverified; may notify the supplier
+    crude-sonas message list <eventId> [--json]
+    crude-sonas document list <eventId> [--json]
+    crude-sonas terms list <eventId> [--json]
+    crude-sonas activity list <eventId> [--limit N] [--json]
+    crude-sonas activity verify <activityId>
+    crude-sonas activity verify-all <eventId>
 
 Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
 
