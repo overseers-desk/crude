@@ -148,7 +148,9 @@ frames per §6.4), `eventCustomersInfo(eventId)`, `eventCosts(eventId)`,
 `eventTransactions(eventId)` **[live]** (collection `transactions`),
 `eventFinancialRecords(eventId)` **[live]** (collection `financial-records`),
 `eventTermsAndConditions(eventId)`,
-`eventServiceBookings(eventId)`, `eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
+`eventServiceBookings(eventId)` **[live]** (multi-cursor: collection
+`service-bookings` plus the referenced `services` docs),
+`eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
 `eventTables(eventId)`, `eventMessages(eventId)`, `eventActivities(eventId, limit)`,
 `eventActivitiesCount(eventId)`, `guests(eventId)` **[live]** (collection `guests`),
 `enquiryData(eventId)`, `tastingBookingsForEvent(eventId)`, `eventPricesAndDrinks(eventId)`.
@@ -278,9 +280,29 @@ Menu / drinks (write): `eventChangeFoodMenu({foodMenuId, eventId})`,
 Documents (write): `eventAddDoc({docId, fileObj})`, `eventDeleteDoc({docId, fileId})`,
 `eventChangeDocName({docId, fileId, newName, staffOnly})`, `eventGetDocumentLinks({docId, fileIds})` (read).
 
-Service bookings (write): `eventAddServiceBooking({eventId, serviceId, selectedOptions, questions})`,
-`eventEditServiceBooking({eventId, bookingId, selectedOptions, questions})`,
-`eventConfirmServiceBooking({eventId, bookingId})`, `eventCancelServiceBooking({eventId, bookingId})`.
+Service bookings: one doc per booking in collection `service-bookings`
+(`{eventId, serviceId, status, selectedOptions, questionsAndAnswers, from?, to?,
+timelineLinkId?}`). Writes:
+- `eventAddServiceBooking({eventId, serviceId, selectedOptions, questions})` **[live]**:
+  selectedOptions is one or more SelectedOptionSchema objects: the service
+  option's `_id`, `name`, `internalName?`, `description`, `price?` (omitted
+  price = on quote) plus `quantity` (integer ≥0; ≥1 on at least one option)
+  and optional `included`, `guestIds`; `questions` is `{question, answer?}`
+  pairs, stored on the doc as `questionsAndAnswers`. Creates the booking at
+  status 1 Pending with no transaction or timeline side effect (trialed on the
+  harness; every service in this tenant is in-house, `supplierId` unset, so no
+  supplier notification was possible). Works on an enquiry-status event even
+  though the UI shows no Suppliers section for enquiries.
+- `eventEditServiceBooking({eventId, bookingId, selectedOptions, questions})` **[live]**:
+  selectedOptions is a full replacement array.
+- `eventCancelServiceBooking({eventId, bookingId})` **[live]**: sets status 3
+  and keeps the doc. No booking delete method exists, so a cancelled booking
+  is a permanent record (list UIs hide cancelled bookings behind a "Show
+  Cancelled" toggle).
+- `eventConfirmServiceBooking({eventId, bookingId})` (**not called**, O-class:
+  confirming is the step most likely to notify a supplier and raise the
+  service's deposit charge; the effect is server-side and was unobservable on
+  this supplier-less tenant).
 
 Finance (write): `makeChargeTransaction({eventId, doc})`, `makeDiscountTransaction({eventId, doc})`,
 `makeRefundTransaction({eventId, doc})`, `makeSecurityDepositTransaction({eventId, doc})`,
@@ -466,12 +488,12 @@ sub-apps `guest` (`list`, `add`, `update`, `delete`, `set-numbers`), `timeline`
 `edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers); and the
 finance reads `transaction list <eventId>` and `invoice list <eventId>` /
 `get <eventId> <recordId>` (financial records), verified against a live event's
-finance data.
+finance data; and `service-booking` (`list`, `add`, `edit`, `cancel` trialed on
+the harness; `confirm` ships unverified, §6.1).
 
 **T1, operational (read + write):**
 - `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
 - `invoice` (financial-record) writes: `pdf`.
-- `service-booking`: `list <eventId>`, `add`, `confirm`, `cancel`.
 - `message`: `list <eventId>`, `send --template`.
 - `document`: `list <eventId>`, `add`, `delete`.
 - `terms`: `list <eventId>`, `accept`, `pdf`.
@@ -549,10 +571,12 @@ the build.
 
 A standing test enquiry exists while the build is in progress: "CRUDE TEST
 (ignore)", id `xgxeKKgYdNZmRZHGR`, status Enquiry, date 2031-11-20, main
-customer alice@example.com. Later resource commits trial guest/timeline/note
-verbs on it. Keep it until the build ends: `eventRestore` is permission-gated
-for this account (§6.1), so deleting it is one-way and a replacement means a
-fresh `event create-enquiry`.
+customer alice@example.com. Resource commits trial their write verbs on it.
+Keep it until the build ends: `eventRestore` is permission-gated for this
+account (§6.1), so deleting it is one-way and a replacement means a fresh
+`event create-enquiry`. It carries one cancelled service booking (the
+service-booking trial's residue; cancelled bookings cannot be deleted, §6.1)
+and the activity records of the trials; both are invisible in its UI view.
 
 - Method args behind composed/external validators (still open:
   `calendarEventCreate`'s `doc`, `paymentPlanCreate`, the nested CLI payloads in

@@ -37,6 +37,8 @@ transaction_app = typer.Typer(help="An event's transactions: charges, payments, 
 app.add_typer(transaction_app, name="transaction")
 invoice_app = typer.Typer(help="An event's financial records: proformas, invoices, credit notes.")
 app.add_typer(invoice_app, name="invoice")
+service_booking_app = typer.Typer(help="An event's bookings of catalog services.")
+app.add_typer(service_booking_app, name="service-booking")
 console = Console()
 
 register_claude_command(app)
@@ -971,6 +973,194 @@ def invoice_get(
         typer.echo(f"Error: record {record_id} not found on event {event_id}.", err=True)
         raise typer.Exit(1)
     _emit_record(record, output_json)
+
+
+# ----------------------------------------------------------------------
+# service-booking
+# ----------------------------------------------------------------------
+
+# ServiceBookingStatusEnum (docs/sonas.md §7).
+SERVICE_BOOKING_STATUS = {1: "Pending", 2: "Booked", 3: "Cancelled"}
+
+
+def _options_summary(booking: dict) -> str:
+    parts = []
+    for opt in booking.get("selectedOptions") or []:
+        qty = opt.get("quantity")
+        parts.append(f"{opt.get('name')} x{qty}" if qty not in (None, 1) else _s(opt.get("name")))
+    return ", ".join(parts)
+
+
+@service_booking_app.command("list")
+def service_booking_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's service bookings (eventServiceBookings publication; it
+    also carries the referenced `services` docs, used here for the names)."""
+    client = _client()
+    try:
+        docs = client.read_pub("eventServiceBookings", [event_id])
+    except Exception as e:
+        typer.echo(f"Error fetching service bookings: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    services = {d["_id"]: d.get("name") for d in docs if d["_collection"] == "services"}
+    bookings = [d for d in docs if d["_collection"] == "service-bookings"]
+    if output_json:
+        _emit(bookings, True, what="booking")
+        return
+    for b in bookings:
+        b["service"] = services.get(b.get("serviceId"), _s(b.get("serviceId")))
+        b["options"] = _options_summary(b)
+        b["status"] = SERVICE_BOOKING_STATUS.get(b.get("status"), _s(b.get("status")))
+    _emit(bookings, False, columns=[
+        ("Id", "_id"), ("Service", "service"), ("Status", "status"),
+        ("Options", "options"), ("From", "from"), ("To", "to"),
+    ], what="booking")
+
+
+def _selected_options(client, service_id: str, option_specs: List[str]) -> list:
+    """Expand ``optionId[:qty]`` specs against the service's option docs into
+    SelectedOptionSchema objects (docs/sonas.md §6.1)."""
+    rows, _info = client.read_tabular("ServiceList", data_pub="tabular_genericPub",
+                                      selector={"_id": service_id}, limit=2)
+    if not rows:
+        typer.echo(f"Error: service {service_id} not found in ServiceList.", err=True)
+        raise typer.Exit(1)
+    available = {o["_id"]: o for o in rows[0].get("options") or []}
+    selected = []
+    for spec in option_specs:
+        opt_id, _, qty = spec.partition(":")
+        if opt_id not in available:
+            choices = ", ".join(f"{i} ({o.get('name')})" for i, o in available.items())
+            typer.echo(f"Error: option {opt_id} not on service {service_id}; "
+                       f"available: {choices}.", err=True)
+            raise typer.Exit(1)
+        option = {k: v for k, v in available[opt_id].items()
+                  if k in ("_id", "name", "internalName", "description", "price")}
+        option["quantity"] = int(qty) if qty else 1
+        selected.append(option)
+    return selected
+
+
+@service_booking_app.command("add")
+def service_booking_add(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    service: Optional[str] = typer.Option(None, "--service", help="Service id (from the catalog)."),
+    option: List[str] = typer.Option(
+        [], "--option", help="Option to book, as optionId or optionId:quantity; repeatable."),
+    data: Optional[str] = typer.Option(
+        None, "--data", help="Full arg JSON (selectedOptions, questions); flags overlay it."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the arg JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Book a service on an event (eventAddServiceBooking).
+
+    selectedOptions needs at least one option with quantity >= 1; --option
+    expands ids against the service's catalog doc. questions, when sent, are
+    {question, answer?} pairs (--data).
+    """
+    arg = _read_data(data, file) if (data is not None or file is not None) else {}
+    arg["eventId"] = event_id
+    if service is not None:
+        arg["serviceId"] = service
+    if not arg.get("serviceId"):
+        typer.echo("Error: pass --service (or a serviceId key in --data).", err=True)
+        raise typer.Exit(1)
+    client = _client()
+    try:
+        if option:
+            arg["selectedOptions"] = _selected_options(client, arg["serviceId"], option)
+        if not arg.get("selectedOptions"):
+            typer.echo("Error: pass --option (or selectedOptions in --data).", err=True)
+            raise typer.Exit(1)
+        arg.setdefault("questions", [])
+        try:
+            result = client.call("eventAddServiceBooking", arg)
+        except Exception as e:
+            typer.echo(f"Error: add service booking: {e}", err=True)
+            raise typer.Exit(1)
+    finally:
+        client.close()
+    if output_json:
+        typer.echo(json.dumps(result if result is not None else {"ok": True}, indent=2))
+        return
+    typer.echo("add service booking: done.")
+    if result is not None:
+        typer.echo(str(result))
+
+
+@service_booking_app.command("edit")
+def service_booking_edit(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    booking_id: str = typer.Argument(..., help="Booking id (from `service-booking list`)."),
+    option: List[str] = typer.Option(
+        [], "--option", help="Replacement option, as optionId or optionId:quantity; repeatable."),
+    data: Optional[str] = typer.Option(
+        None, "--data", help="Full arg JSON (selectedOptions, questions); flags overlay it."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the arg JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Replace a booking's selected options (eventEditServiceBooking); the
+    selectedOptions array is a full replacement, like `timeline update`."""
+    arg = _read_data(data, file) if (data is not None or file is not None) else {}
+    arg["eventId"] = event_id
+    arg["bookingId"] = booking_id
+    client = _client()
+    try:
+        if option:
+            bookings = client.read_pub("eventServiceBookings", [event_id],
+                                       collection="service-bookings")
+            booking = next((b for b in bookings if b["_id"] == booking_id), None)
+            if booking is None:
+                typer.echo(f"Error: booking {booking_id} not found on event {event_id}.",
+                           err=True)
+                raise typer.Exit(1)
+            arg["selectedOptions"] = _selected_options(client, booking["serviceId"], option)
+        if not arg.get("selectedOptions"):
+            typer.echo("Error: pass --option (or selectedOptions in --data).", err=True)
+            raise typer.Exit(1)
+        arg.setdefault("questions", [])
+        try:
+            result = client.call("eventEditServiceBooking", arg)
+        except Exception as e:
+            typer.echo(f"Error: edit service booking: {e}", err=True)
+            raise typer.Exit(1)
+    finally:
+        client.close()
+    if output_json:
+        typer.echo(json.dumps(result if result is not None else {"ok": True}, indent=2))
+        return
+    typer.echo(f"edit service booking {booking_id}: done.")
+
+
+@service_booking_app.command("cancel")
+def service_booking_cancel(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    booking_id: str = typer.Argument(..., help="Booking id (from `service-booking list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Cancel a service booking (eventCancelServiceBooking). The booking doc
+    stays, status Cancelled; there is no delete method."""
+    _do_call("eventCancelServiceBooking", {"eventId": event_id, "bookingId": booking_id},
+             f"cancel service booking {booking_id}",
+             confirm=f"Cancel service booking {booking_id}?", yes=yes)
+
+
+@service_booking_app.command("confirm")
+def service_booking_confirm(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    booking_id: str = typer.Argument(..., help="Booking id (from `service-booking list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Confirm a service booking (eventConfirmServiceBooking), Pending to Booked;
+    may notify the supplier and raise the service's deposit charge
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("eventConfirmServiceBooking", {"eventId": event_id, "bookingId": booking_id},
+             f"confirm service booking {booking_id}",
+             confirm=f"Confirm service booking {booking_id}?", yes=yes)
 
 
 if __name__ == "__main__":

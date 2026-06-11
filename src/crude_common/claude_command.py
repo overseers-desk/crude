@@ -143,12 +143,19 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas transaction list <eventId> [--json]    # charges, payments, refunds, discounts
     crude-sonas invoice list <eventId> [--json]        # financial records: proformas, invoices, credit notes
     crude-sonas invoice get <eventId> <recordId> [--json]
+    crude-sonas service-booking list <eventId> [--json]
+    crude-sonas service-booking add <eventId> --service <serviceId> --option <optionId[:qty]> [--option ...] [--data '<json>']
+    crude-sonas service-booking edit <eventId> <bookingId> --option <optionId[:qty]> [--data '<json>']
+    crude-sonas service-booking cancel <eventId> <bookingId> [--yes]
+    crude-sonas service-booking confirm <eventId> <bookingId> [--yes]  # unverified; may notify the supplier
 
 Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
 
 Named guests (guest list/add/update/delete) and the headcount (guest set-numbers, the currentMain counts shown by event list) are separate records: adding an attending guest auto-increments the matching count, deleting a guest does not decrement it, and set-numbers refuses to go below the named guestlist's total for a type.
 
 Timeline entries are absolute (--time, naive ISO counts as UTC) or relative to another entry (--after + --offset-minutes, negative = before); timeline update takes a full replacement entry, not a modifier; timeline import appends a tenant template's entries (template ids are the eventId-less docs in the timelines collection). Note and timeline --section take an EventSectionEnum slug (notes, general, timeline, bar, ...; the table is in the crude repo docs/sonas.md); note add defaults to notes.
+
+service-booking cancel keeps the booking as a Cancelled record (Sonas has no booking delete); edit replaces the whole option list. Option ids come from the service's catalog doc.
 """
 
 
