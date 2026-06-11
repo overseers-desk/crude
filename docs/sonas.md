@@ -19,21 +19,25 @@ dynamic-import chunk's validators (§6.4), never run.
 
 ## 1. Status
 
-Working and verified **[live]**:
+Built and live-verified **[live]**:
 
 - DDP transport (TLS websocket), connect handshake.
 - Login (customised Meteor accounts-password with a device fingerprint),
   device-verification handling, and resume-token caching.
 - Tenant selection.
-- Read: `crude-sonas event list` / `event get` via `eventsByDateRange`.
-- Write: the event lifecycle (§6.1): `eventCreateEnquiry`, `eventHoldDate`,
-  `eventChangeDate`, `eventChangeStatus`, `eventExhaustEnquiry`, `eventDelete`,
-  and `eventUpdateGeneralSection` (rename), each trialed read-before/read-after
-  on the throwaway test enquiry (§13).
+- The full §9 CLI surface: the event lifecycle, `guest`, `timeline`, `note`,
+  the finance reads (`transaction list`, `invoice list/get`), `service-booking`,
+  the `message`/`document`/`terms` reads, `activity`, T2 scheduling
+  (`appointment` lifecycle; `availability` and `tasting` reads), and the T3
+  catalog reads. Every [live]-marked write verb was trialed per the §13 policy
+  on a throwaway enquiry.
 
-Mapped but not yet built **[bundle]**: every other resource in §6. The argument
-shapes there come from each method's `validate()` destructuring in the bundle and
-should be confirmed on first call.
+Shipped uncalled (**[chunk]**: payload shapes decoded statically, never
+invoked): the finance, mail, terms, availability-write, tasting-booking, and
+`service-booking confirm` verbs. The §13 list names each with the reason it was
+not trialed and the way to verify it.
+
+Out of scope (§9): reviews, platform-contracts, workflows, forms, `document add`.
 
 ---
 
@@ -697,14 +701,13 @@ the verb with its payload accepted but marked unverified in `--help`, keep its
 [bundle] marker in §6, and list it in the verification summary at the end of
 the build.
 
-A standing test enquiry exists while the build is in progress: "CRUDE TEST
-(ignore)", id `xgxeKKgYdNZmRZHGR`, status Enquiry, date 2031-11-20, main
-customer alice@example.com. Resource commits trial their write verbs on it.
-Keep it until the build ends: `eventRestore` is permission-gated for this
-account (§6.1), so deleting it is one-way and a replacement means a fresh
-`event create-enquiry`. It carries one cancelled service booking (the
-service-booking trial's residue; cancelled bookings cannot be deleted, §6.1)
-and the activity records of the trials; both are invisible in its UI view.
+To trial a write, create a fresh harness with `event create-enquiry` (name it
+"CRUDE TEST (ignore)", far-future date) and `event delete` it when done.
+`eventRestore` is permission-gated for this account (§6.1), so deletion is
+one-way. Trial residue rides the harness event and leaves view with it: a
+cancelled service booking cannot be deleted (§6.1), and trial actions accrue
+activity records, but neither shows in the enquiry's UI view and the delete
+retires them together.
 
 - Method args behind composed/external validators (still open:
   `paymentPlanCreate`) are not destructured in the loader bundle.
@@ -720,6 +723,10 @@ and the activity records of the trials; both are invisible in its UI view.
   payload shapes decoded statically, never invoked (finance/Xero coupling,
   real mail, contract state). To verify: observe the real UI actions' WS
   frames.
+- `service-booking confirm` (`eventConfirmServiceBooking`) ships uncalled: the
+  likeliest verb to notify a supplier and raise the deposit charge, and the
+  effect is server-side and unobservable on this supplier-less tenant (§6.1).
+  To verify: observe the confirm's WS frames on a tenant with suppliers.
 - `eventCancelWithWorkflow` stays uncalled (O-class: the name says it runs the
   cancellation workflow, which may cancel future charges, revoke portal access,
   and plausibly send mail). Plain `eventChangeStatus` to Cancelled is a silent
