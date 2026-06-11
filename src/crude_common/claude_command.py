@@ -126,8 +126,15 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas event delete <eventId> [--yes]
     crude-sonas event restore <eventId>
     crude-sonas event cancel <eventId> --reason <slug> [--note <text>] [--data '<json>'] [--yes]
+    crude-sonas guest list <eventId> [--json]
+    crude-sonas guest add <eventId> --firstname <name> --lastname <name> [--role <text>] [--category Main|Additional] [--type Adult|Teenager|Child|Infant|Supplier] [--attending 0|1|2] [--data '<json>']
+    crude-sonas guest update <eventId> <guestId> --data '<mongo-modifier-json>'
+    crude-sonas guest delete <eventId> <guestId> [--yes]
+    crude-sonas guest set-numbers <eventId> [--adults N] [--teenagers N] [--children N] [--infants N] [--suppliers N] [--data '<mongo-modifier-json>']
 
 Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
+
+Named guests (guest list/add/update/delete) and the headcount (guest set-numbers, the currentMain counts shown by event list) are separate records: adding an attending guest auto-increments the matching count, deleting a guest does not decrement it, and set-numbers refuses to go below the named guestlist's total for a type.
 """
 
 

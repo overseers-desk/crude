@@ -144,8 +144,8 @@ pubs: `eventCustomersInfo(eventId)`, `eventCosts(eventId)`, `eventTransactions(e
 `eventFinancialRecords(eventId)`, `eventTermsAndConditions(eventId)`,
 `eventServiceBookings(eventId)`, `eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
 `eventTables(eventId)`, `eventMessages(eventId)`, `eventActivities(eventId, limit)`,
-`eventActivitiesCount(eventId)`, `guests(eventId)`, `enquiryData(eventId)`,
-`tastingBookingsForEvent(eventId)`, `eventPricesAndDrinks(eventId)`.
+`eventActivitiesCount(eventId)`, `guests(eventId)` **[live]** (collection `guests`),
+`enquiryData(eventId)`, `tastingBookingsForEvent(eventId)`, `eventPricesAndDrinks(eventId)`.
 
 Lifecycle methods (write):
 - `eventCreateEnquiry({doc, calendarEventId?})` **[live]**. The doc is flat
@@ -201,10 +201,30 @@ Customers (write): `eventInviteCustomer({eventId, customer})`,
 `eventRevokeCustomerAccess({eventId, userId})`, `eventEditInvitedCustomer({eventId, userId, modifier})`,
 `eventUpdateCustomerMarketingPermission({eventId, userId, marketingPermission})`.
 
-Guests (write): `eventAddGuest({eventId, data})`, `eventUpdateGuest({eventId, guestId, modifier})`,
-`eventDeleteGuest({eventId, guestId})`, `eventDeleteGuests({eventId, guestIds})`,
-`eventImportGuests({eventId, entries, detail})`, `eventUpdateGuestNumbers({eventId, modifier})`,
-`eventAssignGuestAttendances({eventId, guestIds, status})`, `eventAssignGuestChoices({eventId, guestIds})`.
+Guests: named guests are docs in collection `guests` (one per guest, served by the
+`guests(eventId)` pub); the headcount (`currentMain`/`currentAdditional` on the
+event) is a separate record. Writes:
+- `eventAddGuest({eventId, data})` **[live]**: data is EventGuestAddSchema:
+  `firstname`, `lastname` (required), `role` (free text), `category`
+  (EventGuestCategoryEnum §7), `type` (EventGuestTypeEnum §7), `attendingStatus`
+  (EventGuestAttendingStatusEnum §7). The last three carry schema defaults
+  (Main, Adult, Yes) but `validate()` runs without clean, so crude sends them
+  explicitly (omission untried). Returns the new guest id. Adding an attending
+  guest auto-increments the matching headcount type; deleting does not decrement.
+- `eventUpdateGuest({eventId, guestId, modifier})` **[live]**: Mongo modifier over
+  EventGuestCoreSchema fields (the add fields plus title, middleNames,
+  preferredName, dateOfBirth, nationality, email, phone, landline, address,
+  responsibleGuestId, partnerIndex, specialRequirements, notes, allergies,
+  dietaryRestriction, airborneSensitivity, menuChoice, tasks).
+- `eventDeleteGuest({eventId, guestId})` **[live]**, `eventDeleteGuests({eventId, guestIds})`,
+  `eventImportGuests({eventId, entries, detail})`.
+- `eventUpdateGuestNumbers({eventId, modifier})` **[live]**: Mongo modifier over
+  `{currentMain: {adults, teenagers, children, infants, suppliers}}` (integers ≥0;
+  `currentAdditional` likewise, valid only when `config.allowAdditionalGuests`),
+  e.g. `{$set: {"currentMain.adults": 80}}`. A count below the named guestlist's
+  total for that type is refused: the method **returns** `{error: ...}` as its
+  result (no DDP error) and applies nothing.
+- `eventAssignGuestAttendances({eventId, guestIds, status})`, `eventAssignGuestChoices({eventId, guestIds})`.
 
 Notes (write): `eventAddNote({eventId, text, sectionId})`,
 `eventUpdateNote({noteId, text, calendarEventId})`, `eventRemoveNote({noteId})`.
@@ -340,6 +360,10 @@ types: 2 Corporate, 5 Party, 7 Conference, etc.). `isWedding()` ⊇ {0,1,10,13,1
 6 Tasting, 7 Maintenance, 8 PhotoShoot, 9 Accommodation, 10 Ceremony, 11 InternalMeeting, 100 RegularEvent.
 `ServiceBooking status`: 1 Pending, 2 Booked, 3 Cancelled.
 `AuditLogType` (collection `audit-logs`, field `type`): 1 Insert, 2 Update, 3 Delete.
+`EventGuestTypeEnum` (strings): Adult, Teenager, Child, Infant, Supplier; the
+matching headcount keys are adults, teenagers, children, infants, suppliers.
+`EventGuestCategoryEnum` (strings): Main, Additional.
+`EventGuestAttendingStatusEnum`: 0 Yes, 1 No, 2 Maybe.
 
 Event document (from `eventsByDateRange`): `status`, `type`, `date`/`endDate`/`ceremonyDate`
 (EJSON), `customers:[{firstname, lastname, main, userId}]`, `reference`, `name`,

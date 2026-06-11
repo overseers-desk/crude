@@ -27,6 +27,8 @@ from crude_sonas.client import EVENT_STATUS, EVENT_TYPE, date_str, to_ejson_date
 app = typer.Typer(help="crude-sonas — Sonas wedding-venue software (app.sonas.events).")
 event_app = typer.Typer(help="Events (weddings and other bookings).")
 app.add_typer(event_app, name="event")
+guest_app = typer.Typer(help="An event's named guests and its headcount.")
+app.add_typer(guest_app, name="guest")
 console = Console()
 
 register_claude_command(app)
@@ -517,6 +519,141 @@ def event_cancel(
         arg.update(_read_data(data, None))
     _do_call("eventCancelWithWorkflow", arg, f"cancel event {event_id}",
              confirm=f"Cancel event {event_id} with the cancellation workflow?", yes=yes)
+
+
+# ----------------------------------------------------------------------
+# guest
+# ----------------------------------------------------------------------
+
+# EventGuestAttendingStatusEnum (docs/sonas.md §7).
+GUEST_ATTENDING = {0: "Yes", 1: "No", 2: "Maybe"}
+
+
+@guest_app.command("list")
+def guest_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's named guests (guests publication).
+
+    Named guests are a separate record from the headcount: an event can count
+    120 guests (currentMain, see `guest set-numbers`) while naming only the
+    couple here.
+    """
+    client = _client()
+    try:
+        guests = client.read_pub("guests", [event_id], collection="guests")
+    except Exception as e:
+        typer.echo(f"Error fetching guests: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        for g in guests:
+            g["attendingStatus"] = GUEST_ATTENDING.get(
+                g.get("attendingStatus"), _s(g.get("attendingStatus")))
+    _emit(guests, output_json, columns=[
+        ("Id", "_id"), ("First", "firstname"), ("Last", "lastname"),
+        ("Type", "type"), ("Category", "category"),
+        ("Attending", "attendingStatus"), ("Role", "role"), ("Notes", "notes"),
+    ], what="guest")
+
+
+@guest_app.command("add")
+def guest_add(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    firstname: Optional[str] = typer.Option(None, "--firstname", help="Guest first name."),
+    lastname: Optional[str] = typer.Option(None, "--lastname", help="Guest last name."),
+    role: Optional[str] = typer.Option(None, "--role", help="Free-text role (e.g. Bride)."),
+    category: str = typer.Option("Main", "--category", help="Main or Additional."),
+    type_: str = typer.Option("Adult", "--type",
+                              help="Adult, Teenager, Child, Infant or Supplier."),
+    attending: int = typer.Option(0, "--attending", help="0 Yes, 1 No, 2 Maybe."),
+    data: Optional[str] = typer.Option(None, "--data", help="Full data as JSON (flags overlay it)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the data JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Add a named guest (eventAddGuest).
+
+    The data keys are EventGuestAddSchema (docs/sonas.md §6.1): firstname and
+    lastname required; role, category, type, attendingStatus optional with the
+    flag defaults.
+    """
+    doc = _read_data(data, file) if (data is not None or file is not None) else {}
+    for key, value in (("firstname", firstname), ("lastname", lastname), ("role", role)):
+        if value is not None:
+            doc[key] = value
+    doc.setdefault("category", category)
+    doc.setdefault("type", type_)
+    doc.setdefault("attendingStatus", attending)
+    missing = [k for k in ("firstname", "lastname") if not doc.get(k)]
+    if missing:
+        typer.echo(f"Error: data is missing required key(s): {', '.join(missing)}.", err=True)
+        raise typer.Exit(1)
+    _do_call("eventAddGuest", {"eventId": event_id, "data": doc},
+             "add guest", output_json=output_json)
+
+
+@guest_app.command("update")
+def guest_update(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    guest_id: str = typer.Argument(..., help="Guest document id (from `guest list`)."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='Mongo modifier JSON, e.g. {"$set": {"role": "Bride", "email": "a@example.com"}}.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the modifier JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Update a named guest (eventUpdateGuest); the modifier keys are
+    EventGuestCoreSchema fields (docs/sonas.md §6.1)."""
+    _do_call("eventUpdateGuest",
+             {"eventId": event_id, "guestId": guest_id, "modifier": _read_data(data, file)},
+             f"update guest {guest_id}", output_json=output_json)
+
+
+@guest_app.command("delete")
+def guest_delete(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    guest_id: str = typer.Argument(..., help="Guest document id (from `guest list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete a named guest (eventDeleteGuest)."""
+    _do_call("eventDeleteGuest", {"eventId": event_id, "guestId": guest_id},
+             f"delete guest {guest_id}",
+             confirm=f"Delete guest {guest_id} from event {event_id}?", yes=yes)
+
+
+@guest_app.command("set-numbers")
+def guest_set_numbers(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    adults: Optional[int] = typer.Option(None, "--adults", help="currentMain.adults."),
+    teenagers: Optional[int] = typer.Option(None, "--teenagers", help="currentMain.teenagers."),
+    children: Optional[int] = typer.Option(None, "--children", help="currentMain.children."),
+    infants: Optional[int] = typer.Option(None, "--infants", help="currentMain.infants."),
+    suppliers: Optional[int] = typer.Option(None, "--suppliers", help="currentMain.suppliers."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='Full Mongo modifier JSON, e.g. {"$set": {"currentMain.adults": 80}} '
+             "(flags overlay it; currentAdditional needs config.allowAdditionalGuests)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the modifier JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Set the event headcount (eventUpdateGuestNumbers): the currentMain /
+    currentAdditional counts shown by `event list`, independent of the named
+    guest list."""
+    modifier = _read_data(data, file) if (data is not None or file is not None) else {}
+    sets = modifier.setdefault("$set", {})
+    for key, value in (("adults", adults), ("teenagers", teenagers), ("children", children),
+                       ("infants", infants), ("suppliers", suppliers)):
+        if value is not None:
+            sets[f"currentMain.{key}"] = value
+    if not sets and len(modifier) == 1:
+        typer.echo("Error: nothing to set; pass count flags or --data.", err=True)
+        raise typer.Exit(1)
+    if not sets:
+        del modifier["$set"]
+    _do_call("eventUpdateGuestNumbers", {"eventId": event_id, "modifier": modifier},
+             f"set guest numbers on {event_id}", output_json=output_json)
 
 
 if __name__ == "__main__":
