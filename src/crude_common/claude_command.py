@@ -117,8 +117,17 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
 
     crude-sonas event list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--status <name|number>]
     crude-sonas event get <eventId>
+    crude-sonas event create-enquiry --venue <venueId> --email <email> --firstname <name> --lastname <name> [--telephone] [--type <n>] [--date-desired <text>] [--data '<json>']
+    crude-sonas event rename <eventId> --name <name>
+    crude-sonas event change-status <eventId> <status> [--yes]
+    crude-sonas event change-date <eventId> --date YYYY-MM-DD [--end-date YYYY-MM-DD] [--ceremony-date YYYY-MM-DD]
+    crude-sonas event hold-date <eventId> --date YYYY-MM-DD [--end-date YYYY-MM-DD] [--ceremony-date YYYY-MM-DD]
+    crude-sonas event exhaust-enquiry <eventId> [--data '<json>']
+    crude-sonas event delete <eventId> [--yes]
+    crude-sonas event restore <eventId>
+    crude-sonas event cancel <eventId> --reason <slug> [--note <text>] [--data '<json>'] [--yes]
 
-Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. This is the read surface of a larger client; the full resource map (events, finance, guests, timelines, service-bookings, and more) and the planned subcommands live in the crude repo docs/sonas.md.
+Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
 """
 
 

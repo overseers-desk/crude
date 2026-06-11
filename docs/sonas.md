@@ -24,8 +24,10 @@ Working and verified **[live]**:
   device-verification handling, and resume-token caching.
 - Tenant selection.
 - Read: `crude-sonas event list` / `event get` via `eventsByDateRange`.
-- Write: `eventUpdateGeneralSection` (a reversible spelling edit on a test event,
-  read-verified and restored).
+- Write: the event lifecycle (§6.1): `eventCreateEnquiry`, `eventHoldDate`,
+  `eventChangeDate`, `eventChangeStatus`, `eventExhaustEnquiry`, `eventDelete`,
+  and `eventUpdateGeneralSection` (rename), each trialed read-before/read-after
+  on the throwaway test enquiry (§13).
 
 Mapped but not yet built **[bundle]**: every other resource in §6. The argument
 shapes there come from each method's `validate()` destructuring in the bundle and
@@ -146,15 +148,46 @@ pubs: `eventCustomersInfo(eventId)`, `eventCosts(eventId)`, `eventTransactions(e
 `tastingBookingsForEvent(eventId)`, `eventPricesAndDrinks(eventId)`.
 
 Lifecycle methods (write):
-- `eventCreateEnquiry({doc, calendarEventId})`, `eventCreateEnquiryWithMessage({venueId, ...})`,
-  `eventCreateConfirmed({customer, event})`
-- `eventChangeStatus({eventId, toStatus})`, `eventCanChangeStatus({eventId, toStatus})` (read)
-- `eventChangeDate({eventId, date, eventEndDate, areaIds, ceremonyDate})`,
-  `eventHoldDate({...same...})`
+- `eventCreateEnquiry({doc, calendarEventId?})` **[live]**. The doc is flat
+  (EnquiryCreationSchema): required `venueId`, `email`, `firstname`, `lastname`,
+  `enquiryData: {date}` (= when the enquiry was made, an EJSON date); optional
+  `type`, `reference`, `telephone`, `company`, and in `enquiryData`: `sourceId`,
+  `heardAboutUsId`, `dateDesired` (free text), `budget`, `accommodation`.
+  firstname/lastname/email become the main customer. Returns the new event id.
+  The new event has **no date** until `eventHoldDate`/`eventChangeDate` sets one.
+  Schema-validation failures come back as opaque 500s, not Match errors, so
+  discover doc shapes from the dynamic-import chunk (§6.4), not by iterating.
+- `eventCreateEnquiryWithMessage({venueId, ...})`, `eventCreateConfirmed({customer, event})`
+- `eventChangeStatus({eventId, toStatus})` **[live]** (0↔3, 4→0 verified; →2
+  Cancelled is a silent no-op: result ok, status unchanged; cancellation needs
+  the workflow method), `eventCanChangeStatus({eventId, toStatus})` (read)
+  **[live]**: returns null for "no objection", even for nonsensical transitions;
+  the real gate is server-side in `eventChangeStatus`.
+- `eventChangeDate({eventId, date, eventEndDate?, areaIds?, ceremonyDate?})` **[live]**,
+  `eventHoldDate({...same...})` **[live]**. Dates are EJSON; the server
+  reinterprets the sent instant's calendar day in the **venue timezone** and
+  stores venue-local day bounds (so UTC-midnight in, `date` = local 00:00,
+  `endDate` auto-set to local 23:59:59.999; `date_str` renders UTC and can show
+  the prior day). `areaIds` is `Match.Maybe([id])`: omitting it works; re-send
+  the event's current areas to keep them reserved. change-date keeps the
+  status; hold-date sets DateOnHold.
 - `eventPreConfirm({eventId, data, transactions, welcomeTemplateId, termsAndConditions, paymentPlanId, timelineId, fileIds})`
-- `eventExhaustEnquiry({eventId, doc})`, `changeEnquiryVenue({eventId, venueId})`
-- `eventCancelWithWorkflow({eventId, reasonSlug, note, cancelFutureCharges, revokePortalAccess})`,
-  `eventCancelBooking({bookingId})`, `eventDelete({eventId})`, `eventRestore({eventId})`
+- `eventExhaustEnquiry({eventId, doc})` **[live]** (doc keys both optional:
+  `{reasonNotBookedId?, venueBookedId?}`; sets status 4 and clears the date),
+  `changeEnquiryVenue({eventId, venueId})`
+- `eventCancelWithWorkflow({eventId, reasonSlug, note?, cancelFutureCharges, revokePortalAccess})`
+  (keys confirmed from the dynamic chunk's validator; **not called**: O-class,
+  may stop charges and revoke portal access, see §13),
+  `eventCancelBooking({bookingId})`, `eventDelete({eventId})` **[live]**,
+  `eventRestore({eventId})` (wire shape accepted; refused for this account,
+  which lacks `events.general.to-confirmed-pending`; a deleted event is gone
+  for us, so don't delete the test harness mid-build).
+
+Status moves that leave date-holding clear `date` (3→0 releases the held date,
+exhaust clears it too); `eventsByDateRange` only returns dated events, so a
+date-less enquiry is invisible to `event list`. Find it via the `EventList`
+tabular read with an explicit `status` selector (e.g. `{status: {$in: [0..7]},
+"customers.firstname": ...}`), which overrides the table's default filter.
 
 General update (write): `eventUpdateGeneralSection({modifier, eventId})` **[live]**
 (Mongo modifier, e.g. `{$set:{name:...}}`), `eventUpdateCosts({eventId, doc})`,
@@ -262,16 +295,24 @@ Tables/collections (use the tabular two-step or the named pub): `SuppliersList`,
 
 Data pubs: reach for `tabular_genericPub` first (§5); hunt for a custom pub only
 if it delivers nothing. Per-table data-pub definitions are not minable from the
-static bundle: the `<hash>.js?meteor_js_resource=true` script is only Meteor's
-loader/vendor layer (~1.3 MB **[live]**), and table definitions arrive in
-dynamic-import modules at runtime.
+static bundle: the `<hash>.js?meteor_js_resource=true` script named in the page
+source is only Meteor's loader/vendor layer (~1.3 MB **[live]**), and table,
+method, and schema definitions arrive in dynamic-import modules at runtime.
 
-To complete a catalog resource, confirm its method arguments primarily by **live
-trial** (call the method; the DDP error names the failing `Match`) or by watching
-the real call in the logged-in browser's DevTools (Network → WS frames, which show
-the method name and payload Sonas sends). To enumerate method *names* statically,
-fetch the static bundle and grep it; it is named in the app's page source (no auth
-needed), and the hash changes each release, so read it fresh:
+Those dynamic modules are themselves plain unauthenticated
+`<hash>.js?meteor_js_resource=true` URLs **[live]**; one ~15 MB chunk carries
+the method validators and the SimpleSchema definitions. To get its hash, load
+the app in a browser (login not required for the chunk to be listed) and read
+the loaded-script URLs (CDP `Debugger.scriptParsed`, or DevTools → Sources),
+then curl the chunk and grep it: `name:"<method>",validate` shows a method's
+`validate()` body; `<Name>Schema` definitions resolve the composed `doc`
+shapes (this is how `eventCreateEnquiry`'s doc was decoded, §6.1). Prefer this
+over live iteration for any schema-validated method: those return opaque 500s,
+not Match errors. For plain `check()` methods, the live DDP error does name
+the failing Match. Watching the real call in the logged-in browser's DevTools
+(Network → WS frames) remains the route for observing side effects. To
+enumerate method *names* statically, the loader-layer bundle suffices; its
+hash changes each release, so read it fresh:
 
     curl -s https://app.sonas.events/ | grep -oaE '/[a-f0-9]+\.js\?meteor_js_resource=true'
     curl -s -o /tmp/sonas-bundle.js "https://app.sonas.events/<hash>.js?meteor_js_resource=true"
@@ -336,11 +377,13 @@ subscriptions, writes are method calls via `SonasClient.call(method, arg)`. The
 resource and verb names below are the proposed CLI surface, not fixed; keep or
 adjust them.
 
-**Shipped (reference):** `event list [--from --to --status]`, `event get <id>`.
+**Shipped (reference):** `event list [--from --to --status]`, `event get <id>`,
+and the lifecycle verbs: `event create-enquiry`, `change-status <id> <status>`,
+`change-date <id> --date`, `hold-date`, `exhaust-enquiry`, `rename <id> --name`
+(→ `eventUpdateGeneralSection`), `delete`, `restore` (permission-gated), and
+`cancel` (→ `eventCancelWithWorkflow`, unverified, see §13).
 
 **T1, operational (read + write):**
-- `event`: `list`, `get`, `change-status <id> <status>`, `change-date <id> --date`,
-  `hold-date`, `cancel`, `exhaust-enquiry`, `rename <id> --name` (→ `eventUpdateGeneralSection`).
 - `guest`: `list <eventId>`, `add`, `update`, `delete`, `set-numbers`.
 - `transaction`: `list <eventId>`, `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
 - `invoice` (financial-record): `list <eventId>`, `get`, `pdf`.
@@ -381,7 +424,7 @@ DDP error names the failing match).
 
 Two conventions the `event` commands set: list output is a Rich table plus
 `--json` (the `_render_*`/`_emit` helpers in `cli.py`), and destructive verbs
-(`event cancel`, deletes) should prompt for confirmation unless `--yes`, as
+(`event cancel`, `event delete`) prompt for confirmation unless `--yes`, as
 `crude-deputy resource delete` does (`typer.confirm(..., abort=True)`).
 
 ---
@@ -412,7 +455,7 @@ Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
 **Write-testing policy.** Live-trial a write only when certain it is safe and
 reversible. The standard harness is a throwaway test enquiry, named so staff
 recognise it as a test (e.g. "CRUDE TEST (ignore)"), created via
-`eventCreateEnquiry` and deleted at session end. Trial protocol per method:
+`eventCreateEnquiry` and deleted at build end. Trial protocol per method:
 read-before → call → read-after → revert → read-again. Before the first call of
 an uncertain method, watch the real action's WS frames in the logged-in browser
 (read-only) to learn the payload and spot side effects (mail templates, finance
@@ -422,18 +465,31 @@ the verb with its payload accepted but marked unverified in `--help`, keep its
 [bundle] marker in §6, and list it in the verification summary at the end of
 the build.
 
-- Method args behind composed/external validators (e.g. `eventCreateEnquiry`'s
-  `doc`, `calendarEventCreate`'s `doc`, `paymentPlanCreate`) are not destructured
-  in the bundle. Confirm them by live trial (the DDP error names the failing
-  `Match`) or by watching the real call in the logged-in browser's DevTools
-  (Network → WS frames show the exact method name and payload). The nested CLI
-  payloads in §9 (a charge's `doc`, a guest's `data`, a timeline `entry`) resolve
-  the same way.
+A standing test enquiry exists while the build is in progress: "CRUDE TEST
+(ignore)", id `xgxeKKgYdNZmRZHGR`, status Enquiry, date 2031-11-20, main
+customer alice@example.com. Later resource commits trial guest/timeline/note
+verbs on it. Keep it until the build ends: `eventRestore` is permission-gated
+for this account (§6.1), so deleting it is one-way and a replacement means a
+fresh `event create-enquiry`.
+
+- Method args behind composed/external validators (still open:
+  `calendarEventCreate`'s `doc`, `paymentPlanCreate`, the nested CLI payloads in
+  §9 such as a charge's `doc`, a guest's `data`, a timeline `entry`) are not
+  destructured in the loader bundle. Resolve them from the dynamic-import
+  chunk's schema definitions (§6.4, the route that decoded `eventCreateEnquiry`'s
+  doc); schema-validation failures on the wire are opaque 500s, so blind live
+  iteration does not converge. Watching the real call's WS frames in the
+  logged-in browser also works and is the only way to see side effects.
+- `eventCancelWithWorkflow` stays uncalled (O-class: the name says it runs the
+  cancellation workflow, which may cancel future charges, revoke portal access,
+  and plausibly send mail). Plain `eventChangeStatus` to Cancelled is a silent
+  no-op, so there is no harmless path to a cancelled state. To verify: observe
+  a real cancellation's WS frames and check for mail/finance calls.
+- `eventRestore` is refused for this account (`events.general.to-confirmed-pending`);
+  its effect (and what status a restored event lands in) is unverified.
 - `EventSectionEnum` member names are known (General, Wedding, Guests, MenuChoice,
   Timeline, Seating, Bar, ...) but integer values were not decoded; `eventAddNote`'s
   `sectionId` value is therefore unconfirmed.
 - T3 catalog reads go through `tabular_genericPub` (§6.4); write-method args
   remain unconfirmed.
-- EJSON encoding of write arguments beyond plain strings/ids (dates, nested docs)
-  is unverified; the one confirmed write used a `{$set:{name}}` string modifier.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.
