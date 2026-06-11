@@ -401,6 +401,19 @@ Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
 
 ## 13. Open gaps / uncertainties
 
+**Write-testing policy.** Live-trial a write only when certain it is safe and
+reversible. The standard harness is a throwaway test enquiry, named so staff
+recognise it as a test (e.g. "CRUDE TEST (ignore)"), created via
+`eventCreateEnquiry` and deleted at session end. Trial protocol per method:
+read-before → call → read-after → revert → read-again. Before the first call of
+an uncertain method, watch the real action's WS frames in the logged-in browser
+(read-only) to learn the payload and spot side effects (mail templates, finance
+documents). When unsure whether a call is destructive or externally visible
+(sends mail, touches finance/Xero, alters contract state), do not call it: ship
+the verb with its payload accepted but marked unverified in `--help`, keep its
+[bundle] marker in §6, and list it in the verification summary at the end of
+the build.
+
 - Method args behind composed/external validators (e.g. `eventCreateEnquiry`'s
   `doc`, `calendarEventCreate`'s `doc`, `paymentPlanCreate`) are not destructured
   in the bundle. Confirm them by live trial (the DDP error names the failing
