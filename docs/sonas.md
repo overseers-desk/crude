@@ -11,7 +11,9 @@ of the hard parts (transport, auth, one read resource, the write path); a fresh
 implementer should be able to extend it to the rest from this document alone.
 
 Epistemic markers used below: **[live]** = exercised against the real account and
-confirmed; **[bundle]** = read from the minified client bundle, not yet run.
+confirmed; **[bundle]** = read from the minified client bundle, not yet run;
+**[chunk]** = arg keys and payload schema decoded statically from the
+dynamic-import chunk's validators (§6.4), never run.
 
 ---
 
@@ -281,7 +283,8 @@ Menu / drinks (write): `eventChangeFoodMenu({foodMenuId, eventId})`,
 `eventChangeDrinksMenu({packageId, eventId})`, `eventUpdateMenuChoice({eventId, choiceData})`,
 `eventUpdateDrinkChoice({eventId, choices, notes, serviceTimes})`, `eventSetBarOption({eventId, data, timelineEntries})`.
 
-Documents (write): `eventAddDoc({docId, fileObj})`, `eventDeleteDoc({docId, fileId})`,
+Documents (write): `eventAddDoc({docId, fileObj})`, `eventDeleteDoc({docId, fileId})`
+**[chunk]** (docId = the file's `containerId`; not called, §13),
 `eventChangeDocName({docId, fileId, newName, staffOnly})`, `eventGetDocumentLinks({docId, fileIds})` (read).
 
 Service bookings: one doc per booking in collection `service-bookings`
@@ -308,19 +311,39 @@ timelineLinkId?}`). Writes:
   service's deposit charge; the effect is server-side and was unobservable on
   this supplier-less tenant).
 
-Finance (write): `makeChargeTransaction({eventId, doc})`, `makeDiscountTransaction({eventId, doc})`,
-`makeRefundTransaction({eventId, doc})`, `makeSecurityDepositTransaction({eventId, doc})`,
-`createPaymentTransaction({eventId, financialRecordId, method, amount, description})`,
-`createCreditNote({eventId, doc})`, `approveTransaction({transactionId})`, `cancelTransaction({transactionId})`,
-`reviseTransaction({transactionId, modifier})`, `generateFinancialRecordDocument({financialRecordId})`,
-`toggleEventSkipXeroJournal({eventId})`, `paymentPlanCreate`, `paymentPlanUpdate({docId, modifier})`,
-`paymentPlanDelete({docId})`.
+Finance (write; all **[chunk]**, none called: finance/Xero coupling, §13). The
+transaction-create docs share a base: `amount` (≥ 0, required), `dueDate`
+(EJSON date, required), `description?`:
+- `makeChargeTransaction({eventId, doc})`: doc (CreateChargeSchema) adds
+  `categoryId?` (a `charges`-tag category id) and `sectionId?` (slug from the
+  manual-charge subset: general, wedding, tasting-date, menu-choice, order,
+  bar, transactions, guests, suppliers; required once categoryId is set).
+- `makeDiscountTransaction({eventId, doc})`: doc is the base alone.
+- `makeRefundTransaction({eventId, doc})`: doc adds required `method`
+  (PaymentMethod §7) and `financialRecordId`.
+- `makeSecurityDepositTransaction({eventId, doc})`: doc adds required
+  `categoryId` and `sectionId`.
+- `createPaymentTransaction({eventId, financialRecordId, method, amount,
+  description?})`: flat typed args, no doc; description is the one optional.
+- `createCreditNote({eventId, doc})`: doc is `{entries: [{_id,
+  amountToCredit ≥ 0}], financialRecordId, date, dueDate ≥ date}`.
+- `approveTransaction({transactionId})`; `cancelTransaction({transactionId})`
+  (the server refuses non-cancellable ones; cancelling a payment or refund
+  needs the void-credit permission); `reviseTransaction({transactionId,
+  modifier})` (modifier over dueDate/description/amount, `$set.amount` > 0);
+  `generateFinancialRecordDocument({financialRecordId})` (the artifact is
+  visible in the customer portal); `toggleEventSkipXeroJournal({eventId})`;
+  `paymentPlanCreate`; `paymentPlanUpdate({docId, modifier})`;
+  `paymentPlanDelete({docId})`.
 
-Terms (write): `termsCreate({doc})`, `termsDelete({termsId})`, `termsAcceptPending({eventId})`,
-`termsAnswer({termsId, answer})`, `termsGeneratePDF({termsId})`.
+Terms (write): `termsCreate({doc})`, `termsDelete({termsId})`,
+`termsAcceptPending({eventId})` **[chunk]** (accepts every pending terms record
+on the event: contract state, not called, §13), `termsAnswer({termsId, answer})`,
+`termsGeneratePDF({termsId})` **[chunk]**.
 
 Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessage({messageId, message})`,
-`eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`,
+`eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`
+**[chunk]** (sends real mail to the customer, not called, §13),
 `eventMarkMessageAsOpened({eventId, messageId})`.
 
 Activities: one doc per entry in collection `activities` (readable `text`,
@@ -603,16 +626,15 @@ reads: `supplier`, `service`, `drinks-package`, `package`, `template`,
 `category`, `venue`, `user`, each `list [--limit --search --json]` and
 `get <id>` via the factory-made sub-apps over the §6.4 table map, plus
 `report list`/`get` over the §6.3 report pubs (every list and several gets
-verified live).
+verified live); and the C-class write verbs, shipped uncalled per §13
+(finance/Xero coupling, real mail, contract state), payloads chunk-decoded
+(§6.1 **[chunk]** markers): `transaction charge|payment|refund|discount`,
+`transaction approve|cancel`, `invoice pdf`, `message send`,
+`document delete`, `terms accept|pdf`.
 
-**T1, operational (read + write):**
-- `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
-- `invoice` (financial-record) writes: `pdf`.
-- `message` writes: `send --template`.
-- `document` writes: `add`, `delete`.
-- `terms` writes: `accept`, `pdf`.
-
-**Skip / defer:** reviews, platform-contracts, workflows, forms.
+**Skip / defer:** `document add` (`eventAddDoc`: the fileObj presumably comes
+from the §2 upload sidecar, unexplored), reviews, platform-contracts,
+workflows, forms.
 
 ---
 
@@ -685,13 +707,19 @@ service-booking trial's residue; cancelled bookings cannot be deleted, §6.1)
 and the activity records of the trials; both are invisible in its UI view.
 
 - Method args behind composed/external validators (still open:
-  `paymentPlanCreate`, the nested CLI payloads in §9 such as a charge's `doc`)
-  are not destructured in the loader bundle.
+  `paymentPlanCreate`) are not destructured in the loader bundle.
   Resolve them from the dynamic-import chunk's schema definitions (§6.4, the
-  route that decoded `eventCreateEnquiry`'s doc, the guest `data`, and the
-  timeline `entry`); schema-validation failures on the wire are opaque 500s, so
-  blind live iteration does not converge. Watching the real call's WS frames in
-  the logged-in browser also works and is the only way to see side effects.
+  route that decoded `eventCreateEnquiry`'s doc, the guest `data`, the
+  timeline `entry`, and the §6.1 transaction docs); schema-validation failures
+  on the wire are opaque 500s, so blind live iteration does not converge.
+  Watching the real call's WS frames in the logged-in browser also works and
+  is the only way to see side effects.
+- The finance, mail, and terms verbs (`transaction charge|payment|refund|discount`,
+  `transaction approve|cancel`, `invoice pdf`, `message send`,
+  `document delete`, `terms accept|pdf`) ship **[chunk]**:
+  payload shapes decoded statically, never invoked (finance/Xero coupling,
+  real mail, contract state). To verify: observe the real UI actions' WS
+  frames.
 - `eventCancelWithWorkflow` stays uncalled (O-class: the name says it runs the
   cancellation workflow, which may cancel future charges, revoke portal access,
   and plausibly send mail). Plain `eventChangeStatus` to Cancelled is a silent

@@ -1003,6 +1003,116 @@ def transaction_list(
     ], what="transaction")
 
 
+@transaction_app.command("charge")
+def transaction_charge(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='The doc as JSON: {"amount": N, "dueDate": {"$date": ms}, '
+             '"description"?, "categoryId"?, "sectionId"?}.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Create a charge on an event (makeChargeTransaction). The doc is
+    CreateChargeSchema (docs/sonas.md §6.1): amount (>= 0) and dueDate (EJSON
+    date) required; description, categoryId (a charges-tag category) and
+    sectionId (manual-charge slug; required once categoryId is set) optional.
+    Touches event finance (unverified; see docs/sonas.md §6)."""
+    _do_call("makeChargeTransaction",
+             {"eventId": event_id, "doc": _read_data(data, file)},
+             f"charge event {event_id}", output_json=output_json)
+
+
+@transaction_app.command("payment")
+def transaction_payment(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    record: str = typer.Option(..., "--record",
+                               help="Financial-record id the payment settles (from `invoice list`)."),
+    method: str = typer.Option(..., "--method",
+                               help="Payment method, name or number (Cash, Card, Cheque, "
+                                    "Transfer, DirectDebit, EscrowAccount, OnlineBankTransfer, Other)."),
+    amount: float = typer.Option(..., "--amount", help="Amount paid."),
+    description: Optional[str] = typer.Option(None, "--description", help="Payment description."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Record a payment against a financial record (createPaymentTransaction);
+    the method's shape is these flat typed args, no doc. Touches event finance
+    (unverified; see docs/sonas.md §6)."""
+    arg = {"eventId": event_id, "financialRecordId": record,
+           "method": _parse_enum(method, PAYMENT_METHOD, "payment method"),
+           "amount": amount}
+    if description is not None:
+        arg["description"] = description
+    _do_call("createPaymentTransaction", arg, f"record payment on {event_id}",
+             output_json=output_json)
+
+
+@transaction_app.command("refund")
+def transaction_refund(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='The doc as JSON: {"amount": N, "dueDate": {"$date": ms}, "method": n, '
+             '"financialRecordId": id, "description"?}.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Create a refund (makeRefundTransaction). The doc is CreateRefundSchema
+    (docs/sonas.md §6.1): amount (>= 0), dueDate (EJSON date), method
+    (PaymentMethod number, §7) and financialRecordId required; description
+    optional. Touches event finance (unverified; see docs/sonas.md §6)."""
+    _do_call("makeRefundTransaction",
+             {"eventId": event_id, "doc": _read_data(data, file)},
+             f"refund on event {event_id}", output_json=output_json)
+
+
+@transaction_app.command("discount")
+def transaction_discount(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='The doc as JSON: {"amount": N, "dueDate": {"$date": ms}, "description"?}.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Create a discount (makeDiscountTransaction). The doc is
+    CreateDiscountSchema (docs/sonas.md §6.1): amount (>= 0) and dueDate (EJSON
+    date) required; description optional. Touches event finance
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("makeDiscountTransaction",
+             {"eventId": event_id, "doc": _read_data(data, file)},
+             f"discount on event {event_id}", output_json=output_json)
+
+
+@transaction_app.command("approve")
+def transaction_approve(
+    transaction_id: str = typer.Argument(..., help="Transaction id (from `transaction list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Approve a transaction (approveTransaction)
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("approveTransaction", {"transactionId": transaction_id},
+             f"approve transaction {transaction_id}",
+             confirm=f"Approve transaction {transaction_id}?", yes=yes,
+             output_json=output_json)
+
+
+@transaction_app.command("cancel")
+def transaction_cancel(
+    transaction_id: str = typer.Argument(..., help="Transaction id (from `transaction list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Cancel a transaction (cancelTransaction); the server refuses
+    non-cancellable ones, and cancelling a payment or refund needs the
+    void-credit permission (unverified; see docs/sonas.md §6)."""
+    _do_call("cancelTransaction", {"transactionId": transaction_id},
+             f"cancel transaction {transaction_id}",
+             confirm=f"Cancel transaction {transaction_id}?", yes=yes,
+             output_json=output_json)
+
+
 def _financial_records(client, event_id: str) -> list:
     return client.read_pub("eventFinancialRecords", [event_id],
                            collection="financial-records")
@@ -1054,6 +1164,18 @@ def invoice_get(
         typer.echo(f"Error: record {record_id} not found on event {event_id}.", err=True)
         raise typer.Exit(1)
     _emit_record(record, output_json)
+
+
+@invoice_app.command("pdf")
+def invoice_pdf(
+    record_id: str = typer.Argument(..., help="Financial-record id (from `invoice list`)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Generate a financial record's PDF document
+    (generateFinancialRecordDocument); the artifact is visible in the customer
+    portal (unverified; see docs/sonas.md §6)."""
+    _do_call("generateFinancialRecordDocument", {"financialRecordId": record_id},
+             f"generate document for record {record_id}", output_json=output_json)
 
 
 # ----------------------------------------------------------------------
@@ -1281,6 +1403,24 @@ def message_list(
     ], what="message")
 
 
+@message_app.command("send")
+def message_send(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    template: str = typer.Option(..., "--template", help="Email template id (from `template list`)."),
+    user: str = typer.Option(..., "--user", help="Recipient user id (a customer on the event)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Send an email template to an event customer (eventSendEmailTemplate).
+    This sends real mail to the recipient (unverified; see docs/sonas.md §6)."""
+    _do_call("eventSendEmailTemplate",
+             {"templateId": template, "eventId": event_id, "userId": user},
+             f"send template {template} to user {user}",
+             confirm=f"Send email template {template} to user {user} on event "
+                     f"{event_id}? Real mail goes out.",
+             yes=yes, output_json=output_json)
+
+
 @document_app.command("list")
 def document_list(
     event_id: str = typer.Argument(..., help="Event document id."),
@@ -1306,6 +1446,20 @@ def document_list(
     ], what="document")
 
 
+@document_app.command("delete")
+def document_delete(
+    doc_id: str = typer.Argument(
+        ..., help="Documents-container id (the file's containerId, in `document list --json`)."),
+    file_id: str = typer.Argument(..., help="File id (from `document list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete a document file (eventDeleteDoc)
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("eventDeleteDoc", {"docId": doc_id, "fileId": file_id},
+             f"delete document {file_id}",
+             confirm=f"Delete document {file_id}?", yes=yes)
+
+
 @terms_app.command("list")
 def terms_list(
     event_id: str = typer.Argument(..., help="Event document id."),
@@ -1329,6 +1483,32 @@ def terms_list(
         ("Required", "required"), ("Answered by", "answeredByName"),
         ("Answered", "answeredAt"),
     ], what="terms record")
+
+
+@terms_app.command("accept")
+def terms_accept(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Accept all of an event's pending terms on the couple's behalf
+    (termsAcceptPending); alters contract state
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("termsAcceptPending", {"eventId": event_id},
+             f"accept pending terms on {event_id}",
+             confirm=f"Accept all pending terms on event {event_id}?", yes=yes,
+             output_json=output_json)
+
+
+@terms_app.command("pdf")
+def terms_pdf(
+    terms_id: str = typer.Argument(..., help="Terms record id (from `terms list`)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Generate a terms record's PDF (termsGeneratePDF)
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("termsGeneratePDF", {"termsId": terms_id},
+             f"generate PDF for terms {terms_id}", output_json=output_json)
 
 
 @activity_app.command("list")

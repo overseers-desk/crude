@@ -141,16 +141,27 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas note edit <noteId> --text <text>
     crude-sonas note delete <noteId> [--yes]
     crude-sonas transaction list <eventId> [--json]    # charges, payments, refunds, discounts
+    crude-sonas transaction charge <eventId> --data '<doc-json>'       # unverified; touches finance
+    crude-sonas transaction payment <eventId> --record <financialRecordId> --method <name|n> --amount N [--description <text>]  # unverified
+    crude-sonas transaction refund <eventId> --data '<doc-json>'       # unverified
+    crude-sonas transaction discount <eventId> --data '<doc-json>'     # unverified
+    crude-sonas transaction approve <transactionId> [--yes]            # unverified
+    crude-sonas transaction cancel <transactionId> [--yes]             # unverified
     crude-sonas invoice list <eventId> [--json]        # financial records: proformas, invoices, credit notes
     crude-sonas invoice get <eventId> <recordId> [--json]
+    crude-sonas invoice pdf <recordId>                 # unverified; the artifact is portal-visible
     crude-sonas service-booking list <eventId> [--json]
     crude-sonas service-booking add <eventId> --service <serviceId> --option <optionId[:qty]> [--option ...] [--data '<json>']
     crude-sonas service-booking edit <eventId> <bookingId> --option <optionId[:qty]> [--data '<json>']
     crude-sonas service-booking cancel <eventId> <bookingId> [--yes]
     crude-sonas service-booking confirm <eventId> <bookingId> [--yes]  # unverified; may notify the supplier
     crude-sonas message list <eventId> [--json]
+    crude-sonas message send <eventId> --template <templateId> --user <userId> [--yes]  # unverified; sends real mail
     crude-sonas document list <eventId> [--json]
+    crude-sonas document delete <docId> <fileId> [--yes]               # unverified; docId = the file's containerId
     crude-sonas terms list <eventId> [--json]
+    crude-sonas terms accept <eventId> [--yes]                         # unverified; accepts all pending terms (contract state)
+    crude-sonas terms pdf <termsId>                                    # unverified
     crude-sonas activity list <eventId> [--limit N] [--json]
     crude-sonas activity verify <activityId>
     crude-sonas activity verify-all <eventId>
@@ -178,6 +189,8 @@ Named guests (guest list/add/update/delete) and the headcount (guest set-numbers
 Timeline entries are absolute (--time, naive ISO counts as UTC) or relative to another entry (--after + --offset-minutes, negative = before); timeline update takes a full replacement entry, not a modifier; timeline import appends a tenant template's entries (template ids are the eventId-less docs in the timelines collection). Note and timeline --section take an EventSectionEnum slug (notes, general, timeline, bar, ...; the table is in the crude repo docs/sonas.md); note add defaults to notes.
 
 service-booking cancel keeps the booking as a Cancelled record (Sonas has no booking delete); edit replaces the whole option list. Option ids come from the service's catalog doc.
+
+The finance, mail, and terms writes ship uncalled (they touch finance/Xero, send real mail, or alter contract state); each says so in --help. The charge/refund/discount --data doc: amount (>= 0) and dueDate (EJSON, {"$date": <epoch-ms>}) required, description optional; refund also needs method (payment-method name maps to a number: Cash 0, Card 1, Cheque 2, Transfer 3, DirectDebit 4, EscrowAccount 5, OnlineBankTransfer 6, Other 100) and financialRecordId; charge also accepts categoryId and sectionId. payment takes flat typed flags instead of --data; terms accept accepts every pending terms record on the event.
 
 Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
 
