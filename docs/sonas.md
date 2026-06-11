@@ -113,8 +113,8 @@ login token. crude auto-discovers `tenantId` from the logged-in user record
   2. Subscribe to that table's **data pub** with the ids to receive the
      documents. Tables that define no custom data pub are served by
      aldeed:tabular's built-in `tabular_genericPub(tableName, ids, projection)`
-     **[live]** (confirmed for `ServiceList`, delivering into collection
-     `services`); try it first. Some tables have a custom pub (e.g.
+     **[live]** (confirmed for all eight catalog tables; the table-to-collection
+     map is in §6.4); try it first. Some tables have a custom pub (e.g.
      `activitiesWithExtra` for `SystemActivities`). Signature varies; try, in
      order, `[tableName, ids, proj]`, `[ids, proj]`, `[tableName, ids]`, `[ids]`
      until the collection fills.
@@ -420,25 +420,43 @@ tag-partitioned entries in the shared `Categories` collection, loaded via the
 Web-intake forms: `createTenantExternalForm`, `updateTenantExternalForm({formId, doc})`,
 `cloneTenantExternalForm({formId})`, `deleteTenantExternalForm({formId})`.
 
-Reports: `report(reportId)`, `reports(venueId)`, `reportsBasicInfo` (pubs);
+Reports: `reportsBasicInfo` **[live]** (no params; collection `reports`, fields
+`name` and `type` only) and `report(reportId)` **[live]** (the full definition
+with its `queryLines`) drive `report list`/`get`; `reports(venueId)` (pub);
 `reportCreate({doc})`, `reportUpdate({docId, modifier})`, `reportClone({docId})`,
 `reportDelete({docId})`, `reportGenerate({reportId})`. Report types include
 `SalesFunnel` and `EventMarketing`.
 
-### 6.4 Catalog & config (T3): read-mostly, method args to confirm on build
+### 6.4 Catalog & config (T3): reads live, write-method args to confirm
 
-Tables/collections (use the tabular two-step or the named pub): `SuppliersList`,
-`ServiceList`, `DrinksList`, `PackageList`, `TemplatesList`, `CategoriesList`,
-`FormsList`, `VenueList`, `UserList`, `UserRoleList`, `TransactionList`
+The eight catalog tables behind `crude-sonas <resource> list|get` are all served
+by `tabular_genericPub` **[live]**, signature `[tableName, ids, projection]`,
+delivering into these collections:
+
+| table | collection | | table | collection |
+|---|---|---|---|---|
+| `SuppliersList` | `suppliers` | | `TemplatesList` | `templates` |
+| `ServiceList` | `services` | | `CategoriesList` | `categories` |
+| `DrinksList` | `drinks` | | `VenueList` | `venues` |
+| `PackageList` | `price-lists` | | `UserList` | `users` |
+
+All eight declare `searching: false` in their tabular definitions and ignore
+`tabular_getInfo`'s searchTerm (confirmed live: counts stay unfiltered; on
+`EventList` the same term does change the counts), so crude's `--search`
+filters the fetched rows client-side. `get <id>` is the same two-step with
+selector `{_id: ...}`; pass the collection name explicitly, since the
+new-docs-only auto-detect misses documents already in the store (the
+logged-in user's own `users` doc).
+
+Other tables (not yet built): `FormsList`, `UserRoleList`, `TransactionList`
 (`transactionsWithEventDate`), `FinancialRecordsList` (`financialRecordsWithEventDate`),
 `Inbox` (`messagesWithExtra`), `ReviewList`, `WorkflowsList`, `AuditLogList`
-(`auditLogComposite`, collection `audit-logs`).
-
-Data pubs: reach for `tabular_genericPub` first (§5); hunt for a custom pub only
-if it delivers nothing. Per-table data-pub definitions are not minable from the
-static bundle: the `<hash>.js?meteor_js_resource=true` script named in the page
-source is only Meteor's loader/vendor layer (~1.3 MB **[live]**), and table,
-method, and schema definitions arrive in dynamic-import modules at runtime.
+(`auditLogComposite`, collection `audit-logs`). For these, reach for
+`tabular_genericPub` first (§5); hunt for a custom pub only if it delivers
+nothing. Per-table data-pub definitions are not minable from the static bundle:
+the `<hash>.js?meteor_js_resource=true` script named in the page source is only
+Meteor's loader/vendor layer (~1.3 MB **[live]**), and table, method, and schema
+definitions arrive in dynamic-import modules at runtime.
 
 Those dynamic modules are themselves plain unauthenticated
 `<hash>.js?meteor_js_resource=true` URLs **[live]**; one ~15 MB chunk carries
@@ -580,7 +598,12 @@ activities); the T2 scheduling sub-apps: `appointment` (`list`, `get`,
 InternalMeeting, §6.2), `availability` (`list` verified; `create`, `update`,
 `delete` ship unverified: windows feed the public booking widget, §6.2), and
 `tasting` (`list` verified on the empty tenant; `book`, `cancel` ship
-unverified: the server side may mail the couple, §6.2).
+unverified: the server side may mail the couple, §6.2); and the T3 catalog
+reads: `supplier`, `service`, `drinks-package`, `package`, `template`,
+`category`, `venue`, `user`, each `list [--limit --search --json]` and
+`get <id>` via the factory-made sub-apps over the §6.4 table map, plus
+`report list`/`get` over the §6.3 report pubs (every list and several gets
+verified live).
 
 **T1, operational (read + write):**
 - `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
@@ -588,10 +611,6 @@ unverified: the server side may mail the couple, §6.2).
 - `message` writes: `send --template`.
 - `document` writes: `add`, `delete`.
 - `terms` writes: `accept`, `pdf`.
-
-**T3, catalog (read-only first):** `supplier`, `service`, `drinks-package`
-(→ `DrinksList`), `package` (→ `PackageList`), `template`, `category`, `report`,
-`venue`, `user`, all `list`/`get`.
 
 **Skip / defer:** reviews, platform-contracts, workflows, forms.
 
@@ -685,6 +704,6 @@ and the activity records of the trials; both are invisible in its UI view.
   `eventCancelBooking`) ship unverified (§6.2): windows surface on the public
   booking widget, and a tasting booking may mail the couple. To verify: observe
   the real UI actions' WS frames.
-- T3 catalog reads go through `tabular_genericPub` (§6.4); write-method args
-  remain unconfirmed.
+- T3 catalog reads are live (§6.4); the catalog write-method args remain
+  unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.

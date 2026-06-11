@@ -149,12 +149,29 @@ def _render_record(item: dict) -> None:
     console.print(table)
 
 
+def _dig(item: dict, key: str):
+    """``item[key]``, or a dotted-path walk (dict keys and list indices) when
+    the literal key is absent, e.g. ``contactData.email``, ``emails.0.address``."""
+    if key in item:
+        return item[key]
+    cur = item
+    for part in key.split("."):
+        if isinstance(cur, dict):
+            cur = cur.get(part)
+        elif isinstance(cur, list) and part.isdigit() and int(part) < len(cur):
+            cur = cur[int(part)]
+        else:
+            return None
+    return cur
+
+
 def _emit(items: list, output_json: bool,
           columns: Optional[List[Tuple[str, str]]] = None, what: str = "row") -> None:
     """Render a list result: raw JSON, or a Rich table plus a count line.
 
-    ``columns`` is (header, key) pairs; None derives headers from the union of
-    the items' keys (minus ``_collection``), capped at 8 to stay readable.
+    ``columns`` is (header, key) pairs, the key a ``_dig`` path; None derives
+    headers from the union of the items' keys (minus ``_collection``), capped
+    at 8 to stay readable.
     """
     if output_json:
         typer.echo(json.dumps(items, indent=2))
@@ -171,7 +188,7 @@ def _emit(items: list, output_json: bool,
         for header, _key in columns:
             table.add_column(header)
         for item in items:
-            table.add_row(*(_cell(item.get(key)) for _header, key in columns))
+            table.add_row(*(_cell(_dig(item, key)) for _header, key in columns))
         console.print(table)
     typer.echo(f"\n{len(items)} {what}(s).")
 
@@ -292,14 +309,32 @@ def _do_call(method: str, arg: dict, what: str, confirm: Optional[str] = None,
         typer.echo(str(result))
 
 
+def _matches(value, term: str) -> bool:
+    """Case-insensitive substring match against any string in the document."""
+    if isinstance(value, dict):
+        return any(_matches(v, term) for v in value.values())
+    if isinstance(value, list):
+        return any(_matches(v, term) for v in value)
+    return isinstance(value, str) and term.lower() in value.lower()
+
+
 def _tabular_list(table: str, data_pub: str, columns: Optional[List[Tuple[str, str]]],
                   output_json: bool, what: str, limit: int = 50, search: str = "",
-                  selector: Optional[dict] = None) -> None:
-    """List command body for aldeed:tabular tables (the two-step in docs/sonas.md §5)."""
+                  selector: Optional[dict] = None, collection: Optional[str] = None) -> None:
+    """List command body for aldeed:tabular tables (the two-step in docs/sonas.md §5).
+
+    Pass ``collection`` when it is known: the auto-detect mode misses documents
+    already in the store (e.g. the logged-in user's doc for UserList). ``search``
+    filters client-side: the catalog tables all declare ``searching: false`` and
+    ignore the wire searchTerm (docs/sonas.md §6.4), so the rows (fetched wide)
+    are matched here instead.
+    """
     client = _client()
     try:
         rows, info = client.read_tabular(
-            table, data_pub=data_pub, selector=selector, limit=limit, search=search
+            table, data_pub=data_pub, selector=selector,
+            limit=max(limit, 500) if search else limit, search=search,
+            collection=collection,
         )
     except Exception as e:
         typer.echo(f"Error fetching {what}s: {e}", err=True)
@@ -312,9 +347,14 @@ def _tabular_list(table: str, data_pub: str, columns: Optional[List[Tuple[str, s
             f"{data_pub!r} delivered none (signature mismatch? see docs/sonas.md §5).",
             err=True,
         )
+    if search:
+        rows = [r for r in rows if _matches(r, search)][:limit]
     _emit(rows, output_json, columns=columns, what=what)
-    if not output_json and info.get("recordsFiltered") is not None \
-            and info.get("recordsTotal") is not None:
+    if output_json:
+        return
+    if search:
+        typer.echo(f"{len(rows)} of {info.get('recordsTotal')} record(s) match {search!r}.")
+    elif info.get("recordsFiltered") is not None and info.get("recordsTotal") is not None:
         typer.echo(f"{info['recordsFiltered']} of {info['recordsTotal']} record(s).")
 
 
@@ -1603,6 +1643,127 @@ def tasting_cancel(
     _do_call("eventCancelBooking", {"bookingId": booking_id},
              f"cancel tasting booking {booking_id}",
              confirm=f"Cancel tasting booking {booking_id}?", yes=yes)
+
+
+# ----------------------------------------------------------------------
+# T3 catalog (read-only): one factory-made sub-app per tenant catalog table
+# ----------------------------------------------------------------------
+
+
+def _make_catalog_app(label: str, help_text: str, table: str, data_pub: str,
+                      collection: str, columns: List[Tuple[str, str]]) -> typer.Typer:
+    """A read-only catalog sub-app: `list` via the tabular two-step and
+    `get <id>` by selector. The per-table data pubs and collections are
+    recorded in docs/sonas.md §6.4."""
+    sub = typer.Typer(help=help_text)
+
+    @sub.command("list", help=f"List {label}s ({table} table).")
+    def _list(
+        limit: int = typer.Option(50, "--limit", help="Rows to fetch."),
+        search: str = typer.Option("", "--search", help="Search term (the table's searchable columns)."),
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+    ):
+        _tabular_list(table, data_pub, columns, output_json, label,
+                      limit=limit, search=search, collection=collection)
+
+    @sub.command("get", help=f"Show one {label} ({table} row by id).")
+    def _get(
+        record_id: str = typer.Argument(..., help=f"{label} document id."),
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+    ):
+        client = _client()
+        try:
+            rows, _info = client.read_tabular(table, data_pub=data_pub,
+                                              selector={"_id": record_id},
+                                              limit=2, collection=collection)
+        except Exception as e:
+            typer.echo(f"Error fetching {label} {record_id}: {e}", err=True)
+            raise typer.Exit(1)
+        finally:
+            client.close()
+        if not rows:
+            typer.echo(f"Error: {label} {record_id} not found in {table}.", err=True)
+            raise typer.Exit(1)
+        _emit_record(rows[0], output_json)
+
+    return sub
+
+
+# (cli name, help, table, data pub, collection, list columns); every table
+# here is served by aldeed:tabular's generic data pub (docs/sonas.md §6.4).
+CATALOG = [
+    ("supplier", "Supplier directory (external vendors).", "SuppliersList",
+     "tabular_genericPub", "suppliers",
+     [("Id", "_id"), ("Company", "contactData.companyName"),
+      ("Email", "contactData.email"), ("Phone", "contactData.phone"),
+      ("Description", "description")]),
+    ("service", "Bookable services and their options.", "ServiceList",
+     "tabular_genericPub", "services",
+     [("Id", "_id"), ("Name", "name"), ("Options", "options"),
+      ("Max options", "maxSelectedOptions"), ("Staff only", "staffOnly"),
+      ("Deleted", "deleted")]),
+    ("drinks-package", "Drinks catalog entries.", "DrinksList",
+     "tabular_genericPub", "drinks",
+     [("Id", "_id"), ("Name", "name"), ("Measure", "measure"),
+      ("Price", "price"), ("Type", "type"), ("Description", "description")]),
+    ("package", "Price-list packages.", "PackageList",
+     "tabular_genericPub", "price-lists",
+     [("Id", "_id"), ("Name", "name"), ("Type", "type"),
+      ("Description", "descriptionText")]),
+    ("template", "Email and document templates.", "TemplatesList",
+     "tabular_genericPub", "templates",
+     [("Id", "_id"), ("Name", "name"), ("Type", "type"),
+      ("Subject", "subject"), ("Venue", "venueId")]),
+    ("category", "Tag-partitioned option lists (enquiry source, heard-about-us, ...).",
+     "CategoriesList", "tabular_genericPub", "categories",
+     [("Id", "_id"), ("Name", "name"), ("Tag", "tag"), ("Slug", "slug"),
+      ("Status", "status")]),
+    ("venue", "The tenant's venues.", "VenueList",
+     "tabular_genericPub", "venues",
+     [("Id", "_id"), ("Name", "name"), ("Initials", "initials"),
+      ("Capacity", "capacity"), ("Timezone", "timezone"), ("Website", "website")]),
+    ("user", "Staff user accounts.", "UserList",
+     "tabular_genericPub", "users",
+     [("Id", "_id"), ("First", "profile.firstname"), ("Last", "profile.lastname"),
+      ("Email", "emails.0.address")]),
+]
+
+for _name, _help, _table, _pub, _coll, _cols in CATALOG:
+    app.add_typer(_make_catalog_app(_name.replace("-", " "), _help, _table, _pub,
+                                    _coll, _cols), name=_name)
+
+report_app = typer.Typer(help="Saved report definitions (sales funnel, revenue, marketing).")
+app.add_typer(report_app, name="report")
+
+
+@report_app.command("list")
+def report_list(
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List reports (reportsBasicInfo publication: id, name and type only)."""
+    _pub_list("reportsBasicInfo", [], columns=[
+        ("Id", "_id"), ("Name", "name"), ("Type", "type"),
+    ], output_json=output_json, what="report", collection="reports")
+
+
+@report_app.command("get")
+def report_get(
+    report_id: str = typer.Argument(..., help="Report document id (from `report list`)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Show one report definition with its query lines (report publication)."""
+    client = _client()
+    try:
+        docs = client.read_pub("report", [report_id], collection="reports")
+    except Exception as e:
+        typer.echo(f"Error fetching report {report_id}: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not docs:
+        typer.echo(f"Error: report {report_id} not found.", err=True)
+        raise typer.Exit(1)
+    _emit_record(docs[0], output_json)
 
 
 if __name__ == "__main__":

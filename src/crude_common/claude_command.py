@@ -166,6 +166,10 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas tasting list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
     crude-sonas tasting book --data '<booking-json>' [--previous <bookingId>]  # unverified; may mail the couple
     crude-sonas tasting cancel <bookingId> [--yes]                    # unverified
+    crude-sonas <catalog> list [--limit N] [--search <term>] [--json]
+    crude-sonas <catalog> get <id> [--json]
+    crude-sonas report list [--json]
+    crude-sonas report get <reportId> [--json]
 
 Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
 
@@ -176,6 +180,8 @@ Timeline entries are absolute (--time, naive ISO counts as UTC) or relative to a
 service-booking cancel keeps the booking as a Cancelled record (Sonas has no booking delete); edit replaces the whole option list. Option ids come from the service's catalog doc.
 
 Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
+
+`<catalog>` is one of the read-only catalog resources: supplier, service, drinks-package, package, template, category, venue, user. --search matches a case-insensitive substring anywhere in the document.
 """
 
 
