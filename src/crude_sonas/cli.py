@@ -33,6 +33,10 @@ timeline_app = typer.Typer(help="An event's wedding-day timeline entries.")
 app.add_typer(timeline_app, name="timeline")
 note_app = typer.Typer(help="Staff notes on an event.")
 app.add_typer(note_app, name="note")
+transaction_app = typer.Typer(help="An event's transactions: charges, payments, refunds, discounts.")
+app.add_typer(transaction_app, name="transaction")
+invoice_app = typer.Typer(help="An event's financial records: proformas, invoices, credit notes.")
+app.add_typer(invoice_app, name="invoice")
 console = Console()
 
 register_claude_command(app)
@@ -867,6 +871,106 @@ def note_delete(
     """Delete a note (eventRemoveNote)."""
     _do_call("eventRemoveNote", {"noteId": note_id}, f"delete note {note_id}",
              confirm=f"Delete note {note_id}?", yes=yes)
+
+
+# ----------------------------------------------------------------------
+# transaction / invoice (financial records)
+# ----------------------------------------------------------------------
+
+# Transaction and financial-record enums (docs/sonas.md §7).
+TRANSACTION_KIND = {1: "Charge", 2: "Payment", 3: "Refund", 4: "Discount",
+                    5: "PaymentMethodFee"}
+TRANSACTION_STATUS = {0: "Accepted", 1: "Failed", 2: "Cancelled", 3: "Pending"}
+PAYMENT_METHOD = {0: "Cash", 1: "Card", 2: "Cheque", 3: "Transfer", 4: "DirectDebit",
+                  5: "EscrowAccount", 6: "OnlineBankTransfer", 100: "Other"}
+FINANCIAL_RECORD_TYPE = {1: "Proforma", 2: "Invoice", 3: "CreditNote"}
+FINANCIAL_RECORD_STATUS = {1: "Valid", 4: "Cancelled", 5: "Draft"}
+
+
+def _name_enums(items: list, fields: dict) -> None:
+    """Replace integer enum fields with their names for table rendering;
+    ``fields`` maps a field name to its enum table."""
+    for item in items:
+        for key, names in fields.items():
+            if key in item:
+                item[key] = names.get(item[key], _s(item[key]))
+
+
+@transaction_app.command("list")
+def transaction_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's transactions (eventTransactions publication, collection
+    `transactions`): charges, payments, refunds, discounts."""
+    client = _client()
+    try:
+        items = client.read_pub("eventTransactions", [event_id], collection="transactions")
+    except Exception as e:
+        typer.echo(f"Error fetching transactions: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        _name_enums(items, {"kind": TRANSACTION_KIND, "status": TRANSACTION_STATUS,
+                            "method": PAYMENT_METHOD})
+    _emit(items, output_json, columns=[
+        ("Id", "_id"), ("Kind", "kind"), ("Status", "status"), ("Amount", "amount"),
+        ("Method", "method"), ("Due", "dueDate"), ("Description", "description"),
+    ], what="transaction")
+
+
+def _financial_records(client, event_id: str) -> list:
+    return client.read_pub("eventFinancialRecords", [event_id],
+                           collection="financial-records")
+
+
+@invoice_app.command("list")
+def invoice_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's financial records (eventFinancialRecords publication,
+    collection `financial-records`): proformas, invoices, credit notes."""
+    client = _client()
+    try:
+        records = _financial_records(client, event_id)
+    except Exception as e:
+        typer.echo(f"Error fetching financial records: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        _name_enums(records, {"type": FINANCIAL_RECORD_TYPE,
+                              "status": FINANCIAL_RECORD_STATUS})
+    _emit(records, output_json, columns=[
+        ("Id", "_id"), ("Ref", "reference"), ("Type", "type"), ("Status", "status"),
+        ("Date", "date"), ("Due", "dueDate"), ("Total", "totalAmount"),
+        ("Paid", "totalPaid"),
+    ], what="record")
+
+
+@invoice_app.command("get")
+def invoice_get(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    record_id: str = typer.Argument(..., help="Financial-record id (from `invoice list`)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Show one financial record, with its line entries (filtered from the
+    eventFinancialRecords publication)."""
+    client = _client()
+    try:
+        records = _financial_records(client, event_id)
+    except Exception as e:
+        typer.echo(f"Error fetching financial records: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    record = next((r for r in records if r["_id"] == record_id), None)
+    if record is None:
+        typer.echo(f"Error: record {record_id} not found on event {event_id}.", err=True)
+        raise typer.Exit(1)
+    _emit_record(record, output_json)
 
 
 if __name__ == "__main__":

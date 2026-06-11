@@ -144,8 +144,10 @@ pubs: `eventBasicInfo(eventId)` **[live]** (multi-cursor: the event doc, its
 venue, and the event's `timelines` doc), `eventNotes(eventId)` **[live]**
 (collection `notes`; both pubs are subscribed by the event page rather than from
 any statically greppable `subscribe(` call, found by watching the page's WS
-frames per §6.4), `eventCustomersInfo(eventId)`, `eventCosts(eventId)`, `eventTransactions(eventId)`,
-`eventFinancialRecords(eventId)`, `eventTermsAndConditions(eventId)`,
+frames per §6.4), `eventCustomersInfo(eventId)`, `eventCosts(eventId)`,
+`eventTransactions(eventId)` **[live]** (collection `transactions`),
+`eventFinancialRecords(eventId)` **[live]** (collection `financial-records`),
+`eventTermsAndConditions(eventId)`,
 `eventServiceBookings(eventId)`, `eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
 `eventTables(eventId)`, `eventMessages(eventId)`, `eventActivities(eventId, limit)`,
 `eventActivitiesCount(eventId)`, `guests(eventId)` **[live]** (collection `guests`),
@@ -386,8 +388,11 @@ A method's `validate()` body in the bundle shows its destructured argument keys.
 types: 2 Corporate, 5 Party, 7 Conference, etc.). `isWedding()` ⊇ {0,1,10,13,14,18,19,22,23,48,50,55,57,58}.
 
 `TransactionKind`: 1 Charge, 2 Payment, 3 Refund, 4 Discount, 5 PaymentMethodFee.
+`TransactionStatus`: 0 Accepted, 1 Failed, 2 Cancelled, 3 Pending.
 `FinancialRecordType`: 1 Proforma, 2 Invoice, 3 CreditNote.
-`PaymentMethod`: 0 Cash, 1 Card, 2 Cheque, 3 Transfer, 4 DirectDebit, 6 OnlineBankTransfer, 100 Other.
+`FinancialRecordStatus`: 1 Valid, 4 Cancelled, 5 Draft.
+`PaymentMethod` (transaction `method`): 0 Cash, 1 Card, 2 Cheque, 3 Transfer,
+4 DirectDebit, 5 EscrowAccount, 6 OnlineBankTransfer, 100 Other.
 `CalendarEventType`: 0 ShowAround, 1 Meeting, 2 Holiday, 3 OpenDay, 5 ItemDelivery,
 6 Tasting, 7 Maintenance, 8 PhotoShoot, 9 Accommodation, 10 Ceremony, 11 InternalMeeting, 100 RegularEvent.
 `ServiceBooking status`: 1 Pending, 2 Booked, 3 Cancelled.
@@ -410,6 +415,16 @@ Event document (from `eventsByDateRange`): `status`, `type`, `date`/`endDate`/`c
 `venueId`, `tenantId`, `currentMain`/`currentAdditional`/`includedMain`/`includedAdditional`
 (`{adults, teenagers, children, infants, suppliers}`), `areaIds`/`reservedAreaIds`,
 `enquiryData`, `weddingData`, `config`.
+
+Transaction document (from `eventTransactions`): `kind`, `status`, `type`
+(0 Credit, 1 Debit, 2 Escrow), `amount`, `method` (payments only), `dueDate`,
+`description`, `sectionId`, `financialRecordId` (once invoiced),
+`amountDistribution` (per-category split), `systemGenerated`, audit fields.
+
+Financial-record document (from `eventFinancialRecords`): `type`, `status`,
+`reference` (e.g. `INV-HR-000018`), `date`/`dueDate`, `entries` (line items
+with `transactionId` and tax/discount breakdown), `subTotals`, `totalAmount`,
+`totalPaid`, `clientId`.
 
 ---
 
@@ -448,11 +463,14 @@ the lifecycle verbs: `event create-enquiry`, `change-status <id> <status>`,
 `cancel` (→ `eventCancelWithWorkflow`, unverified, see §13); plus the per-event
 sub-apps `guest` (`list`, `add`, `update`, `delete`, `set-numbers`), `timeline`
 (`list`, `add`, `update`, `delete`, `import`), and `note` (`list`, `add`,
-`edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers).
+`edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers); and the
+finance reads `transaction list <eventId>` and `invoice list <eventId>` /
+`get <eventId> <recordId>` (financial records), verified against a live event's
+finance data.
 
 **T1, operational (read + write):**
-- `transaction`: `list <eventId>`, `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
-- `invoice` (financial-record): `list <eventId>`, `get`, `pdf`.
+- `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
+- `invoice` (financial-record) writes: `pdf`.
 - `service-booking`: `list <eventId>`, `add`, `confirm`, `cancel`.
 - `message`: `list <eventId>`, `send --template`.
 - `document`: `list <eventId>`, `add`, `delete`.
