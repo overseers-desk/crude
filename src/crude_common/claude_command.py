@@ -154,6 +154,18 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas activity list <eventId> [--limit N] [--json]
     crude-sonas activity verify <activityId>
     crude-sonas activity verify-all <eventId>
+    crude-sonas availability list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
+    crude-sonas availability create --data '<doc-json>'               # unverified; feeds the public booking widget
+    crude-sonas availability update <availabilityId> --data '<mongo-modifier-json>'  # unverified
+    crude-sonas availability delete <availabilityId> [--yes]          # unverified
+    crude-sonas appointment list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
+    crude-sonas appointment get <calendarEventId> [--json]
+    crude-sonas appointment create --venue <venueId> --type <name|n> --start <iso-datetime> [--end <iso-datetime>] [--title <text>] [--event <eventId>] [--data '<json>']
+    crude-sonas appointment update <calendarEventId> --data '<mongo-modifier-json>'  # $set needs start and end together
+    crude-sonas appointment delete <calendarEventId> [--yes]
+    crude-sonas tasting list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
+    crude-sonas tasting book --data '<booking-json>' [--previous <bookingId>]  # unverified; may mail the couple
+    crude-sonas tasting cancel <bookingId> [--yes]                    # unverified
 
 Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, ConfirmedPending, Completed, Idle. A fresh enquiry has no event date and stays out of `event list` until hold-date or change-date sets one; hold-date also sets DateOnHold, change-date keeps the status. change-status prompts when the target leaves the enquiry group (Enquiry, DateOnHold, Exhausted, Idle); delete and cancel prompt unless --yes. The full resource map (events, finance, guests, timelines, service-bookings, and more) and the remaining subcommand plan live in the crude repo docs/sonas.md.
 
@@ -162,6 +174,8 @@ Named guests (guest list/add/update/delete) and the headcount (guest set-numbers
 Timeline entries are absolute (--time, naive ISO counts as UTC) or relative to another entry (--after + --offset-minutes, negative = before); timeline update takes a full replacement entry, not a modifier; timeline import appends a tenant template's entries (template ids are the eventId-less docs in the timelines collection). Note and timeline --section take an EventSectionEnum slug (notes, general, timeline, bar, ...; the table is in the crude repo docs/sonas.md); note add defaults to notes.
 
 service-booking cancel keeps the booking as a Cancelled record (Sonas has no booking delete); edit replaces the whole option list. Option ids come from the service's catalog doc.
+
+Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
 """
 
 

@@ -190,7 +190,7 @@ Lifecycle methods (write):
 - `eventCancelWithWorkflow({eventId, reasonSlug, note?, cancelFutureCharges, revokePortalAccess})`
   (keys confirmed from the dynamic chunk's validator; **not called**: O-class,
   may stop charges and revoke portal access, see §13),
-  `eventCancelBooking({bookingId})`, `eventDelete({eventId})` **[live]**,
+  `eventDelete({eventId})` **[live]**,
   `eventRestore({eventId})` (wire shape accepted; refused for this account,
   which lacks `events.general.to-confirmed-pending`; a deleted event is gone
   for us, so don't delete the test harness mid-build).
@@ -338,18 +338,73 @@ Export: `exportEvents({clientSelector, extension, mode})`, `tenantImportEvents({
 
 ### 6.2 Availability & bookings (T2)
 
-Publications: `availabilityByDateRange(from, to)`, `calendarEventsByDateRange(from, to)`,
+Publications: `availabilityByDateRange(from, to)` **[live]** (collection
+`availability`, plus the range's `calendar-events`), `calendarEventsByDateRange(from, to)`
+**[live]** (collection `calendar-events`, plus the linked `events`),
+`calendarEvent(calendarEventId)` **[live]** (the doc plus its `activities`),
+`tastingEventsByDateRange(from, to)` **[live]** (collection `tasting-events`;
+this tenant has none, so the doc shape is from TastingEventSchema only),
 `calendarEventsByDateRangeForAvailability(from, to, venueIds, availabilityTypes)`,
-`calendarEvent(calendarEventId)`, `tastingEventsByDateRange(from, to)`,
 `tastingBookingsForEvent(eventId)`, `tastingBookingsByTasting(tastingEventId)`.
 
-Methods: `getVenueAvailability({venueId, eventId, startDate, endDate, eventType})` (read),
-`createAvailability({doc})`, `updateAvailability({availabilityId, modifier})`, `deleteAvailability({availabilityId})`,
-`calendarEventCreate({doc})`, `calendarEventUpdate({id, modifier})`, `calendarEventDelete({id})`,
-`calendarEventSetAttendance({calendarEventId, eventId, attended, noteText})`,
-`tastingEventCreate({doc})`, `tastingEventUpdate({tastingEventId, mod})`, `tastingEventDelete({tastingEventId})`,
-`tastingEventSetAttendance({tastingEventId, tastingBookingId, attended})`,
-`eventAddTastingBooking({previousBookingId, booking})`, `tenantUpdateCalendars({modifier})`,
+Appointments (collection `calendar-events`):
+- `calendarEventCreate(doc)` **[live]**: the arg is the flat
+  CalendarEventCreateSchema doc, no wrapper (idSource `venueId`). Required
+  `venueId`, `type` (CalendarEventTypeEnum §7), `start` (EJSON); optional `end`
+  (≥ start + 15 min when set), `title`, `staffId` (1–2 user ids), `eventId`,
+  `allDay`, `weatherType`, `attended`, `attendants`. Returns the new id. The
+  schema has no notification field; reminder mail belongs to the customer
+  appointment types (`sendsRemindersTypes()`: ShowAround, Meeting, ItemDelivery,
+  CustomAppointment1–3) and to the separate `eventCreateCalendarEvent({eventId,
+  data})` path, whose simplified schema carries an `emailTemplateId`. Trialed as
+  an InternalMeeting with no event link, the plain staff-calendar shape.
+- `calendarEventUpdate({id, modifier})` **[live]**: Mongo modifier over
+  CalendarEventSchema fields, but the server needs `$set.start` and `$set.end`
+  together in every modifier; a title-only or start-only `$set` passes schema
+  validation and then fails with an opaque `method-exec-err`.
+- `calendarEventDelete({id})` **[live]**,
+  `calendarEventSetAttendance({calendarEventId, eventId, attended, noteText})`,
+  `eventCreateCalendarEvent({eventId, data})`, `eventUpdateCalendarEvent({calendarEventId, modifier})`,
+  `eventDeleteCalendarEvent({calendarEventId})`, `eventCancelAppointment({calendarEventId, eventId})`.
+
+Availability windows (collection `availability`): recurring bookable-slot
+definitions the public appointment-booking widget offers, not internal date
+blocks (a block is an `exceptions` entry inside a window). **Not called** for
+that reason (O-class, public-widget visibility); shapes from the chunk:
+- `createAvailability({doc})`: doc is AvailabilityCoreSchema: `title`,
+  `availableFor` (CalendarEventTypeEnum `availabilityValues()`: ShowAround,
+  Meeting, ItemDelivery, CustomAppointment1–3, Ceremony), `from`/`to` (EJSON,
+  to > from + 30 min), `defaultStaffId`, `availability` (array of `{day`
+  (DaysEnum: 1–7 Mon–Sun, 10 Weekdays, 11 Weekends, 12 EveryDay), `start`
+  "HH:MM", `end?` "HH:MM", `slotDuration` ≥15, `bufferBetweenSlots` 0–720,
+  `bookingsPerSlot` 1–999, `onlyEventTypes?`, `exceptEventTypes?}`),
+  `exceptions?` (array of `{start, end, title?}` EJSON spans), `venueId`,
+  `minTimeBeforeBooking` 0–999.
+- `updateAvailability({availabilityId, modifier})`: modifier over
+  AvailabilityUpdateSchema (the core minus venueId/availableFor/defaultStaffId);
+  exceptions must fall inside `$set.from`..`$set.to`.
+- `deleteAvailability({availabilityId})`.
+- `getVenueAvailability({venueId, eventId, startDate, endDate, eventType})` (read).
+
+Tastings: tasting events are venue-hosted slots (TastingEventCoreSchema: `type`,
+`venueId`, `permittedVenueIds?`, `staffOnly?`, `permittedProductMenuIds?`,
+`startTime`, `timeInterval` 1–300, `capacityPerSlot`, ...); bookings put an
+event's couple into a slot. **Not called** (the server side may mail the couple,
+and the booking's optional `transactionId` hints finance coupling); shapes from
+the chunk:
+- `eventAddTastingBooking({previousBookingId?, booking})`: booking is
+  TastingBookingNHSchema: required `tastingEventId`, `tastingSlot` (integer slot
+  index), `eventId`, `foodToTaste` (string array), `numberAttending`; optional
+  `wineToTaste`, `transactionId`, `notes` (`{subType, text}` array), `attended`,
+  `dietaryRestriction`, `allergies`, `airborneSensitivity`, `bookingNotes`.
+- `eventCancelBooking({bookingId})`: the tasting-booking cancel, despite the
+  event-sounding name (it lives in tasting-bookings/methods.ts, zone
+  TastingBookings).
+- `tastingEventCreate({doc})`, `tastingEventUpdate({tastingEventId, mod})`,
+  `tastingEventDelete({tastingEventId})`,
+  `tastingEventSetAttendance({tastingEventId, tastingBookingId, attended})`.
+
+Calendar plumbing: `tenantUpdateCalendars({modifier})`,
 `exportPublicCalendar({venueId})`, `exportPrivateCalendar({venueId})`.
 
 ### 6.3 Leads & enquiry pipeline (T1/T3)
@@ -426,7 +481,11 @@ types: 2 Corporate, 5 Party, 7 Conference, etc.). `isWedding()` ⊇ {0,1,10,13,1
 `PaymentMethod` (transaction `method`): 0 Cash, 1 Card, 2 Cheque, 3 Transfer,
 4 DirectDebit, 5 EscrowAccount, 6 OnlineBankTransfer, 100 Other.
 `CalendarEventType`: 0 ShowAround, 1 Meeting, 2 Holiday, 3 OpenDay, 5 ItemDelivery,
-6 Tasting, 7 Maintenance, 8 PhotoShoot, 9 Accommodation, 10 Ceremony, 11 InternalMeeting, 100 RegularEvent.
+6 Tasting, 7 Maintenance, 8 PhotoShoot, 9 Accommodation, 10 Ceremony,
+11 InternalMeeting, 12–14 CustomAppointment1–3, 100 RegularEvent. Subsets:
+`sendsRemindersTypes()` = {0, 1, 5, 12, 13, 14} (the customer appointment kinds);
+`hasAttendees()` = {3}; `createOnCalendarTypes()` (staff-created entries) =
+{2, 3, 7, 8, 9, 11}; `availabilityValues()` = {0, 1, 5, 10, 12, 13, 14}.
 `MessageStatus`: 0 Incoming, 1 Received, 2 Outgoing, 3 Sent, 4 Delivered, 7 Opened, 9 Draft.
 `MessageTransport`: 0 Internal, 1 Email.
 `TermsAndConditionsStatus`: 0 Waiting, 1 Accepted, 2 Rejected.
@@ -516,7 +575,12 @@ finance data; `service-booking` (`list`, `add`, `edit`, `cancel` trialed on
 the harness; `confirm` ships unverified, §6.1); the per-event reads
 `message list`, `document list`, `terms list` (verified on a live event); and
 `activity` (`list`, `verify`, `verify-all`, trialed on the harness's own
-activities).
+activities); the T2 scheduling sub-apps: `appointment` (`list`, `get`,
+`create`, `update`, `delete`, the lifecycle trialed on a throwaway
+InternalMeeting, §6.2), `availability` (`list` verified; `create`, `update`,
+`delete` ship unverified: windows feed the public booking widget, §6.2), and
+`tasting` (`list` verified on the empty tenant; `book`, `cancel` ship
+unverified: the server side may mail the couple, §6.2).
 
 **T1, operational (read + write):**
 - `transaction` writes: `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
@@ -524,9 +588,6 @@ activities).
 - `message` writes: `send --template`.
 - `document` writes: `add`, `delete`.
 - `terms` writes: `accept`, `pdf`.
-
-**T2, scheduling:** `availability list`, `appointment list|create|update|delete`
-(calendar-event), `tasting list|book|cancel`.
 
 **T3, catalog (read-only first):** `supplier`, `service`, `drinks-package`
 (→ `DrinksList`), `package` (→ `PackageList`), `template`, `category`, `report`,
@@ -605,8 +666,8 @@ service-booking trial's residue; cancelled bookings cannot be deleted, §6.1)
 and the activity records of the trials; both are invisible in its UI view.
 
 - Method args behind composed/external validators (still open:
-  `calendarEventCreate`'s `doc`, `paymentPlanCreate`, the nested CLI payloads in
-  §9 such as a charge's `doc`) are not destructured in the loader bundle.
+  `paymentPlanCreate`, the nested CLI payloads in §9 such as a charge's `doc`)
+  are not destructured in the loader bundle.
   Resolve them from the dynamic-import chunk's schema definitions (§6.4, the
   route that decoded `eventCreateEnquiry`'s doc, the guest `data`, and the
   timeline `entry`); schema-validation failures on the wire are opaque 500s, so
@@ -619,6 +680,11 @@ and the activity records of the trials; both are invisible in its UI view.
   a real cancellation's WS frames and check for mail/finance calls.
 - `eventRestore` is refused for this account (`events.general.to-confirmed-pending`);
   its effect (and what status a restored event lands in) is unverified.
+- Availability writes (`createAvailability`, `updateAvailability`,
+  `deleteAvailability`) and tasting bookings (`eventAddTastingBooking`,
+  `eventCancelBooking`) ship unverified (§6.2): windows surface on the public
+  booking widget, and a tasting booking may mail the couple. To verify: observe
+  the real UI actions' WS frames.
 - T3 catalog reads go through `tabular_genericPub` (§6.4); write-method args
   remain unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.

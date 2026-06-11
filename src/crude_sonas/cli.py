@@ -22,7 +22,14 @@ from crude_common.config import (
     resolve_account as _resolve_account,
     s as _s,
 )
-from crude_sonas.client import EVENT_STATUS, EVENT_TYPE, date_str, to_ejson_date
+from crude_sonas.client import (
+    EPOCH_1900_MS,
+    EPOCH_2100_MS,
+    EVENT_STATUS,
+    EVENT_TYPE,
+    date_str,
+    to_ejson_date,
+)
 
 app = typer.Typer(help="crude-sonas — Sonas wedding-venue software (app.sonas.events).")
 event_app = typer.Typer(help="Events (weddings and other bookings).")
@@ -47,6 +54,12 @@ terms_app = typer.Typer(help="An event's terms-and-conditions records.")
 app.add_typer(terms_app, name="terms")
 activity_app = typer.Typer(help="An event's activity log (system and staff entries).")
 app.add_typer(activity_app, name="activity")
+availability_app = typer.Typer(help="Venue appointment-availability windows (bookable slot definitions).")
+app.add_typer(availability_app, name="availability")
+appointment_app = typer.Typer(help="Calendar appointments: show-arounds, meetings, holidays, internal entries.")
+app.add_typer(appointment_app, name="appointment")
+tasting_app = typer.Typer(help="Tasting events and their bookings.")
+app.add_typer(tasting_app, name="tasting")
 console = Console()
 
 register_claude_command(app)
@@ -180,16 +193,36 @@ def _status_matches(doc: dict, query: str) -> bool:
 ENQUIRY_GROUP = {0, 3, 4, 7}
 
 
-def _parse_status(value: str) -> int:
-    """Resolve a status name or number against EVENT_STATUS."""
-    if value.lstrip("-").isdigit() and int(value) in EVENT_STATUS:
+def _parse_enum(value: str, names: dict, what: str) -> int:
+    """Resolve an enum name or number against its table."""
+    if value.lstrip("-").isdigit() and int(value) in names:
         return int(value)
-    for num, name in EVENT_STATUS.items():
+    for num, name in names.items():
         if name.lower() == value.lower():
             return num
-    choices = ", ".join(f"{k} {v}" for k, v in EVENT_STATUS.items())
-    typer.echo(f"Error: unknown status {value!r}; one of: {choices}.", err=True)
+    choices = ", ".join(f"{k} {v}" for k, v in names.items())
+    typer.echo(f"Error: unknown {what} {value!r}; one of: {choices}.", err=True)
     raise typer.Exit(2)
+
+
+def _parse_status(value: str) -> int:
+    return _parse_enum(value, EVENT_STATUS, "status")
+
+
+def _range_params(from_: Optional[str], to: Optional[str]) -> list:
+    """EJSON [from, to] params for the *ByDateRange pubs; default all time,
+    the same wide range `event list` uses."""
+    return [to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS},
+            to_ejson_date(to) if to else {"$date": EPOCH_2100_MS}]
+
+
+def _dt_str(value) -> str:
+    """Render an EJSON datetime as YYYY-MM-DD HH:MM (UTC); pass others through."""
+    if isinstance(value, dict) and "$date" in value:
+        from datetime import datetime, timezone
+        return datetime.fromtimestamp(
+            value["$date"] / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M")
+    return _s(value)
 
 
 # ----------------------------------------------------------------------
@@ -1302,6 +1335,274 @@ def activity_verify_all(
     """Mark all of an event's activities as verified (eventVerifyAllActivities)."""
     _do_call("eventVerifyAllActivities", {"eventId": event_id},
              f"verify all activities on {event_id}", output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# availability / appointment / tasting (T2 scheduling)
+# ----------------------------------------------------------------------
+
+# CalendarEventTypeEnum (docs/sonas.md §7).
+CALENDAR_EVENT_TYPE = {
+    0: "ShowAround", 1: "Meeting", 2: "Holiday", 3: "OpenDay", 5: "ItemDelivery",
+    6: "Tasting", 7: "Maintenance", 8: "PhotoShoot", 9: "Accommodation",
+    10: "Ceremony", 11: "InternalMeeting", 12: "CustomAppointment1",
+    13: "CustomAppointment2", 14: "CustomAppointment3", 100: "RegularEvent",
+}
+
+
+@availability_app.command("list")
+def availability_list(
+    from_: Optional[str] = typer.Option(None, "--from", help="Windows touching on/after this date (YYYY-MM-DD)."),
+    to: Optional[str] = typer.Option(None, "--to", help="Windows touching on/before this date (YYYY-MM-DD)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List availability windows (availabilityByDateRange publication, collection
+    `availability`): the recurring slot definitions the appointment-booking
+    widget offers. The pub also serves the range's calendar-events; only the
+    availability docs are listed here."""
+    client = _client()
+    try:
+        items = client.read_pub("availabilityByDateRange", _range_params(from_, to),
+                                collection="availability")
+    except Exception as e:
+        typer.echo(f"Error fetching availability: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        for item in items:
+            item["availableFor"] = ", ".join(
+                CALENDAR_EVENT_TYPE.get(t, _s(t)) for t in item.get("availableFor") or [])
+            item["slots"] = len(item.get("availability") or [])
+            item["exceptions"] = len(item.get("exceptions") or [])
+            item["from"] = _dt_str(item.get("from"))
+            item["to"] = _dt_str(item.get("to"))
+    _emit(items, output_json, columns=[
+        ("Id", "_id"), ("Title", "title"), ("From", "from"), ("To", "to"),
+        ("For", "availableFor"), ("Slots", "slots"), ("Exceptions", "exceptions"),
+        ("Venue", "venueId"),
+    ], what="availability window")
+
+
+@availability_app.command("create")
+def availability_create(
+    data: Optional[str] = typer.Option(None, "--data", help="The doc as JSON."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Create an availability window (createAvailability). The doc is
+    AvailabilityCoreSchema (docs/sonas.md §6.2): title, availableFor, from/to,
+    defaultStaffId, availability slot array, venueId, minTimeBeforeBooking.
+    Windows feed the public appointment-booking widget
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("createAvailability", {"doc": _read_data(data, file)},
+             "create availability", output_json=output_json)
+
+
+@availability_app.command("update")
+def availability_update(
+    availability_id: str = typer.Argument(..., help="Availability id (from `availability list`)."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='Mongo modifier JSON over AvailabilityUpdateSchema fields, e.g. {"$set": {"to": ...}}.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the modifier JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Update an availability window (updateAvailability)
+    (unverified; see docs/sonas.md §6)."""
+    _do_call("updateAvailability",
+             {"availabilityId": availability_id, "modifier": _read_data(data, file)},
+             f"update availability {availability_id}", output_json=output_json)
+
+
+@availability_app.command("delete")
+def availability_delete(
+    availability_id: str = typer.Argument(..., help="Availability id (from `availability list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete an availability window (deleteAvailability); removes its bookable
+    slots from the public widget (unverified; see docs/sonas.md §6)."""
+    _do_call("deleteAvailability", {"availabilityId": availability_id},
+             f"delete availability {availability_id}",
+             confirm=f"Delete availability window {availability_id}?", yes=yes)
+
+
+@appointment_app.command("list")
+def appointment_list(
+    from_: Optional[str] = typer.Option(None, "--from", help="On or after this date (YYYY-MM-DD)."),
+    to: Optional[str] = typer.Option(None, "--to", help="On or before this date (YYYY-MM-DD)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List calendar appointments (calendarEventsByDateRange publication,
+    collection `calendar-events`; the pub also carries the linked events)."""
+    client = _client()
+    try:
+        items = client.read_pub("calendarEventsByDateRange", _range_params(from_, to),
+                                collection="calendar-events")
+    except Exception as e:
+        typer.echo(f"Error fetching appointments: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    items.sort(key=lambda a: (a.get("start") or {}).get("$date", 0)
+               if isinstance(a.get("start"), dict) else 0)
+    if not output_json:
+        for item in items:
+            item["type"] = CALENDAR_EVENT_TYPE.get(item.get("type"), _s(item.get("type")))
+            item["start"] = _dt_str(item.get("start"))
+            item["end"] = _dt_str(item.get("end"))
+    _emit(items, output_json, columns=[
+        ("Id", "_id"), ("Start", "start"), ("End", "end"), ("Type", "type"),
+        ("Title", "title"), ("Event", "eventId"), ("Attended", "attended"),
+    ], what="appointment")
+
+
+@appointment_app.command("get")
+def appointment_get(
+    appointment_id: str = typer.Argument(..., help="Calendar-event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Show one appointment (calendarEvent publication; it also carries the
+    appointment's activity entries, not shown here)."""
+    client = _client()
+    try:
+        docs = client.read_pub("calendarEvent", [appointment_id],
+                               collection="calendar-events")
+    except Exception as e:
+        typer.echo(f"Error fetching appointment {appointment_id}: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not docs:
+        typer.echo(f"Error: appointment {appointment_id} not found.", err=True)
+        raise typer.Exit(1)
+    _emit_record(docs[0], output_json)
+
+
+@appointment_app.command("create")
+def appointment_create(
+    venue: Optional[str] = typer.Option(None, "--venue", help="Venue id (venueId)."),
+    type_: Optional[str] = typer.Option(
+        None, "--type", help="CalendarEventType, name or number (e.g. InternalMeeting, 11)."),
+    start: Optional[str] = typer.Option(
+        None, "--start", help="Start: ISO datetime (naive = UTC)."),
+    end: Optional[str] = typer.Option(
+        None, "--end", help="End: ISO datetime, at least 15 minutes after start."),
+    title: Optional[str] = typer.Option(None, "--title", help="Appointment title."),
+    event: Optional[str] = typer.Option(None, "--event", help="Linked event id (eventId)."),
+    data: Optional[str] = typer.Option(None, "--data", help="Full doc as JSON (flags overlay it)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Create a calendar appointment (calendarEventCreate); prints the new id.
+
+    The arg is the flat CalendarEventCreateSchema doc (docs/sonas.md §6.2):
+    venueId, type, start required; end, title, staffId, eventId, allDay,
+    weatherType, attendants optional. Create itself carries no notification
+    field; reminder mails belong to the customer appointment types
+    (docs/sonas.md §7), so an InternalMeeting with no event link is a plain
+    staff-calendar entry.
+    """
+    doc = _read_data(data, file) if (data is not None or file is not None) else {}
+    for key, value in (("venueId", venue), ("title", title), ("eventId", event)):
+        if value is not None:
+            doc[key] = value
+    if type_ is not None:
+        doc["type"] = _parse_enum(type_, CALENDAR_EVENT_TYPE, "appointment type")
+    if start is not None:
+        doc["start"] = _datetime_ejson(start)
+    if end is not None:
+        doc["end"] = _datetime_ejson(end)
+    missing = [k for k in ("venueId", "type", "start") if doc.get(k) is None]
+    if missing:
+        typer.echo(f"Error: doc is missing required key(s): {', '.join(missing)}.", err=True)
+        raise typer.Exit(1)
+    _do_call("calendarEventCreate", doc, "create appointment", output_json=output_json)
+
+
+@appointment_app.command("update")
+def appointment_update(
+    appointment_id: str = typer.Argument(..., help="Calendar-event document id."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help="Mongo modifier JSON over CalendarEventSchema fields; $set must "
+             "carry start and end together (docs/sonas.md §6.2)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the modifier JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Update an appointment (calendarEventUpdate); the $set needs start and
+    end alongside any other change."""
+    _do_call("calendarEventUpdate",
+             {"id": appointment_id, "modifier": _read_data(data, file)},
+             f"update appointment {appointment_id}", output_json=output_json)
+
+
+@appointment_app.command("delete")
+def appointment_delete(
+    appointment_id: str = typer.Argument(..., help="Calendar-event document id."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete an appointment (calendarEventDelete)."""
+    _do_call("calendarEventDelete", {"id": appointment_id},
+             f"delete appointment {appointment_id}",
+             confirm=f"Delete appointment {appointment_id}?", yes=yes)
+
+
+@tasting_app.command("list")
+def tasting_list(
+    from_: Optional[str] = typer.Option(None, "--from", help="On or after this date (YYYY-MM-DD)."),
+    to: Optional[str] = typer.Option(None, "--to", help="On or before this date (YYYY-MM-DD)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List tasting events (tastingEventsByDateRange publication, collection
+    `tasting-events`)."""
+    client = _client()
+    try:
+        items = client.read_pub("tastingEventsByDateRange", _range_params(from_, to),
+                                collection="tasting-events")
+    except Exception as e:
+        typer.echo(f"Error fetching tasting events: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        for item in items:
+            item["startTime"] = _dt_str(item.get("startTime"))
+    _emit(items, output_json, columns=[
+        ("Id", "_id"), ("Start", "startTime"), ("Type", "type"),
+        ("Capacity/slot", "capacityPerSlot"), ("Interval(min)", "timeInterval"),
+        ("Staff only", "staffOnly"), ("Venue", "venueId"),
+    ], what="tasting event")
+
+
+@tasting_app.command("book")
+def tasting_book(
+    previous: Optional[str] = typer.Option(
+        None, "--previous", help="Booking this one replaces (previousBookingId)."),
+    data: Optional[str] = typer.Option(None, "--data", help="The booking as JSON."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the booking JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Book a couple onto a tasting event (eventAddTastingBooking). The booking
+    is TastingBookingNHSchema (docs/sonas.md §6.2): tastingEventId, tastingSlot,
+    eventId, foodToTaste, numberAttending required. May mail the couple
+    (unverified; see docs/sonas.md §6)."""
+    arg = {"booking": _read_data(data, file)}
+    if previous is not None:
+        arg["previousBookingId"] = previous
+    _do_call("eventAddTastingBooking", arg, "book tasting", output_json=output_json)
+
+
+@tasting_app.command("cancel")
+def tasting_cancel(
+    booking_id: str = typer.Argument(..., help="Tasting-booking document id."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Cancel a tasting booking (eventCancelBooking, the tasting-booking cancel
+    despite the event-sounding name; unverified; see docs/sonas.md §6)."""
+    _do_call("eventCancelBooking", {"bookingId": booking_id},
+             f"cancel tasting booking {booking_id}",
+             confirm=f"Cancel tasting booking {booking_id}?", yes=yes)
 
 
 if __name__ == "__main__":
