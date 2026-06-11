@@ -49,8 +49,8 @@ should be confirmed on first call.
   server replies `{"msg":"connected","session":"..."}`.
 - **Heartbeats**: server sends `{"msg":"ping","id":...}`; reply `{"msg":"pong","id":...}`.
 - **Version coupling**: Meteor autoupdate (`meteor_autoupdate_clientVersions`) hot-pushes
-  a matched client to browsers and force-reloads stale ones. A standalone client like
-  this is exposed to silent server-side changes on each Sonas release; treat the method
+  a matched client to browsers and force-reloads stale ones. A standalone DDP client
+  is exposed to silent server-side changes on each Sonas release; treat the method
   and pub shapes here as a snapshot of v4.58.6. Monti APM (`engine.montiapm.com`) records
   client traffic, so automated use is visible to the vendor.
 
@@ -210,7 +210,7 @@ Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessag
 Activities (write): `eventAddCalledClientActivity({eventId, noteText})`,
 `eventVerifyActivity({activityId})`, `eventVerifyAllActivities({eventId})`,
 `tenantVerifyActivities(...)`. Reads: the `SystemActivities` table → `activitiesWithExtra`
-data pub; unverified selector is `{verifiedById: null}`.
+data pub; the selector for unverified activities is `{verifiedById: null}`.
 
 Export: `exportEvents({clientSelector, extension, mode})`, `tenantImportEvents({entries, detail})`.
 
@@ -255,10 +255,22 @@ Tables/collections (use the tabular two-step or the named pub): `SuppliersList`,
 `FormsList`, `VenueList`, `UserList`, `UserRoleList`, `TransactionList`
 (`transactionsWithEventDate`), `FinancialRecordsList` (`financialRecordsWithEventDate`),
 `Inbox` (`messagesWithExtra`), `ReviewList`, `WorkflowsList`, `AuditLogList`
-(`auditLogComposite`, collection `audit-logs`). To complete a catalog resource,
-mine its method args from the bundle: list method names with
-`grep -oaE 'name:"[a-zA-Z][A-Za-z0-9]+",validate' src-bundle | sed -E 's/.*name:"//;s/",validate//' | sort -u`,
-then read one method's `validate()` for its destructured arguments.
+(`auditLogComposite`, collection `audit-logs`).
+
+To complete a catalog resource, confirm its method arguments primarily by **live
+trial** (call the method; the DDP error names the failing `Match`) or by watching
+the real call in the logged-in browser's DevTools (Network → WS frames, which show
+the method name and payload Sonas sends). To enumerate method and pub *names*
+statically, fetch the current Meteor client bundle and grep it. The bundle is the
+`<hash>.js?meteor_js_resource=true` script named in the app's page source (no auth
+needed); the hash changes each release, so read it fresh:
+
+    curl -s https://app.sonas.events/ | grep -oaE '/[a-f0-9]+\.js\?meteor_js_resource=true'
+    curl -s -o /tmp/sonas-bundle.js "https://app.sonas.events/<hash>.js?meteor_js_resource=true"
+    grep -oaE 'name:"[a-zA-Z][A-Za-z0-9]+",validate' /tmp/sonas-bundle.js \
+      | sed -E 's/.*name:"//; s/",validate//' | sort -u   # method names
+
+A method's `validate()` body in the bundle shows its destructured argument keys.
 
 ---
 
@@ -312,7 +324,9 @@ notes) and the read side of T3 catalog first; defer reviews/workflows/forms.
 ## 9. CLI subcommand plan
 
 Grammar: `crude-sonas <resource> <verb>`. `--json` on reads; reads are
-subscriptions, writes are method calls via `SonasClient.call(method, arg)`.
+subscriptions, writes are method calls via `SonasClient.call(method, arg)`. The
+resource and verb names below are the proposed CLI surface, not fixed; keep or
+adjust them.
 
 **Shipped (reference):** `event list [--from --to --status]`, `event get <id>`.
 
@@ -333,8 +347,9 @@ subscriptions, writes are method calls via `SonasClient.call(method, arg)`.
 **T2, scheduling:** `availability list`, `appointment list|create|update|delete`
 (calendar-event), `tasting list|book|cancel`.
 
-**T3, catalog (read-only first):** `supplier`, `service`, `drinks-package`,
-`package`, `template`, `category`, `report`, `venue`, `user`, all `list`/`get`.
+**T3, catalog (read-only first):** `supplier`, `service`, `drinks-package`
+(→ `DrinksList`), `package` (→ `PackageList`), `template`, `category`, `report`,
+`venue`, `user`, all `list`/`get`.
 
 **Skip / defer:** reviews, platform-contracts, workflows, forms.
 
@@ -355,6 +370,11 @@ the tabular two-step, collect from `store`, unsub), add write methods as
 `self.call("<method>", {<args from §6>})`, then add a Typer sub-app in `cli.py`
 mirroring the `event` commands. Confirm each method's arg shape on first call (the
 DDP error names the failing match).
+
+Two conventions the `event` commands set: list output is a Rich table plus
+`--json` (the `_render_*`/`_emit` helpers in `cli.py`), and destructive verbs
+(`event cancel`, deletes) should prompt for confirmation unless `--yes`, as
+`crude-deputy resource delete` does (`typer.confirm(..., abort=True)`).
 
 ---
 
@@ -383,7 +403,11 @@ Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
 
 - Method args behind composed/external validators (e.g. `eventCreateEnquiry`'s
   `doc`, `calendarEventCreate`'s `doc`, `paymentPlanCreate`) are not destructured
-  in the bundle; confirm by observing a real call or by trial.
+  in the bundle. Confirm them by live trial (the DDP error names the failing
+  `Match`) or by watching the real call in the logged-in browser's DevTools
+  (Network → WS frames show the exact method name and payload). The nested CLI
+  payloads in §9 (a charge's `doc`, a guest's `data`, a timeline `entry`) resolve
+  the same way.
 - `EventSectionEnum` member names are known (General, Wedding, Guests, MenuChoice,
   Timeline, Seating, Bar, ...) but integer values were not decoded; `eventAddNote`'s
   `sectionId` value is therefore unconfirmed.
