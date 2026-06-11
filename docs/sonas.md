@@ -1,19 +1,18 @@
-# Sonas client: protocol, data model, and implementation scope
+# Sonas client: protocol and data model
 
-Reverse-engineered reference and build plan for `crude-sonas`. Source:
-`app.sonas.events`, Sonas wedding-venue software by Lytesoft, app v4.58.6,
-Meteor 2.16. Discovery date: 2026-06-11.
+Reverse-engineered reference for `crude-sonas`. Source: `app.sonas.events`,
+Sonas wedding-venue software by Lytesoft, app v4.58.6, Meteor 2.16. Snapshot
+date: 2026-06-11.
 
 This document is the single source for the Sonas integration: the wire protocol
-and endpoint shapes, the resource map, the data model, and the planned
-subcommands. The shipped `crude_sonas` package is a **reference implementation**
-of the hard parts (transport, auth, one read resource, the write path); a fresh
-implementer should be able to extend it to the rest from this document alone.
+and endpoint shapes, the resource map, and the data model. The `crude_sonas`
+package implements the §8 CLI surface on top of it; anything Sonas offers beyond
+that surface can be built from this document alone.
 
 Epistemic markers used below: **[live]** = exercised against the real account and
-confirmed; **[bundle]** = read from the minified client bundle, not yet run;
-**[chunk]** = arg keys and payload schema decoded statically from the
-dynamic-import chunk's validators (§6.4), never run.
+confirmed; **[bundle]** = arg keys read from the minified client code, never run;
+**[chunk]** = payload schema decoded statically from the dynamic-import chunk's
+validators (§6.4), never run.
 
 ---
 
@@ -25,19 +24,19 @@ Built and live-verified **[live]**:
 - Login (customised Meteor accounts-password with a device fingerprint),
   device-verification handling, and resume-token caching.
 - Tenant selection.
-- The full §9 CLI surface: the event lifecycle, `guest`, `timeline`, `note`,
+- The full §8 CLI surface: the event lifecycle, `guest`, `timeline`, `note`,
   the finance reads (`transaction list`, `invoice list/get`), `service-booking`,
   the `message`/`document`/`terms` reads, `activity`, T2 scheduling
   (`appointment` lifecycle; `availability` and `tasting` reads), and the T3
-  catalog reads. Every [live]-marked write verb was trialed per the §13 policy
+  catalog reads. Every [live]-marked write verb was trialed per the §11 policy
   on a throwaway enquiry.
 
 Shipped uncalled (**[chunk]**: payload shapes decoded statically, never
 invoked): the finance, mail, terms, availability-write, tasting-booking, and
-`service-booking confirm` verbs. The §13 list names each with the reason it was
+`service-booking confirm` verbs. The §11 list names each with the reason it was
 not trialed and the way to verify it.
 
-Out of scope (§9): reviews, platform-contracts, workflows, forms, `document add`.
+Out of scope (§8): reviews, platform-contracts, workflows, forms, `document add`.
 
 ---
 
@@ -70,15 +69,14 @@ built from `added`/`changed`/`removed` messages (minimongo-style).
 
 ---
 
-## 3. Authentication (built; reference only)
+## 3. Authentication
 
-Login is implemented and verified in `auth.py` and `SonasClient._ensure`
-(`client.py`); an implementer adding resources reuses it untouched. At a high
+Login lives in `auth.py` and `SonasClient._ensure` (`client.py`). At a high
 level it is a customised Meteor accounts-password login carrying a device
 fingerprint, with the Meteor resume token cached in a temp file and reused. Read
 the code for the wire details.
 
-One operational note worth knowing while developing: a login from a device
+Operational note: a login from a device
 fingerprint or network the server has not seen returns a `verification-error` and
 emails a one-time link; opening it once trusts that device, after which logins
 resume silently. `sonas_login` detects this and prints guidance. A
@@ -131,15 +129,15 @@ login token. crude auto-discovers `tenantId` from the logged-in user record
 - **Unsub discipline.** Meteor dedupes identical `(name, params)` subscriptions per
   connection: re-subscribing after locally clearing the store returns nothing.
   `ddp_unsub(sid)` after collecting, so a later identical read (e.g.
-  read-after-write) re-sends. The client's `list_events` does this.
+  read-after-write) re-sends. The client's `read_pub` does this.
 
 ---
 
 ## 6. Resource map
 
-Tier (see §8 for the usage basis): **T1** operational (read+write), **T2**
-scheduling, **T3** catalog (read-mostly). Method args are the `validate()`
-destructured keys; "→" notes the effect. All **[bundle]** unless marked.
+Tiers: **T1** operational (read+write), **T2** scheduling, **T3** catalog
+(read-mostly). Method args are the `validate()` destructured keys; "→" notes
+the effect. All **[bundle]** unless marked.
 
 ### 6.1 Events (T1): the core record
 
@@ -195,11 +193,11 @@ Lifecycle methods (write):
   `changeEnquiryVenue({eventId, venueId})`
 - `eventCancelWithWorkflow({eventId, reasonSlug, note?, cancelFutureCharges, revokePortalAccess})`
   (keys confirmed from the dynamic chunk's validator; **not called**: O-class,
-  may stop charges and revoke portal access, see §13),
+  may stop charges and revoke portal access, see §11),
   `eventDelete({eventId})` **[live]**,
   `eventRestore({eventId})` (wire shape accepted; refused for this account,
-  which lacks `events.general.to-confirmed-pending`; a deleted event is gone
-  for us, so don't delete the test harness mid-build).
+  which lacks `events.general.to-confirmed-pending`, so a deleted event is
+  gone for us).
 
 Status moves that leave date-holding clear `date` (3→0 releases the held date,
 exhaust clears it too); `eventsByDateRange` only returns dated events, so a
@@ -288,7 +286,7 @@ Menu / drinks (write): `eventChangeFoodMenu({foodMenuId, eventId})`,
 `eventUpdateDrinkChoice({eventId, choices, notes, serviceTimes})`, `eventSetBarOption({eventId, data, timelineEntries})`.
 
 Documents (write): `eventAddDoc({docId, fileObj})`, `eventDeleteDoc({docId, fileId})`
-**[chunk]** (docId = the file's `containerId`; not called, §13),
+**[chunk]** (docId = the file's `containerId`; not called, §11),
 `eventChangeDocName({docId, fileId, newName, staffOnly})`, `eventGetDocumentLinks({docId, fileIds})` (read).
 
 Service bookings: one doc per booking in collection `service-bookings`
@@ -315,7 +313,7 @@ timelineLinkId?}`). Writes:
   service's deposit charge; the effect is server-side and was unobservable on
   this supplier-less tenant).
 
-Finance (write; all **[chunk]**, none called: finance/Xero coupling, §13). The
+Finance (write; all **[chunk]**, none called: finance/Xero coupling, §11). The
 transaction-create docs share a base: `amount` (≥ 0, required), `dueDate`
 (EJSON date, required), `description?`:
 - `makeChargeTransaction({eventId, doc})`: doc (CreateChargeSchema) adds
@@ -342,12 +340,12 @@ transaction-create docs share a base: `amount` (≥ 0, required), `dueDate`
 
 Terms (write): `termsCreate({doc})`, `termsDelete({termsId})`,
 `termsAcceptPending({eventId})` **[chunk]** (accepts every pending terms record
-on the event: contract state, not called, §13), `termsAnswer({termsId, answer})`,
+on the event: contract state, not called, §11), `termsAnswer({termsId, answer})`,
 `termsGeneratePDF({termsId})` **[chunk]**.
 
 Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessage({messageId, message})`,
 `eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`
-**[chunk]** (sends real mail to the customer, not called, §13),
+**[chunk]** (sends real mail to the customer, not called, §11),
 `eventMarkMessageAsOpened({eventId, messageId})`.
 
 Activities: one doc per entry in collection `activities` (readable `text`,
@@ -454,7 +452,7 @@ with its `queryLines`) drive `report list`/`get`; `reports(venueId)` (pub);
 `reportDelete({docId})`, `reportGenerate({reportId})`. Report types include
 `SalesFunnel` and `EventMarketing`.
 
-### 6.4 Catalog & config (T3): reads live, write-method args to confirm
+### 6.4 Catalog & config (T3)
 
 The eight catalog tables behind `crude-sonas <resource> list|get` are all served
 by `tabular_genericPub` **[live]**, signature `[tableName, ids, projection]`,
@@ -475,7 +473,7 @@ selector `{_id: ...}`; pass the collection name explicitly, since the
 new-docs-only auto-detect misses documents already in the store (the
 logged-in user's own `users` doc).
 
-Other tables (not yet built): `FormsList`, `UserRoleList`, `TransactionList`
+Tables with no crude-sonas verbs: `FormsList`, `UserRoleList`, `TransactionList`
 (`transactionsWithEventDate`), `FinancialRecordsList` (`financialRecordsWithEventDate`),
 `Inbox` (`messagesWithExtra`), `ReviewList`, `WorkflowsList`, `AuditLogList`
 (`auditLogComposite`, collection `audit-logs`). For these, reach for
@@ -578,106 +576,52 @@ File document (from `eventDocs` and `eventMessages`): `name`/`displayName`,
 
 ---
 
-## 8. Usage findings (basis for the tiering)
+## 8. CLI surface
 
-Measured on the live account 2026-06-11. The team's data and 29-day audit-log
-churn show what is operationally live vs static config:
+Grammar: `crude-sonas <resource> <verb>`. Reads are subscriptions, writes are
+DDP method calls. Conventions: `--json` on every read; destructive verbs prompt
+for confirmation unless `--yes`; nested method payloads are accepted as
+`--data <json>`, `-f <file>`, or stdin; verbs that map to a never-invoked
+method say "(unverified; see docs/sonas.md §6)" in their `--help`.
 
-- **34 events** (all time). Active write-churn (29-day audit log): events (84
-  changes: status, guest counts, menu, enquiry outcomes), financial-records (20)
-  + transactions (15), guests (13), timelines (6), service-bookings (5),
-  terms/calendar-events (3 each).
-- **Stocked but not edited** (set-once catalog): transactions total 707, notes 186,
-  categories 143, service-bookings 88, templates 47, drinks 32, services 20,
-  suppliers 6, packages 5, reports 5.
-- **Marginal / absent**: reviews 0, platform-contracts 0, user-logins 0, workflows 2,
-  forms 4. (Caveat: the audit window is 29 days with a TTL, so "no recent writes"
-  means stable config, not unused.)
+The verb list itself has one home: `crude-sonas --help` (and each sub-app's
+`--help`), mirrored for AI use in the `## crude-sonas` block of
+`crude_common/claude_command.py`. Resources covered: `event`, `guest`,
+`timeline`, `note`, `transaction`, `invoice`, `service-booking`, `message`,
+`document`, `terms`, `activity`, `appointment`, `availability`, `tasting`, and
+the §6.4 catalog (`supplier`, `service`, `drinks-package`, `package`,
+`template`, `category`, `venue`, `user`, `report`).
 
-Implication: build T1 (events + per-event finance/guests/timelines/service-bookings/
-notes) and the read side of T3 catalog first; defer reviews/workflows/forms.
-
----
-
-## 9. CLI subcommand plan
-
-Grammar: `crude-sonas <resource> <verb>`. `--json` on reads; reads are
-subscriptions, writes are method calls via `SonasClient.call(method, arg)`. The
-resource and verb names below are the proposed CLI surface, not fixed; keep or
-adjust them.
-
-**Shipped (reference):** `event list [--from --to --status]`, `event get <id>`,
-the lifecycle verbs: `event create-enquiry`, `change-status <id> <status>`,
-`change-date <id> --date`, `hold-date`, `exhaust-enquiry`, `rename <id> --name`
-(→ `eventUpdateGeneralSection`), `delete`, `restore` (permission-gated),
-`cancel` (→ `eventCancelWithWorkflow`, unverified, see §13); plus the per-event
-sub-apps `guest` (`list`, `add`, `update`, `delete`, `set-numbers`), `timeline`
-(`list`, `add`, `update`, `delete`, `import`), and `note` (`list`, `add`,
-`edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers); and the
-finance reads `transaction list <eventId>` and `invoice list <eventId>` /
-`get <eventId> <recordId>` (financial records), verified against a live event's
-finance data; `service-booking` (`list`, `add`, `edit`, `cancel` trialed on
-the harness; `confirm` ships unverified, §6.1); the per-event reads
-`message list`, `document list`, `terms list` (verified on a live event); and
-`activity` (`list`, `verify`, `verify-all`, trialed on the harness's own
-activities); the T2 scheduling sub-apps: `appointment` (`list`, `get`,
-`create`, `update`, `delete`, the lifecycle trialed on a throwaway
-InternalMeeting, §6.2), `availability` (`list` verified; `create`, `update`,
-`delete` ship unverified: windows feed the public booking widget, §6.2), and
-`tasting` (`list` verified on the empty tenant; `book`, `cancel` ship
-unverified: the server side may mail the couple, §6.2); and the T3 catalog
-reads: `supplier`, `service`, `drinks-package`, `package`, `template`,
-`category`, `venue`, `user`, each `list [--limit --search --json]` and
-`get <id>` via the factory-made sub-apps over the §6.4 table map, plus
-`report list`/`get` over the §6.3 report pubs (every list and several gets
-verified live); and the C-class write verbs, shipped uncalled per §13
-(finance/Xero coupling, real mail, contract state), payloads chunk-decoded
-(§6.1 **[chunk]** markers): `transaction charge|payment|refund|discount`,
-`transaction approve|cancel`, `invoice pdf`, `message send`,
-`document delete`, `terms accept|pdf`.
-
-**Skip / defer:** `document add` (`eventAddDoc`: the fileObj presumably comes
-from the §2 upload sidecar, unexplored), reviews, platform-contracts,
-workflows, forms.
+Not covered: `document add` (`eventAddDoc`: the fileObj comes from the §2
+upload sidecar, unexplored), reviews, platform-contracts, workflows, forms
+(all four marginal on this account: 0–4 records each).
 
 ---
 
-## 10. Reference implementation & how to extend
+## 9. Implementation
 
 `src/crude_sonas/`:
-- `client.py`: DDP transport (free functions) plus `SonasClient` (session, creds,
-  tenant, resource methods). `SonasClient.call(method, arg)` is the write primitive;
-  `list_events`/`get_event` show the read pattern and the unsub discipline.
+- `client.py`: DDP transport (free functions) plus `SonasClient` (session,
+  creds, tenant). `read_pub` (subscribe/collect/unsub, with collection
+  auto-detect) and `read_tabular` (the §5 two-step) are the read primitives;
+  `call(method, *args)` is the write primitive.
 - `auth.py`: `sonas_login` (login plus device-verification guidance) and
   `sonas_resume`.
-- `cli.py`: Typer app, `register_claude_command`, `_make_client`, render helpers.
+- `cli.py`: Typer app, one sub-app per resource over shared command bodies
+  (`_pub_list`, `_tabular_list`, `_do_call`, `_read_data`, `_emit`,
+  `_emit_record`); the §6.4 catalog sub-apps come from a factory over a spec
+  table.
 
-To add a resource: add a read method to `SonasClient` (subscribe to its pub or run
-the tabular two-step, collect from `store`, unsub), add write methods as
-`self.call("<method>", {<args from §6>})`, then add a Typer sub-app in `cli.py`
-mirroring the `event` commands. Confirm each method's arg shape on first call (the
-DDP error names the failing match).
-
-Two conventions the `event` commands set: list output is a Rich table plus
-`--json` (the `_render_*`/`_emit` helpers in `cli.py`), and destructive verbs
-(`event cancel`, `event delete`) prompt for confirmation unless `--yes`, as
-`crude-deputy resource delete` does (`typer.confirm(..., abort=True)`).
-
----
-
-## 11. crude integration checklist
-
-Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
-`crude_common/launcher.py` `SITES` + help, `crude_common/claude_command.py`
-(`description`, config-sections line, the `## crude-sonas` block),
-`config.example.toml` `[sonas]`, `debian/control`, `crude.spec` (entry-point loop,
-`%files`, `%description`), `formula/crude.rb` `%w[]`. When a release is cut, bump
-`pyproject.toml` `version` and the mirrors per `docs/RELEASING.md`; add a
-`debian/changelog` entry.
+To add a resource: a read is `read_pub`/`read_tabular` plus a sub-app command
+that picks columns; a write is `_do_call("<method>", {<args from §6>})`. For a
+method whose payload is a composed schema, decode the shape from the
+dynamic-import chunk first (§6.4): schema-validation failures are opaque 500s,
+and only plain `check()` methods return a Match error naming the failing key.
+Trial any new write per the §11 policy.
 
 ---
 
-## 12. Setup
+## 10. Setup
 
 1. Fill in the `[sonas]` section following `config.example.toml`.
 2. The first run from a new device or network triggers the one-time
@@ -686,20 +630,19 @@ Already wired for `crude-sonas`: `pyproject.toml` `[project.scripts]`,
 
 ---
 
-## 13. Open gaps / uncertainties
+## 11. Verification status and open gaps
 
 **Write-testing policy.** Live-trial a write only when certain it is safe and
 reversible. The standard harness is a throwaway test enquiry, named so staff
 recognise it as a test (e.g. "CRUDE TEST (ignore)"), created via
-`eventCreateEnquiry` and deleted at build end. Trial protocol per method:
+`eventCreateEnquiry` and deleted when done. Trial protocol per method:
 read-before → call → read-after → revert → read-again. Before the first call of
 an uncertain method, watch the real action's WS frames in the logged-in browser
 (read-only) to learn the payload and spot side effects (mail templates, finance
 documents). When unsure whether a call is destructive or externally visible
 (sends mail, touches finance/Xero, alters contract state), do not call it: ship
 the verb with its payload accepted but marked unverified in `--help`, keep its
-[bundle] marker in §6, and list it in the verification summary at the end of
-the build.
+[bundle]/[chunk] marker in §6, and list it below.
 
 To trial a write, create a fresh harness with `event create-enquiry` (name it
 "CRUDE TEST (ignore)", far-future date) and `event delete` it when done.
