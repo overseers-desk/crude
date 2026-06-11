@@ -108,11 +108,14 @@ login token. crude auto-discovers `tenantId` from the logged-in user record
   1. `tabular_getInfo(tableName, selector, sort, skip, limit, searchTerm)` →
      publishes one doc into `tabular_records` with `{ids:[...], recordsTotal,
      recordsFiltered}`.
-  2. Subscribe to that table's **data pub** (named in the table's bundle
-     definition, e.g. `activitiesWithExtra`) with the ids to receive the
-     documents. Signature varies; for the `SystemActivities` table it is
-     `dataPub(tableName, ids, projectionObject)`. Try, in order, `[tableName, ids,
-     proj]`, `[ids, proj]`, `[tableName, ids]`, `[ids]` until the collection fills.
+  2. Subscribe to that table's **data pub** with the ids to receive the
+     documents. Tables that define no custom data pub are served by
+     aldeed:tabular's built-in `tabular_genericPub(tableName, ids, projection)`
+     **[live]** (confirmed for `ServiceList`, delivering into collection
+     `services`); try it first. Some tables have a custom pub (e.g.
+     `activitiesWithExtra` for `SystemActivities`). Signature varies; try, in
+     order, `[tableName, ids, proj]`, `[ids, proj]`, `[tableName, ids]`, `[ids]`
+     until the collection fills.
   - `tabular_getInfo`'s `recordsTotal` is the count for the table's **default
     selector**, not the resource total (e.g. `EventList` defaults to upcoming and
     reports far fewer than `eventsByDateRange` over a wide range). For true counts,
@@ -257,13 +260,18 @@ Tables/collections (use the tabular two-step or the named pub): `SuppliersList`,
 `Inbox` (`messagesWithExtra`), `ReviewList`, `WorkflowsList`, `AuditLogList`
 (`auditLogComposite`, collection `audit-logs`).
 
+Data pubs: reach for `tabular_genericPub` first (§5); hunt for a custom pub only
+if it delivers nothing. Per-table data-pub definitions are not minable from the
+static bundle: the `<hash>.js?meteor_js_resource=true` script is only Meteor's
+loader/vendor layer (~1.3 MB **[live]**), and table definitions arrive in
+dynamic-import modules at runtime.
+
 To complete a catalog resource, confirm its method arguments primarily by **live
 trial** (call the method; the DDP error names the failing `Match`) or by watching
 the real call in the logged-in browser's DevTools (Network → WS frames, which show
-the method name and payload Sonas sends). To enumerate method and pub *names*
-statically, fetch the current Meteor client bundle and grep it. The bundle is the
-`<hash>.js?meteor_js_resource=true` script named in the app's page source (no auth
-needed); the hash changes each release, so read it fresh:
+the method name and payload Sonas sends). To enumerate method *names* statically,
+fetch the static bundle and grep it; it is named in the app's page source (no auth
+needed), and the hash changes each release, so read it fresh:
 
     curl -s https://app.sonas.events/ | grep -oaE '/[a-f0-9]+\.js\?meteor_js_resource=true'
     curl -s -o /tmp/sonas-bundle.js "https://app.sonas.events/<hash>.js?meteor_js_resource=true"
@@ -424,7 +432,8 @@ the build.
 - `EventSectionEnum` member names are known (General, Wedding, Guests, MenuChoice,
   Timeline, Seating, Bar, ...) but integer values were not decoded; `eventAddNote`'s
   `sectionId` value is therefore unconfirmed.
-- T3 catalog data-pub names and method args still need bundle-mining (§6.4).
+- T3 catalog reads go through `tabular_genericPub` (§6.4); write-method args
+  remain unconfirmed.
 - EJSON encoding of write arguments beyond plain strings/ids (dates, nested docs)
   is unverified; the one confirmed write used a `{$set:{name}}` string modifier.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.

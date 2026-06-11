@@ -106,3 +106,56 @@ def test_deputy_lists_one_employee(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("Id")
+
+
+@pytest.mark.live
+def test_sonas_lists_one_event(crude_config):
+    if not crude_config.get("sonas", {}).get("username"):
+        pytest.skip("no [sonas] credentials in config")
+    from crude_sonas.cli import _make_client
+
+    client = _make_client(crude_config)
+    try:
+        events = client.list_events()
+        assert isinstance(events, list)
+        if events:
+            assert events[0].get("_id")
+    finally:
+        client.close()
+
+
+@pytest.mark.live
+def test_sonas_event_detail_pub(crude_config):
+    if not crude_config.get("sonas", {}).get("username"):
+        pytest.skip("no [sonas] credentials in config")
+    from crude_sonas.cli import _make_client
+
+    client = _make_client(crude_config)
+    try:
+        events = client.list_events()
+        if not events:
+            pytest.skip("account has no events to read a detail pub against")
+        guests = client.read_pub("guests", [events[0]["_id"]])
+        assert isinstance(guests, list)
+    finally:
+        client.close()
+
+
+@pytest.mark.live
+def test_sonas_tabular_read(crude_config):
+    if not crude_config.get("sonas", {}).get("username"):
+        pytest.skip("no [sonas] credentials in config")
+    from crude_sonas.cli import _make_client
+
+    client = _make_client(crude_config)
+    try:
+        # ServiceList defines no custom data pub; aldeed:tabular's built-in
+        # tabular_genericPub(tableName, ids, projection) serves it (collection
+        # auto-detected as "services").
+        rows, info = client.read_tabular("ServiceList", data_pub="tabular_genericPub")
+        assert isinstance(rows, list)
+        assert isinstance(info["recordsTotal"], int)
+        if rows:
+            assert rows[0].get("_id")
+    finally:
+        client.close()
