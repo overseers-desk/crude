@@ -304,21 +304,76 @@ class SonasClient:
 
     # -- reads --------------------------------------------------------
 
+    def read_pub(self, name: str, params: list, collection: str = None,
+                 drain: float = 2.0) -> list:
+        """Subscribe to a publication, collect its documents, unsubscribe.
+
+        ``collection`` names the store collection to return; None auto-detects:
+        documents that appeared in any collection during the subscription are
+        returned with their collection name under ``_collection`` (the discovery
+        tool for pubs whose collection is unknown). Docs carry the document id
+        under ``_id``. The final unsubscribe matters: Meteor dedupes identical
+        name+params subscriptions per connection, so without it a read-after-write
+        would return a stale empty set.
+        """
+        self._ensure()
+        store = self.conn["store"]
+        if collection:
+            store.pop(collection, None)
+            before = {}
+        else:
+            before = {c: set(docs) for c, docs in store.items()}
+        sid = ddp_sub(self.conn, name, params, timeout=30)
+        _drain(self.conn, drain)
+        if collection:
+            docs = [dict(doc, _id=i) for i, doc in store.get(collection, {}).items()]
+        else:
+            docs = []
+            for c, d in store.items():
+                for i in set(d) - before.get(c, set()):
+                    docs.append(dict(d[i], _id=i, _collection=c))
+        ddp_unsub(self.conn, sid)
+        return docs
+
+    def read_tabular(self, table: str, *, data_pub: str, selector: dict = None,
+                     sort: list = None, skip: int = 0, limit: int = 50,
+                     search: str = "", proj: dict = None, collection: str = None):
+        """aldeed:tabular two-step (docs/sonas.md §5): ``tabular_getInfo``
+        publishes ids and counts into ``tabular_records``; the table's data pub
+        delivers the documents. Data-pub signatures vary per table, so the known
+        arg orders are tried until documents arrive. Returns ``(rows, info)``
+        with ``info = {recordsTotal, recordsFiltered}``.
+        """
+        self._ensure()
+        store = self.conn["store"]
+        store.pop("tabular_records", None)
+        sid = ddp_sub(self.conn, "tabular_getInfo",
+                      [table, selector or {}, sort or [], skip, limit, search])
+        _drain(self.conn, 1)
+        rec = next(iter(store.get("tabular_records", {}).values()), {})
+        ids = rec.get("ids") or []
+        info = {"recordsTotal": rec.get("recordsTotal"),
+                "recordsFiltered": rec.get("recordsFiltered")}
+        rows = []
+        if ids:
+            proj_obj = proj or {}
+            for params in ([table, ids, proj_obj], [ids, proj_obj],
+                           [table, ids], [ids]):
+                try:
+                    rows = self.read_pub(data_pub, params, collection=collection)
+                except RuntimeError:
+                    continue
+                if rows:
+                    break
+        ddp_unsub(self.conn, sid)
+        return rows, info
+
     def list_events(self, from_: str = None, to: str = None) -> list:
         """Events whose date falls in [from, to] (default all time). Returns docs
         with the document id merged in under ``_id``."""
-        self._ensure()
         frm = to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS}
         to_d = to_ejson_date(to) if to else {"$date": EPOCH_2100_MS}
-        self.conn["store"].pop("events", None)
-        sid = ddp_sub(self.conn, "eventsByDateRange", [frm, to_d], timeout=30)
-        _drain(self.conn, 2)
-        events = [dict(doc, _id=eid) for eid, doc in self.conn["store"].get("events", {}).items()]
-        # Unsubscribe so a later identical subscription re-sends (Meteor dedupes
-        # identical name+params per connection; without this, read-after-write
-        # would return a stale empty set).
-        ddp_unsub(self.conn, sid)
-        return events
+        return self.read_pub("eventsByDateRange", [frm, to_d], collection="events")
 
     def get_event(self, event_id: str) -> dict:
         for ev in self.list_events():
@@ -326,9 +381,10 @@ class SonasClient:
                 return ev
         raise RuntimeError(f"event {event_id} not found")
 
-    # -- writes -------------------------------------------------------
+    # -- method calls (writes, and the few read-methods) ----------------
 
-    def call(self, method: str, arg: dict):
-        """Invoke a DDP write method with a single object argument."""
+    def call(self, method: str, *args):
+        """Invoke a DDP method; ``args`` are the DDP params array (typically one
+        object argument)."""
         self._ensure()
-        return ddp_call(self.conn, method, [arg])
+        return ddp_call(self.conn, method, list(args))
