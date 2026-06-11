@@ -1,3 +1,14 @@
+crude (1.1.1) unstable; urgency=medium
+
+  * Add crude-sonas: command-line client for Sonas wedding-venue software.
+    Core enquiry verbs cover event lifecycle, guests, timelines, notes,
+    messages, documents, terms, service bookings, transactions, and invoices.
+    T2 scheduling (availability, appointment, tasting); T3 catalog reads
+    (supplier, service, drinks-package, package, template, category, venue,
+    user, report); finance and mail verbs; live smoke-test suite.
+
+ -- Weiwu Zhang <a@colourful.land>  Thu, 11 Jun 2026 00:00:00 +0000
+
 crude (1.1.0) unstable; urgency=medium
 
   * Add crude-deputy: command-line client for Deputy workforce management.

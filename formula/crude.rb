@@ -6,8 +6,8 @@ class Crude < Formula
 
   desc "CRUD-style command-line clients for sites without a public API"
   homepage "https://github.com/SmartLayer/crude"
-  url "https://github.com/SmartLayer/crude/archive/refs/tags/v1.1.0.tar.gz"
-  sha256 "5a966b64223f270176f371d0e234fbc3ac00f893582b0742299290531a996041"
+  url "https://github.com/SmartLayer/crude/archive/refs/tags/v1.1.1.tar.gz"
+  sha256 "placeholder-update-after-release"
   license "MIT"
 
   depends_on "python@3.13"

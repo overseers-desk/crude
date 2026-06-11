@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.1.0
+Version:        1.1.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -78,6 +78,14 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Thu Jun 11 2026 Weiwu Zhang <a@colourful.land> - 1.1.1-1
+- Add crude-sonas: command-line client for Sonas wedding-venue software.
+  Core enquiry verbs cover event lifecycle, guests, timelines, notes,
+  messages, documents, terms, service bookings, transactions, and invoices.
+  T2 scheduling (availability, appointment, tasting); T3 catalog reads
+  (supplier, service, drinks-package, package, template, category, venue,
+  user, report); finance and mail verbs; live smoke-test suite.
+
 * Sat May 30 2026 Weiwu Zhang <a@colourful.land> - 1.1.0-1
 - Add crude-deputy: command-line client for Deputy workforce management.
   Curated sub-apps for employee, roster, area, timesheet, and leave; a generic
