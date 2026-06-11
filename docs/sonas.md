@@ -140,7 +140,11 @@ destructured keys; "→" notes the effect. All **[bundle]** unless marked.
 Reads (publications): `eventsByDateRange(from, to)` **[live]** → events in range
 (rich docs: status, type, date/endDate, customers, reference, name, currentMain/
 currentAdditional guest counts, weddingData, venueId, config). Per-event detail
-pubs: `eventCustomersInfo(eventId)`, `eventCosts(eventId)`, `eventTransactions(eventId)`,
+pubs: `eventBasicInfo(eventId)` **[live]** (multi-cursor: the event doc, its
+venue, and the event's `timelines` doc), `eventNotes(eventId)` **[live]**
+(collection `notes`; both pubs are subscribed by the event page rather than from
+any statically greppable `subscribe(` call, found by watching the page's WS
+frames per §6.4), `eventCustomersInfo(eventId)`, `eventCosts(eventId)`, `eventTransactions(eventId)`,
 `eventFinancialRecords(eventId)`, `eventTermsAndConditions(eventId)`,
 `eventServiceBookings(eventId)`, `eventDocs(eventId, documents)`, `eventLayouts(eventId)`,
 `eventTables(eventId)`, `eventMessages(eventId)`, `eventActivities(eventId, limit)`,
@@ -226,12 +230,40 @@ event) is a separate record. Writes:
   result (no DDP error) and applies nothing.
 - `eventAssignGuestAttendances({eventId, guestIds, status})`, `eventAssignGuestChoices({eventId, guestIds})`.
 
-Notes (write): `eventAddNote({eventId, text, sectionId})`,
-`eventUpdateNote({noteId, text, calendarEventId})`, `eventRemoveNote({noteId})`.
+Notes: one doc per note in collection `notes` (NoteSchema: `sectionId` slug §7,
+`author` (set server-side to the staff name), `text`, `eventId`, `venueId`,
+`tenantId`, audit fields), served per event by `eventNotes(eventId)` **[live]**
+and tenant-wide by the `NotesList` tabular (default selector: current tenant,
+`deleted != true`). Writes:
+- `eventAddNote({eventId, text, sectionId?})` **[live]**: returns the note id;
+  omitted sectionId defaults server-side to `notes`; an explicit slug
+  (e.g. `general`) is stored as sent.
+- `eventUpdateNote({noteId, text, calendarEventId?})` **[live]** (text
+  replacement verified; calendarEventId untried), `eventRemoveNote({noteId})` **[live]**.
 
-Timeline (write): `eventAddNewTimelineEntry({eventId, entry})`,
-`eventEditTimelineEntry({eventId, entryId, entry})`, `eventDeleteTimelineEntry({eventId, timelineEntryId})`,
-`eventImportTimeline({eventId, timelineId})`.
+Timeline: an event's entries live in one doc per event in collection `timelines`
+(`{eventId, venueId, tenantId, entries: [...]}`), created lazily by the first
+entry write and kept (empty) after the last entry's deletion; tenant timeline
+templates are eventId-less docs in the same collection. The bare `timelines` pub
+**[live]** serves the templates name-only (no entries field); the event's doc
+arrives with full entries via `eventBasicInfo(eventId)` **[live]**; a single
+template with entries via `timeline(timelineId)` **[bundle]**. Entry shape
+(TimelineEntryCreateSchema): `type` (TimelineEntryTypeEnum §7), `time` (EJSON,
+required when Absolute; stored as sent, no venue-timezone rewriting),
+`timeRefId` (required when Relative; the constant `c3r3mnyT7m3L7n355` anchors
+RelativeToCeremony), `relOffsetMinutes` (required when Relative or
+RelativeToCeremony, negative = before), `durationMinutes?`, `description`
+(required), `notes?` (HTML), `readOnly?`, `staffOnly?`, `sectionId` (slug §7,
+defaults to `timeline`). Writes:
+- `eventAddNewTimelineEntry({eventId, entry})` **[live]**: returns the entry id
+  (absolute and relative forms both verified).
+- `eventEditTimelineEntry({eventId, entryId, entry})` **[live]**: entry is a
+  full replacement document, not a Mongo modifier.
+- `eventDeleteTimelineEntry({eventId, timelineEntryId})` **[live]**: reports
+  success for unknown entry ids too, so read after deleting.
+- `eventImportTimeline({eventId, timelineId})` **[live]**: appends the
+  template's entries to the event under fresh entry ids; revert = delete them
+  one by one.
 
 Seating / layouts (write): `eventReserveTable({tableId, eventId})`,
 `eventFreeTable({eventTableId, eventId})`, `eventReassignGuestToTable({guestId, oldEventTableId, newEventTableId, eventId, newIndex})`,
@@ -364,6 +396,14 @@ types: 2 Corporate, 5 Party, 7 Conference, etc.). `isWedding()` ⊇ {0,1,10,13,1
 matching headcount keys are adults, teenagers, children, infants, suppliers.
 `EventGuestCategoryEnum` (strings): Main, Additional.
 `EventGuestAttendingStatusEnum`: 0 Yes, 1 No, 2 Maybe.
+`TimelineEntryTypeEnum`: 0 Relative, 1 Absolute, 2 RelativeToCeremony (2 exists
+but is outside `values()`, so schema validation rejects it on create; the client
+rewrites such entries to Relative with timeRefId `c3r3mnyT7m3L7n355`).
+`EventSectionEnum` (string slugs, not integers): general, wedding, package,
+tasting-date, menu-choice, order, bar, notes, activities, chat, transactions,
+documents, guests, overview, costs, timeline, suppliers, items, terms, people,
+home, reviews, branding, audit-log, related, layouts, seating-plan, workflows.
+Used as `sectionId` in notes, timeline entries, and `eventSetSectionStatus`.
 
 Event document (from `eventsByDateRange`): `status`, `type`, `date`/`endDate`/`ceremonyDate`
 (EJSON), `customers:[{firstname, lastname, main, userId}]`, `reference`, `name`,
@@ -402,18 +442,18 @@ resource and verb names below are the proposed CLI surface, not fixed; keep or
 adjust them.
 
 **Shipped (reference):** `event list [--from --to --status]`, `event get <id>`,
-and the lifecycle verbs: `event create-enquiry`, `change-status <id> <status>`,
+the lifecycle verbs: `event create-enquiry`, `change-status <id> <status>`,
 `change-date <id> --date`, `hold-date`, `exhaust-enquiry`, `rename <id> --name`
-(→ `eventUpdateGeneralSection`), `delete`, `restore` (permission-gated), and
-`cancel` (→ `eventCancelWithWorkflow`, unverified, see §13).
+(→ `eventUpdateGeneralSection`), `delete`, `restore` (permission-gated),
+`cancel` (→ `eventCancelWithWorkflow`, unverified, see §13); plus the per-event
+sub-apps `guest` (`list`, `add`, `update`, `delete`, `set-numbers`), `timeline`
+(`list`, `add`, `update`, `delete`, `import`), and `note` (`list`, `add`,
+`edit`, `delete`), each verb trialed on the test enquiry (§6.1 markers).
 
 **T1, operational (read + write):**
-- `guest`: `list <eventId>`, `add`, `update`, `delete`, `set-numbers`.
 - `transaction`: `list <eventId>`, `charge`, `payment`, `refund`, `discount`, `approve`, `cancel`.
 - `invoice` (financial-record): `list <eventId>`, `get`, `pdf`.
 - `service-booking`: `list <eventId>`, `add`, `confirm`, `cancel`.
-- `timeline`: `list <eventId>`, `add`, `update`, `delete`, `import`.
-- `note`: `list <eventId>`, `add`, `edit <noteId> --text` (→ `eventUpdateNote`), `delete`.
 - `message`: `list <eventId>`, `send --template`.
 - `document`: `list <eventId>`, `add`, `delete`.
 - `terms`: `list <eventId>`, `accept`, `pdf`.
@@ -498,12 +538,12 @@ fresh `event create-enquiry`.
 
 - Method args behind composed/external validators (still open:
   `calendarEventCreate`'s `doc`, `paymentPlanCreate`, the nested CLI payloads in
-  §9 such as a charge's `doc`, a guest's `data`, a timeline `entry`) are not
-  destructured in the loader bundle. Resolve them from the dynamic-import
-  chunk's schema definitions (§6.4, the route that decoded `eventCreateEnquiry`'s
-  doc); schema-validation failures on the wire are opaque 500s, so blind live
-  iteration does not converge. Watching the real call's WS frames in the
-  logged-in browser also works and is the only way to see side effects.
+  §9 such as a charge's `doc`) are not destructured in the loader bundle.
+  Resolve them from the dynamic-import chunk's schema definitions (§6.4, the
+  route that decoded `eventCreateEnquiry`'s doc, the guest `data`, and the
+  timeline `entry`); schema-validation failures on the wire are opaque 500s, so
+  blind live iteration does not converge. Watching the real call's WS frames in
+  the logged-in browser also works and is the only way to see side effects.
 - `eventCancelWithWorkflow` stays uncalled (O-class: the name says it runs the
   cancellation workflow, which may cancel future charges, revoke portal access,
   and plausibly send mail). Plain `eventChangeStatus` to Cancelled is a silent
@@ -511,9 +551,6 @@ fresh `event create-enquiry`.
   a real cancellation's WS frames and check for mail/finance calls.
 - `eventRestore` is refused for this account (`events.general.to-confirmed-pending`);
   its effect (and what status a restored event lands in) is unverified.
-- `EventSectionEnum` member names are known (General, Wedding, Guests, MenuChoice,
-  Timeline, Seating, Bar, ...) but integer values were not decoded; `eventAddNote`'s
-  `sectionId` value is therefore unconfirmed.
 - T3 catalog reads go through `tabular_genericPub` (§6.4); write-method args
   remain unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.

@@ -29,6 +29,10 @@ event_app = typer.Typer(help="Events (weddings and other bookings).")
 app.add_typer(event_app, name="event")
 guest_app = typer.Typer(help="An event's named guests and its headcount.")
 app.add_typer(guest_app, name="guest")
+timeline_app = typer.Typer(help="An event's wedding-day timeline entries.")
+app.add_typer(timeline_app, name="timeline")
+note_app = typer.Typer(help="Staff notes on an event.")
+app.add_typer(note_app, name="note")
 console = Console()
 
 register_claude_command(app)
@@ -654,6 +658,215 @@ def guest_set_numbers(
         del modifier["$set"]
     _do_call("eventUpdateGuestNumbers", {"eventId": event_id, "modifier": modifier},
              f"set guest numbers on {event_id}", output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# timeline
+# ----------------------------------------------------------------------
+
+# TimelineEntryTypeEnum (docs/sonas.md §7).
+TIMELINE_TYPE = {0: "Relative", 1: "Absolute", 2: "RelativeToCeremony"}
+
+
+def _event_timeline(client, event_id: str) -> dict:
+    """The event's timeline doc ({entries: [...]}, collection `timelines`),
+    delivered by the multi-cursor eventBasicInfo pub; {} when the event has
+    no timeline yet."""
+    docs = client.read_pub("eventBasicInfo", [event_id], collection="timelines")
+    for doc in docs:
+        if doc.get("eventId") == event_id:
+            return doc
+    return {}
+
+
+def _datetime_ejson(value: str) -> dict:
+    """Parse an ISO datetime (e.g. 2031-11-20T15:00 or '... +10:00') to EJSON;
+    a naive value counts as UTC. The app renders times in the venue timezone."""
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(value)
+    except ValueError as e:
+        typer.echo(f"Error: invalid datetime {value!r}: {e}", err=True)
+        raise typer.Exit(2)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return {"$date": int(dt.timestamp() * 1000)}
+
+
+@timeline_app.command("list")
+def timeline_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's timeline entries (the `timelines` doc carried by the
+    eventBasicInfo publication)."""
+    client = _client()
+    try:
+        entries = _event_timeline(client, event_id).get("entries") or []
+    except Exception as e:
+        typer.echo(f"Error fetching timeline: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if not output_json:
+        for entry in entries:
+            entry["type"] = TIMELINE_TYPE.get(entry.get("type"), _s(entry.get("type")))
+            time_v = entry.get("time")
+            if isinstance(time_v, dict) and "$date" in time_v:
+                from datetime import datetime, timezone
+                entry["time"] = datetime.fromtimestamp(
+                    time_v["$date"] / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    _emit(entries, output_json, columns=[
+        ("Id", "_id"), ("Type", "type"), ("Time", "time"),
+        ("Offset(min)", "relOffsetMinutes"), ("Duration(min)", "durationMinutes"),
+        ("Description", "description"), ("Section", "sectionId"),
+    ], what="entry")
+
+
+@timeline_app.command("add")
+def timeline_add(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    description: Optional[str] = typer.Option(None, "--description", help="Entry name."),
+    time: Optional[str] = typer.Option(
+        None, "--time", help="Absolute entry: ISO datetime (naive = UTC)."),
+    after: Optional[str] = typer.Option(
+        None, "--after", help="Relative entry: the entry id this one follows (timeRefId)."),
+    offset_minutes: Optional[int] = typer.Option(
+        None, "--offset-minutes", help="Relative entry: minutes after (negative = before) --after."),
+    duration: Optional[int] = typer.Option(None, "--duration", help="Duration in minutes."),
+    notes: Optional[str] = typer.Option(None, "--notes", help="Entry notes."),
+    section: str = typer.Option("timeline", "--section", help="EventSectionEnum slug (docs/sonas.md §7)."),
+    data: Optional[str] = typer.Option(None, "--data", help="Full entry as JSON (flags overlay it)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the entry JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Add a timeline entry (eventAddNewTimelineEntry); prints the entry id.
+
+    The entry is TimelineEntryCreateSchema (docs/sonas.md §6.1): absolute
+    (--time) or relative to another entry (--after + --offset-minutes).
+    """
+    entry = _read_data(data, file) if (data is not None or file is not None) else {}
+    if description is not None:
+        entry["description"] = description
+    if time is not None:
+        entry.setdefault("type", 1)
+        entry["time"] = _datetime_ejson(time)
+    if after is not None:
+        entry.setdefault("type", 0)
+        entry["timeRefId"] = after
+    if offset_minutes is not None:
+        entry["relOffsetMinutes"] = offset_minutes
+    if duration is not None:
+        entry["durationMinutes"] = duration
+    if notes is not None:
+        entry["notes"] = notes
+    entry.setdefault("sectionId", section)
+    if not entry.get("description"):
+        typer.echo("Error: the entry needs a --description.", err=True)
+        raise typer.Exit(1)
+    if "type" not in entry:
+        typer.echo("Error: pass --time (absolute) or --after + --offset-minutes (relative).",
+                   err=True)
+        raise typer.Exit(1)
+    _do_call("eventAddNewTimelineEntry", {"eventId": event_id, "entry": entry},
+             "add timeline entry", output_json=output_json)
+
+
+@timeline_app.command("update")
+def timeline_update(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    entry_id: str = typer.Argument(..., help="Entry id (from `timeline list`)."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help="The replacement entry as JSON (a full TimelineEntryCreateSchema "
+             "document, not a Mongo modifier)."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the entry JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Replace a timeline entry (eventEditTimelineEntry)."""
+    _do_call("eventEditTimelineEntry",
+             {"eventId": event_id, "entryId": entry_id, "entry": _read_data(data, file)},
+             f"update timeline entry {entry_id}", output_json=output_json)
+
+
+@timeline_app.command("delete")
+def timeline_delete(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    entry_id: str = typer.Argument(..., help="Entry id (from `timeline list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete a timeline entry (eventDeleteTimelineEntry)."""
+    _do_call("eventDeleteTimelineEntry",
+             {"eventId": event_id, "timelineEntryId": entry_id},
+             f"delete timeline entry {entry_id}",
+             confirm=f"Delete timeline entry {entry_id} from event {event_id}?", yes=yes)
+
+
+@timeline_app.command("import")
+def timeline_import(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    timeline_id: str = typer.Argument(
+        ..., help="Template timeline id (an eventId-less doc in the `timelines` pub)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Append a tenant timeline template's entries to the event
+    (eventImportTimeline). Entries it adds get fresh ids; remove them one by
+    one with `timeline delete`."""
+    _do_call("eventImportTimeline", {"eventId": event_id, "timelineId": timeline_id},
+             f"import timeline {timeline_id}", output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# note
+# ----------------------------------------------------------------------
+
+
+@note_app.command("list")
+def note_list(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """List an event's staff notes (eventNotes publication, collection `notes`)."""
+    _pub_list("eventNotes", [event_id], columns=[
+        ("Id", "_id"), ("Created", "createdAt"), ("Section", "sectionId"),
+        ("Author", "author"), ("Text", "text"),
+    ], output_json=output_json, what="note", collection="notes")
+
+
+@note_app.command("add")
+def note_add(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    text: str = typer.Option(..., "--text", help="Note text."),
+    section: Optional[str] = typer.Option(
+        None, "--section", help="EventSectionEnum slug (docs/sonas.md §7); default notes."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Add a staff note (eventAddNote); prints the note id."""
+    arg = {"eventId": event_id, "text": text}
+    if section is not None:
+        arg["sectionId"] = section
+    _do_call("eventAddNote", arg, "add note", output_json=output_json)
+
+
+@note_app.command("edit")
+def note_edit(
+    note_id: str = typer.Argument(..., help="Note document id (from `note list`)."),
+    text: str = typer.Option(..., "--text", help="New note text."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Replace a note's text (eventUpdateNote)."""
+    _do_call("eventUpdateNote", {"noteId": note_id, "text": text},
+             f"edit note {note_id}", output_json=output_json)
+
+
+@note_app.command("delete")
+def note_delete(
+    note_id: str = typer.Argument(..., help="Note document id (from `note list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+):
+    """Delete a note (eventRemoveNote)."""
+    _do_call("eventRemoveNote", {"noteId": note_id}, f"delete note {note_id}",
+             confirm=f"Delete note {note_id}?", yes=yes)
 
 
 if __name__ == "__main__":
