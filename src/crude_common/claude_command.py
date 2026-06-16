@@ -53,10 +53,11 @@ Tourism listings. Credentials in `[atdw]`; the JWT token is cached and renewed a
     crude-atdw login
     crude-atdw listing list [--scope own|all] [--type] [--city] [--state] [--status] [--name] [--limit] [--offset]
     crude-atdw listing get <id>
+    crude-atdw listing create (--data '<json>' | -f <file> | stdin) [--yes]
     crude-atdw listing update <id> <field> <value>
     crude-atdw listing submit <id>
 
-`listing list` with no filters returns your own organisation's listings; any filter flag or `--scope all` searches every visible listing.
+`listing list` with no filters returns your own organisation's listings; any filter flag or `--scope all` searches every visible listing. `listing create` takes a full listing object (ATDW requires at least listingType, category, name, and physicalAddress; owningOrganisation defaults to yours); the new listing starts as a draft and is not distributed until `listing submit`. `listing update` PATCHes a single field.
 
 ## crude-skal (australia.skal.org)
 
@@ -74,14 +75,38 @@ Member `--state` values: active, draft, unpaid, done, club_change (default exclu
 
 ## crude-rezdy (rezdy.com)
 
-Rezdy Supplier API. API key in `[rezdy]` (`api_key`, required `timezone` as an IANA name, optional `environment`); there is no login step. rezdy reads every typed date as the account's operational day, so any command errors if `timezone` is missing.
+Rezdy Supplier API — full CRUD over products, availability, bookings, customers, extras, and pickup lists, plus category/rate/resource assignment and manifest check-in. API key in `[rezdy]` (`api_key`, required `timezone` as an IANA name, optional `environment`); there is no login step. rezdy reads every typed date as the account's operational day, so any command errors if `timezone` is missing.
 
     crude-rezdy product list [--search] [--limit] [--offset]
     crude-rezdy product get <code>
+    crude-rezdy product create (--data '<json>' | -f <file> | stdin) [--yes]
+    crude-rezdy product update <code> [--name <s>] [--terms <s>] [--data '<json>'] [--yes]
+    crude-rezdy product delete <code> [--yes]
+    crude-rezdy product image-add <code> (--data | -f | stdin) [--yes] ; product image-remove <code> <imageId> [--yes] ; product pickups <code>
     crude-rezdy availability list --product <code> --from "<YYYY-MM-DD HH:mm:ss>" --to "<...>" [--min-availability] [--limit]
+    crude-rezdy availability create (--data | -f | stdin) [--yes]
+    crude-rezdy availability update --product <code> --start-local "<YYYY-MM-DD HH:mm:ss>" (--data | -f | stdin) [--yes]
+    crude-rezdy availability delete --product <code> --start-local "<...>" [--yes]
+    crude-rezdy availability batch (--data | -f | stdin) [--yes]
     crude-rezdy booking list [--status] [--search] [--product] [--from] [--to] [--created-from] [--created-to] [--updated-from] [--updated-to] [--limit] [--offset] [--all]
     crude-rezdy booking cancellations [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit] [--all]
     crude-rezdy booking get <orderno>
+    crude-rezdy booking quote (--data | -f | stdin)
+    crude-rezdy booking create (--data | -f | stdin) [--notify] [--yes]
+    crude-rezdy booking update <orderno> (--data | -f | stdin) [--yes]
+    crude-rezdy booking cancel <orderno> [--yes]
+    crude-rezdy customer list [--search] [--limit] [--offset] ; customer get <id> ; customer create (--data | -f | stdin) [--yes] ; customer delete <id> [--yes]
+    crude-rezdy extra list [--search] ; extra get <id> ; extra create (--data | -f | stdin) [--yes] ; extra update <id> [--name <s>] [--data '<json>'] [--yes] ; extra delete <id> [--yes]
+    crude-rezdy pickup-list list [--search] ; pickup-list get <id> ; pickup-list create (--data | -f | stdin) [--yes] ; pickup-list update <id> [--name <s>] [--data '<json>'] [--yes] ; pickup-list delete <id> [--yes]
+    crude-rezdy category list ; category get <id> ; category products <id> ; category add-product <categoryId> <code> [--yes] ; category remove-product <categoryId> <code> [--yes]
+    crude-rezdy rate list [--name <s>] [--product <code>] ; rate get <id> ; rate add-product <rateId> <code> [--yes] ; rate remove-product <rateId> <code> [--yes]
+    crude-rezdy resource list ; resource sessions <id> ; resource for-session (--session <id> | --product <code> --start/--start-local <t>) ; resource add-session <resourceId> <sessionId> [--yes] ; resource remove-session <resourceId> <sessionId> [--yes]
+    crude-rezdy manifest {order,session}-{status,set,remove} --product <code> [--order <no>] [--start <utc> | --start-local <t>] [--checkin/--no-checkin] [--yes]
+    crude-rezdy voucher list [--search] ; voucher get <code> ; company get <alias> ; company find <name>
+
+Writes take a JSON body from `--data '<json>'`, `-f <file>`, or stdin, and verbs that create or destroy prompt unless `--yes`; `--json` on any verb returns the raw API object. `product`, `extra`, and `pickup-list` `update` are read-merge-write — a typed flag or `--data` key overlays the fetched object and an empty string clears a field, so `product update P1 --terms "..."` touches only the terms; `availability update` and `booking update` send the body as-is. `booking create` sends `sendNotifications=false` (emails no one) unless `--notify`.
+
+Product **terms** (`--terms`) and **custom booking questions** are product fields edited through `product update`: booking questions are the product's `bookingFields` array (set via `--data`), and because that list is replaced wholesale you send the complete set. Resources are read + session-assignment only — a new resource is created in the Rezdy dashboard, then assigned here; vouchers/coupons are read-only. `product create` enforces a few fields the spec does not flag: `description` ≥100 chars, `durationMinutes`, and a priceOption `id` (pass `0`, rezdy assigns the real one). Full command surface, JSON body shapes, and these specifics are in the crude repo docs/rezdy.md.
 
 `booking cancellations` filters by when the cancellation occurred (dateUpdated), not the session date. Use --from/--to with YYYY-MM-DD dates.
 --updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
