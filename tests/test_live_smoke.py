@@ -84,6 +84,30 @@ def test_rezdy_paginate(crude_config):
 
 
 @pytest.mark.live
+def test_rezdy_company_get(crude_config):
+    # Exercises the generalized GET transport (_one) against a read-only resource.
+    if not crude_config.get("rezdy", {}).get("api_key"):
+        pytest.skip("no [rezdy] api_key in config")
+    from crude_rezdy.cli import _make_client
+
+    client = _make_client(crude_config)
+    company = client.get_company()
+    assert isinstance(company, dict)
+
+
+@pytest.mark.live
+def test_rezdy_lists_vouchers(crude_config):
+    # Read-only; the API does not allow creating these (see docs/rezdy.md).
+    if not crude_config.get("rezdy", {}).get("api_key"):
+        pytest.skip("no [rezdy] api_key in config")
+    from crude_rezdy.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.list_vouchers(limit=1)
+    assert isinstance(items, list)
+
+
+@pytest.mark.live
 def test_deputy_me(crude_config):
     if not crude_config.get("deputy", {}).get("deputy_api_token"):
         pytest.skip("no [deputy] credentials in config")
