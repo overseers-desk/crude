@@ -45,6 +45,20 @@ def test_skal_lists_one_member(crude_config):
 
 
 @pytest.mark.live
+def test_skal_lists_one_benefit(crude_config):
+    skal = crude_config.get("skal", {})
+    if not (skal.get("username") or skal.get("session_id")):
+        pytest.skip("no [skal] credentials in config")
+    from crude_skal.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.list_benefits(limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("id")
+
+
+@pytest.mark.live
 def test_rezdy_lists_one_product(crude_config):
     if not crude_config.get("rezdy", {}).get("api_key"):
         pytest.skip("no [rezdy] api_key in config")

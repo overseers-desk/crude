@@ -124,9 +124,11 @@ crude-skal member list --city "Gold Coast" --limit 5
 crude-skal member get 184914
 crude-skal club list
 crude-skal event list
+crude-skal benefit list
+crude-skal benefit get 178
 ```
 
-With no filters, `member list` returns the current Australian member roster. Filter flags (`--name`, `--city`, `--club`, `--email`, `--state`) narrow the search.
+With no filters, `member list` returns the current Australian member roster. Filter flags (`--name`, `--city`, `--club`, `--email`, `--state`) narrow the search. `benefit list` shows the global Skål International benefits register (worldwide offers); Australian clubs' own member discounts are published on a website page, not in this model.
 
 ## Rezdy usage (`crude-rezdy`)
 

@@ -174,3 +174,39 @@ class SkalClient:
         """List Skål events, most recent first."""
         fields = ["id", "name", "date_begin", "date_end", "location", "state"]
         return self._search_read("event.event", [], fields, limit=limit, order="date_begin DESC")
+
+    # ------------------------------------------------------------------
+    # Benefits
+    # ------------------------------------------------------------------
+
+    # The skal.benefit model is the global Skål International benefits register
+    # (offers federated by clubs worldwide), not the Australian member-to-member
+    # discounts — those live on a CMS page, not in this model. Binary fields
+    # (image, logo) and audit fields are deliberately left out.
+    BENEFIT_LIST_FIELDS = [
+        "id", "name", "activity_id", "entity_id", "country_id",
+        "website", "start_date", "end_date",
+    ]
+
+    BENEFIT_DETAIL_FIELDS = [
+        "id", "name", "description", "activity_id", "entity_id",
+        "country_id", "website", "start_date", "end_date", "active",
+    ]
+
+    def list_benefits(self, limit: int = 50, offset: int = 0) -> list:
+        """List Skål International member benefits (global, across all clubs)."""
+        return self._search_read(
+            "skal.benefit", [], self.BENEFIT_LIST_FIELDS, limit=limit, offset=offset
+        )
+
+    def get_benefit(self, benefit_id: int) -> dict:
+        """Fetch a single benefit by Odoo integer ID."""
+        results = self._search_read(
+            "skal.benefit",
+            [["id", "=", benefit_id]],
+            self.BENEFIT_DETAIL_FIELDS,
+            limit=1,
+        )
+        if not results:
+            raise RuntimeError(f"Benefit {benefit_id} not found.")
+        return results[0]

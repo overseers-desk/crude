@@ -21,9 +21,11 @@ app = typer.Typer(help="crude-skal — Skål Australia member portal.")
 member_app = typer.Typer(help="Skål members.")
 club_app = typer.Typer(help="Skål clubs.")
 event_app = typer.Typer(help="Skål events.")
+benefit_app = typer.Typer(help="Skål member benefits (global).")
 app.add_typer(member_app, name="member")
 app.add_typer(club_app, name="club")
 app.add_typer(event_app, name="event")
+app.add_typer(benefit_app, name="benefit")
 console = Console()
 
 register_claude_command(app)
@@ -343,6 +345,106 @@ def list_events(
 
     console.print(table)
     typer.echo(f"\n{len(items)} event(s) found.")
+
+
+@benefit_app.command("list")
+def list_benefits(
+    limit: int = typer.Option(50, "--limit", help="Maximum number of benefits to return."),
+    offset: int = typer.Option(0, "--offset", help="Number of benefits to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List Skål International member benefits (global, across all clubs).
+
+    These are the worldwide benefits in the skal.benefit register; Australian
+    clubs publish their own member offers on a website page, not here.
+    """
+    config_path = _find_config()
+    config = _read_config(config_path)
+    client = _make_client(config)
+
+    try:
+        items = client.list_benefits(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching benefits: {e}", err=True)
+        raise typer.Exit(1)
+
+    if output_json:
+        typer.echo(json.dumps(items, indent=2))
+        return
+
+    table = Table(show_header=True, header_style="bold green")
+    table.add_column("ID", style="dim")
+    table.add_column("Title")
+    table.add_column("Activity")
+    table.add_column("Club")
+    table.add_column("Country")
+    table.add_column("Website")
+
+    for item in items:
+        table.add_row(
+            _s(item.get("id")),
+            _s(item.get("name")),
+            _fmt_m2o(item.get("activity_id")),
+            _fmt_m2o(item.get("entity_id")),
+            _fmt_m2o(item.get("country_id")),
+            _s(item.get("website")),
+        )
+
+    console.print(table)
+    typer.echo(f"\n{len(items)} benefit(s) found.")
+
+
+@benefit_app.command("get")
+def get_benefit(
+    benefit_id: int = typer.Argument(..., help="Benefit Odoo integer ID (e.g. 178)."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show details of a single member benefit."""
+    config_path = _find_config()
+    config = _read_config(config_path)
+    client = _make_client(config)
+
+    try:
+        item = client.get_benefit(benefit_id)
+    except Exception as e:
+        typer.echo(f"Error fetching benefit {benefit_id}: {e}", err=True)
+        raise typer.Exit(1)
+
+    if output_json:
+        typer.echo(json.dumps(item, indent=2))
+        return
+
+    table = Table(show_header=True, header_style="bold cyan")
+    table.add_column("Field")
+    table.add_column("Value")
+
+    display_fields = [
+        ("id", "ID"),
+        ("name", "Title"),
+        ("description", "Description"),
+        ("activity_id", "Activity"),
+        ("entity_id", "Club"),
+        ("country_id", "Country"),
+        ("website", "Website"),
+        ("start_date", "Start Date"),
+        ("end_date", "End Date"),
+        ("active", "Active"),
+    ]
+
+    for key, label in display_fields:
+        value = item.get(key, "")
+        if isinstance(value, (list, tuple)) and len(value) == 2:
+            value = value[1]
+        if value is None or value is False:
+            value = ""
+        if isinstance(value, (dict, list)):
+            value = json.dumps(value)
+        value_str = str(value)
+        if len(value_str) > 200:
+            value_str = value_str[:197] + "..."
+        table.add_row(label, value_str)
+
+    console.print(table)
 
 
 if __name__ == "__main__":

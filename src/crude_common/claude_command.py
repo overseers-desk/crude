@@ -67,8 +67,10 @@ Skal Australia member portal. Credentials in `[skal]`; the session cookie lasts 
     crude-skal member get <id>
     crude-skal club list
     crude-skal event list [--limit]
+    crude-skal benefit list [--limit] [--offset]
+    crude-skal benefit get <id>
 
-Member `--state` values: active, draft, unpaid, done, club_change (default excludes done). Club IDs: 330 Melbourne, 334 Sydney, 322 Brisbane, 333 Perth, 321 Adelaide, 1003 Gold Coast (full list in the crude repo docs/skal-api.md).
+Member `--state` values: active, draft, unpaid, done, club_change (default excludes done). Club IDs: 330 Melbourne, 334 Sydney, 322 Brisbane, 333 Perth, 321 Adelaide, 1003 Gold Coast (full list in the crude repo docs/skal-api.md). `benefit` lists the global Skål International benefits register (worldwide offers); Australian clubs publish their own member offers on a website page, not in this model.
 
 ## crude-rezdy (rezdy.com)
 

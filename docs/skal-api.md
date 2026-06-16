@@ -180,7 +180,33 @@ Key fields: `name`, `date_begin`, `date_end`, `description`, `location`, `organi
 
 ### `skal.benefit` — Member benefits
 
-Access: read-all. 18 records.
+Access: read-all. 18 records. These are the **global** Skål International benefits register: discounts and offers federated by clubs worldwide (e.g. Choice Hotels via the General Secretariat, Paradores via Madrid, SIXT via München). Australian clubs do not enter their offers here; the Australian member-to-member discounts are hand-authored on the CMS page `/australian-members-benefits` (a website page, not a queryable model), so this resource does not surface them.
+
+Key fields:
+- `name`: offer title
+- `description`: HTML body with the offer terms
+- `activity_id`: industry category (many2one, e.g. `ACCOMMODATION PROVIDERS`)
+- `entity_id`: club/secretariat that registered the offer (many2one → `entity`)
+- `country_id`: country of the offering business (many2one)
+- `website`: the offer/booking URL
+- `start_date`, `end_date`: validity window
+- `active`: whether the offer is live
+- `image`, `logo`: base64 binaries (omitted by `crude-skal`)
+
+#### List benefits
+
+```json
+{
+  "model": "skal.benefit",
+  "method": "search_read",
+  "args": [[]],
+  "kwargs": {
+    "fields": ["name", "activity_id", "entity_id", "country_id", "website", "start_date", "end_date"],
+    "limit": 50,
+    "order": "name ASC"
+  }
+}
+```
 
 ### `product.template` — Shop products
 
