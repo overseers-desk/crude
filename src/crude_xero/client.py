@@ -148,8 +148,10 @@ class XeroSession:
     def _raise_for_xero(r) -> None:
         """Raise XeroError/XeroAuthError from a failed response's Xero error shape.
 
-        Xero reports a top-level ``Message`` or, for validation, nested
-        ``Elements[].ValidationErrors[].Message``; OAuth errors carry ``error``.
+        On a validation failure Xero gives a generic top-level ``Message`` ("A
+        validation exception occurred") and the actionable detail in nested
+        ``Elements[].ValidationErrors[].Message``; surface the nested detail when
+        present, else the top-level ``Message``. OAuth errors carry ``error``.
         """
         message = f"HTTP {r.status_code}"
         problem = r.headers.get("X-Rate-Limit-Problem")
@@ -158,16 +160,15 @@ class XeroSession:
         except ValueError:
             body = None
         if isinstance(body, dict):
-            if body.get("Message"):
+            errors = []
+            for el in body.get("Elements") or []:
+                for ve in el.get("ValidationErrors") or []:
+                    if ve.get("Message"):
+                        errors.append(ve["Message"])
+            if errors:
+                message = "; ".join(errors)
+            elif body.get("Message"):
                 message = body["Message"]
-            else:
-                errors = []
-                for el in body.get("Elements") or []:
-                    for ve in el.get("ValidationErrors") or []:
-                        if ve.get("Message"):
-                            errors.append(ve["Message"])
-                if errors:
-                    message = "; ".join(errors)
             if body.get("error"):
                 message = body.get("error_description") or body.get("error") or message
         if r.status_code == 401:

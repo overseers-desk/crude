@@ -246,6 +246,24 @@ def test_validation_errors_surface_in_message(monkeypatch):
     assert "Contact is required" in msg
 
 
+def test_nested_validation_wins_over_generic_message(monkeypatch):
+    # Xero pairs a generic top-level Message with the actionable detail in the
+    # nested ValidationErrors; the specific reason must win.
+    xs = _session()
+    body = {
+        "Message": "A validation exception occurred",
+        "Elements": [{"ValidationErrors": [
+            {"Message": "The limit of (2) active tracking categories has been reached."}
+        ]}],
+    }
+    _, fake = _recorder(_FakeResp(body, status_code=400))
+    monkeypatch.setattr(xs.session, "request", fake)
+
+    with pytest.raises(XeroError) as exc:
+        xs._put("accounting", "TrackingCategories", json={"Name": "x"})
+    assert "limit of (2) active tracking categories" in str(exc.value)
+
+
 # ----------------------------------------------------------------------
 # AccountingAPI — list/page, status-POST deletes, raw-byte attachments, reports
 # ----------------------------------------------------------------------
