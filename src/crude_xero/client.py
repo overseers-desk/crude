@@ -145,35 +145,57 @@ class XeroSession:
         return max(0, min(wait, _MAX_RETRY_AFTER))
 
     @staticmethod
-    def _raise_for_xero(r) -> None:
-        """Raise XeroError/XeroAuthError from a failed response's Xero error shape.
+    def _xero_message(r) -> str:
+        """The human message from a Xero error body, validation detail preferred.
 
         On a validation failure Xero gives a generic top-level ``Message`` ("A
         validation exception occurred") and the actionable detail in nested
         ``Elements[].ValidationErrors[].Message``; surface the nested detail when
-        present, else the top-level ``Message``. OAuth errors carry ``error``.
+        present, else the OAuth ``error``, else the top-level ``Message``.
         """
-        message = f"HTTP {r.status_code}"
-        problem = r.headers.get("X-Rate-Limit-Problem")
         try:
             body = r.json()
         except ValueError:
             body = None
-        if isinstance(body, dict):
-            errors = []
-            for el in body.get("Elements") or []:
-                for ve in el.get("ValidationErrors") or []:
-                    if ve.get("Message"):
-                        errors.append(ve["Message"])
-            if errors:
-                message = "; ".join(errors)
-            elif body.get("Message"):
-                message = body["Message"]
-            if body.get("error"):
-                message = body.get("error_description") or body.get("error") or message
+        if not isinstance(body, dict):
+            return f"HTTP {r.status_code}"
+        errors = []
+        for el in body.get("Elements") or []:
+            for ve in el.get("ValidationErrors") or []:
+                if ve.get("Message"):
+                    errors.append(ve["Message"])
+        if errors:
+            return "; ".join(errors)
+        if body.get("error"):
+            return body.get("error_description") or body.get("error") or f"HTTP {r.status_code}"
+        return body.get("Message") or f"HTTP {r.status_code}"
+
+    @classmethod
+    def _raise_for_xero(cls, r) -> None:
+        """Raise XeroError/XeroAuthError from a failed response's Xero error shape."""
+        message = cls._xero_message(r)
+        problem = r.headers.get("X-Rate-Limit-Problem")
         if r.status_code == 401:
             raise XeroAuthError(message, status=r.status_code, problem=problem)
         raise XeroError(message, status=r.status_code, problem=problem)
+
+    def _raise_permission(self, r) -> None:
+        """Raise a scope-aware error for a forbidden operation.
+
+        A 403, or a 401 that persists after a successful refresh, means the token
+        is valid but the operation is not permitted — most often a missing OAuth
+        scope. Re-auth alone does not help; the scope must first be added to the
+        config. Name the scopes actually granted so the gap is visible.
+        """
+        detail = self._xero_message(r)
+        granted = self.tokens.get("scope") or "(unknown)"
+        raise XeroError(
+            f"{detail} (HTTP {r.status_code}). Xero refused this operation; the usual "
+            f"cause is a missing OAuth scope. Granted scopes: {granted}. Add the scope "
+            f"this resource needs to [xero] scopes in config.toml, then run `crude-xero auth`.",
+            status=r.status_code,
+            problem=r.headers.get("X-Rate-Limit-Problem"),
+        )
 
     def _request(self, method, product, path, *, params=None, json=None,
                  headers=None, accept=None, data=None, _retry=True):
@@ -198,6 +220,11 @@ class XeroSession:
             time.sleep(self._retry_after(r))
             return self._request(method, product, path, params=params, json=json,
                                  headers=headers, accept=accept, data=data, _retry=False)
+        if r.status_code in (401, 403):
+            # A 401 reaching here is post-refresh (the first 401 already refreshed
+            # and retried), so the token is valid; a 403 is outright forbidden.
+            # Either is a permissions/scope problem, not token expiry.
+            self._raise_permission(r)
         if not r.ok:
             self._raise_for_xero(r)
         if accept and "json" not in accept.lower():

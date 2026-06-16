@@ -41,7 +41,7 @@ crude-xero auth --manual       # paste-based flow for a headless box (no local w
 **Xero developer-portal prerequisites** (developer.xero.com → My Apps → this app), the user's to set up once:
 
 - Add the `redirect_uri` as an allowed redirect URI on the app.
-- Enable the OAuth scopes the binary requests. Reads work under read scopes; **writes require the write scopes enabled on the app, then a fresh `crude-xero auth`** to obtain a token carrying them.
+- Enable the OAuth scopes the binary requests. Reads work under read scopes; **writes require the write scopes enabled on the app, then a fresh `crude-xero auth`** to obtain a token carrying them. When a call is refused for want of a scope (a 403, or a 401 that survives a token refresh), the error names the scopes the token actually carries and tells you to add the missing one to `scopes` and re-run `crude-xero auth`; re-auth alone does not widen a grant.
 
 Refresh is automatic: the transport refreshes when the access token is within 60 seconds of expiry or on a 401, and persists the rotated token set. The refresh token rotates on every refresh and dies after 60 days idle; if Xero refuses the grant (`invalid_grant`, expired or revoked) the binary errors telling you to run `crude-xero auth` again, and a failed refresh never overwrites the stored token.
 

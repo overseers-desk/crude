@@ -264,6 +264,24 @@ def test_nested_validation_wins_over_generic_message(monkeypatch):
     assert "limit of (2) active tracking categories" in str(exc.value)
 
 
+def test_forbidden_raises_scope_aware_error(monkeypatch):
+    # A 403 (or a 401 surviving a refresh) is a permissions/scope problem: the
+    # error names the granted scopes and points at broadening config + re-auth,
+    # rather than the misleading bare "HTTP 403".
+    xs = _session()
+    xs.tokens["scope"] = "accounting.settings.read"
+    _, fake = _recorder(_FakeResp({"Message": "AuthorizationUnsuccessful"}, status_code=403))
+    monkeypatch.setattr(xs.session, "request", fake)
+
+    with pytest.raises(XeroError) as exc:
+        xs._get("accounting", "Contacts")
+    msg = str(exc.value)
+    assert "missing OAuth scope" in msg
+    assert "accounting.settings.read" in msg
+    assert "crude-xero auth" in msg
+    assert exc.value.status == 403
+
+
 # ----------------------------------------------------------------------
 # AccountingAPI — list/page, status-POST deletes, raw-byte attachments, reports
 # ----------------------------------------------------------------------
