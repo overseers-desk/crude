@@ -1,6 +1,7 @@
 """Typer CLI for the ATDW (Australian Tourism Data Warehouse) site: crude-atdw."""
 
 import json
+import sys
 from typing import Optional
 
 import requests
@@ -243,6 +244,84 @@ def get(
     table.add_row("Tags", tag_display)
 
     console.print(table)
+
+
+@listing_app.command("create")
+def create(
+    data: Optional[str] = typer.Option(None, "--data", help="Listing object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the created listing."),
+):
+    """Create a new listing (POST /api/listings).
+
+    The body is a full listing object passed via --data, -f/--file, or stdin.
+    ATDW requires at least listingType, category, owningOrganisation, name, and
+    physicalAddress; owningOrganisation defaults to your organisation when
+    omitted. A new listing starts as a draft and is not distributed until it is
+    submitted (`listing submit`).
+    """
+    config_path = _find_config()
+    config = _read_config(config_path)
+
+    # Resolve the body: --data inline JSON, then -f file, then piped stdin.
+    if data is not None:
+        raw = data
+    elif file is not None:
+        with open(file, "r") as f:
+            raw = f.read()
+    elif not sys.stdin.isatty():
+        raw = sys.stdin.read()
+    else:
+        typer.echo("Error: provide JSON via --data, -f/--file, or stdin.", err=True)
+        raise typer.Exit(1)
+    try:
+        body = json.loads(raw)
+    except ValueError as e:
+        typer.echo(f"Error: invalid JSON: {e}", err=True)
+        raise typer.Exit(1)
+    if not isinstance(body, dict):
+        typer.echo("Error: JSON body must be an object.", err=True)
+        raise typer.Exit(1)
+
+    # A listing belongs to an organisation; default to the configured one.
+    from crude_atdw.client import ORG_ID
+    body.setdefault("owningOrganisation", ORG_ID)
+
+    missing = [
+        f for f in ("listingType", "category", "owningOrganisation", "name", "physicalAddress")
+        if not body.get(f)
+    ]
+    if missing:
+        typer.echo(f"Warning: ATDW usually requires these missing fields: {', '.join(missing)}", err=True)
+
+    if not yes:
+        typer.confirm(f'Create a new ATDW listing "{body.get("name", "(unnamed)")}"?', abort=True)
+
+    client = _make_client(config)
+    try:
+        result = client.create_listing(body)
+    except requests.exceptions.HTTPError as e:
+        typer.echo(f"Error creating listing: {e}", err=True)
+        if e.response is not None:
+            try:
+                msg = e.response.json().get("error", {}).get("message", "")
+                if msg:
+                    typer.echo(f"ATDW says: {msg}", err=True)
+            except Exception:
+                pass
+        raise typer.Exit(1)
+    except Exception as e:
+        typer.echo(f"Error creating listing: {e}", err=True)
+        raise typer.Exit(1)
+
+    if output_json:
+        typer.echo(json.dumps(result, indent=2))
+        return
+    typer.echo(
+        f'Created listing "{result.get("name", "")}" '
+        f'(id {result.get("id", "?")}, status {result.get("status", "?")}).'
+    )
 
 
 @listing_app.command("update")

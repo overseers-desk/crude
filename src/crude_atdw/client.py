@@ -146,6 +146,15 @@ class ATDWClient:
         """
         return self._get(f"/listings/{listing_id}/publishedListing")
 
+    def create_listing(self, body: dict) -> dict:
+        """POST /api/listings — create a new listing from a full object.
+
+        ATDW requires at least listingType, category, owningOrganisation, name,
+        and physicalAddress; a created listing starts as a draft and is not
+        distributed until submit().
+        """
+        return self._post("/listings", body)
+
     def patch_listing(self, listing_id: str, fields: dict) -> dict:
         """PATCH a listing with only the changed fields."""
         return self._patch(f"/listings/{listing_id}", fields)

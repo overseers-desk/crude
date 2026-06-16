@@ -108,6 +108,21 @@ With `--json`, only the main listing object is printed; the sub-resource counts 
 - `client.get_own_listing(id)`: admin view of an owned listing (401 for external listings)
 - `client.get_published_listing(id)`: read-only view of any published listing
 
+### `crude-atdw listing create [--data JSON | -f FILE | stdin] [--yes]`
+
+Creates a new listing (`POST /api/listings`) from a full listing object supplied as JSON via `--data`, `-f/--file`, or piped stdin. ATDW requires at least `listingType`, `category`, `owningOrganisation`, `name`, and `physicalAddress`; `owningOrganisation` defaults to your configured organisation when omitted, and any documented field left out is reported as a warning before the write.
+
+A created listing starts as a **draft** — it is not distributed to the ATDW network until it is reviewed and approved, so run `listing submit` once it is ready. The command prompts for confirmation unless `--yes` is given, and prints the new listing's id and status (`--json` prints the whole created object).
+
+```
+crude-atdw listing create -f new-tour.json
+crude-atdw listing create --data '{"listingType":"...","category":"...","name":"...","physicalAddress":{...}}' --yes
+```
+
+The simplest way to build a valid body is to `listing get <id> --json` an existing listing of the same type and adapt its `listingType`, `category`, `name`, and `physicalAddress`.
+
+**Python client:** `client.create_listing(body)` returns the created object.
+
 ### `crude-atdw listing update ID FIELD VALUE`
 
 PATCHes a single field on a listing. Only the named field is sent; all other fields are unchanged. If the value parses as JSON (array or object), it is sent with that type rather than as a string.
