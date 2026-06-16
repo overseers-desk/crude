@@ -5,7 +5,7 @@ refresh that persists rotated tokens on success and never clobbers the stored
 token on failure, the concurrent-rotation "adopt" path that skips the single-use
 grant, the config->side-file migration seed (including the naive-timestamp =
 already-expired rule), the 0600 round-trip, and the authorize-URL shape. The
-token store is redirected into a tmp dir by monkeypatching `auth.find_config`,
+token store is redirected into a tmp dir by pointing `$XDG_STATE_HOME` there,
 and the token endpoint / grant are monkeypatched, so nothing reaches the network.
 """
 
@@ -26,9 +26,12 @@ from crude_xero.client import XeroAuthError, XeroSession
 
 @pytest.fixture
 def token_dir(tmp_path, monkeypatch):
-    """Point token_store_path at tmp_path by faking the config location."""
-    cfg = tmp_path / "config.toml"
-    monkeypatch.setattr(auth, "find_config", lambda: cfg)
+    """Point token_store_path under tmp_path via $XDG_STATE_HOME.
+
+    token_store_path resolves to ``$XDG_STATE_HOME/crude/xero_token[_<account>].json``,
+    so the store lands in ``tmp_path/crude/``; save_tokens creates that dir.
+    """
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path))
     return tmp_path
 
 

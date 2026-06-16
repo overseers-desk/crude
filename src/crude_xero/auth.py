@@ -26,7 +26,6 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from crude_common.config import find_config
 from crude_xero.client import XeroAuthError
 
 AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
@@ -212,9 +211,16 @@ def manual_authorize(client_id, client_secret, redirect_uri, scopes) -> dict:
 
 
 def token_store_path(account) -> Path:
-    """The durable token side file, keyed by account, in the config dir."""
-    base = find_config().parent
-    return base / ("xero_token.json" if not account else f"xero_token_{account}.json")
+    """The durable token side file, keyed by account, under $XDG_STATE_HOME.
+
+    A rotating OAuth token is XDG *state*: it persists across restarts but is
+    neither config (user-authored) nor cache (safe to delete — losing it costs a
+    browser re-consent). It lives in ``$XDG_STATE_HOME/crude`` (default
+    ``~/.local/state/crude``), independent of where ``config.toml`` was found, so
+    a dev-tree config never lands a token beside the source.
+    """
+    base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
+    return Path(base) / "crude" / ("xero_token.json" if not account else f"xero_token_{account}.json")
 
 
 def _seed_expiry(timestamp):
