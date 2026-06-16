@@ -1,13 +1,14 @@
 # crude
 
 CRUD-style command-line clients for sites without a usable public API, under one
-`crude-<site> <resource> <verb>` grammar. Three sites ship as separate binaries:
-`crude-atdw`, `crude-skal`, `crude-rezdy`. The `crude` launcher lists them and
-carries the shared `--version` and `install-claude-command` flags.
+`crude-<site> <resource> <verb>` grammar. Each site ships as its own
+`crude-<site>` binary; the `crude` launcher lists them and carries the shared
+`--version` and `install-claude-command` flags. The binaries are declared in
+`[project.scripts]` in `pyproject.toml`, which is the source of truth for the set.
 
-Layout: `src/` holds the four packages (`crude_common`, `crude_atdw`,
-`crude_skal`, `crude_rezdy`). Packaging lives in `debian/` (`.deb`), `crude.spec`
-(`.rpm`), and `formula/crude.rb` (Homebrew).
+Layout: `src/` holds `crude_common` and one `crude_<site>` package per binary.
+Packaging lives in `debian/` (`.deb`), `crude.spec` (`.rpm`), and
+`formula/crude.rb` (Homebrew).
 
 ## Releasing
 
