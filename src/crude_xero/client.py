@@ -29,6 +29,10 @@ PRODUCT_BASES = {
 
 CONNECTIONS_URL = "https://api.xero.com/connections"
 
+# Accounting's `page` param caps each page at this many records; a full page is
+# the signal that more likely exist (the list commands hint on it).
+PAGE_SIZE = 100
+
 # Bound the 429 back-off so a single call cannot hang the CLI indefinitely.
 _MAX_RETRY_AFTER = 60
 
@@ -243,8 +247,15 @@ class XeroSession:
             self._raise_for_xero(r)
         return r.json() if r.content else []
 
-    def paginate(self, product, path, *, params=None, page_size=100) -> list:
-        """Page an Accounting collection via the `page` param until a short page.
+    def paginate(self, product, path, *, params=None, page_size=PAGE_SIZE,
+                 limit=None, all_pages=True) -> list:
+        """Page an Accounting collection via the `page` param.
+
+        `all_pages` walks every page to the end; False fetches only the first
+        page (for the endpoints Xero does not page, that one response is the
+        whole collection anyway). `limit` caps the total records, paging across
+        as many pages as needed and then truncating; it overrides the
+        single-page stop.
 
         Several Accounting endpoints (Accounts, Items, TaxRates, ...) ignore
         `page` and return the whole collection on every request; asking for the
@@ -266,10 +277,14 @@ class XeroSession:
                 break
             prev_first = first
             results.extend(chunk)
+            if limit is not None and len(results) >= limit:
+                break
             if len(chunk) < page_size:
                 break
+            if limit is None and not all_pages:
+                break
             page += 1
-        return results
+        return results[:limit] if limit is not None else results
 
 
 class XeroClient:

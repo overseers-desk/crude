@@ -18,6 +18,7 @@ import typer
 
 from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
 from crude_xero.accounting import REPORT_NAMES
+from crude_xero.client import PAGE_SIZE
 
 
 def _client(*args, **kwargs):
@@ -30,6 +31,15 @@ def _client(*args, **kwargs):
 def _a(label: str) -> str:
     """The indefinite article for a resource label, for readable help text."""
     return "an" if label[:1].lower() in "aeiou" else "a"
+
+
+def _list_hint(items: list, fetch_all: bool, limit: Optional[int]) -> None:
+    """Warn (stderr) when a bare list came back a full page, so more likely exist."""
+    if not fetch_all and limit is None and len(items) == PAGE_SIZE:
+        typer.echo(
+            f"Showing the first {PAGE_SIZE}; pass --all for all, or --limit N for more.",
+            err=True,
+        )
 
 
 def _emit_bytes(content: bytes, out: Optional[str], what: str) -> None:
@@ -132,26 +142,35 @@ def _resource(
         def _list(
             where: Optional[str] = typer.Option(None, "--where", help="Xero filter expression (where=)."),
             order: Optional[str] = typer.Option(None, "--order", help="Xero sort expression (order=)."),
+            fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (default: the first page only)."),
+            limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
             try:
-                items = getattr(_client().accounting, list_fn)(where=where, order=order)
+                items = getattr(_client().accounting, list_fn)(
+                    where=where, order=order, all_pages=fetch_all,
+                    limit=None if fetch_all else limit)
             except Exception as e:
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
+            _list_hint(items, fetch_all, limit)
             _emit_list(items, columns, name, output_json)
 
     elif list_fn:
 
         @sub.command("list", help=f"List {label}.")
         def _list_plain(
+            fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (default: the first page only)."),
+            limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
             try:
-                items = getattr(_client().accounting, list_fn)()
+                items = getattr(_client().accounting, list_fn)(
+                    all_pages=fetch_all, limit=None if fetch_all else limit)
             except Exception as e:
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
+            _list_hint(items, fetch_all, limit)
             _emit_list(items, columns, name, output_json)
 
     if get_fn:
@@ -394,16 +413,20 @@ def register(app: typer.Typer) -> None:
         get_fn="get_journal",
     )
 
-    @journal.command("list", help="List journals (auto-paged via the JournalNumber offset).")
+    @journal.command("list", help="List journals (batched via the JournalNumber offset).")
     def _journal_list(
         offset: Optional[int] = typer.Option(None, "--offset", help="Start after this JournalNumber."),
+        fetch_all: bool = typer.Option(False, "--all", help="Fetch every batch (default: the first batch only)."),
+        limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across batches (--all wins)."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
     ):
         try:
-            items = _client().accounting.list_journals(offset=offset)
+            items = _client().accounting.list_journals(
+                offset=offset, all_pages=fetch_all, limit=None if fetch_all else limit)
         except Exception as e:
             typer.echo(f"Error fetching journals: {e}", err=True)
             raise typer.Exit(1)
+        _list_hint(items, fetch_all, limit)
         _emit_list(
             items,
             [("ID", "JournalID"), ("Number", "JournalNumber"),

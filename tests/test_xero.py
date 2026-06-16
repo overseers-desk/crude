@@ -141,6 +141,47 @@ def test_paginate_walks_pages_and_stops_on_short_page(monkeypatch):
     assert seen == [1, 2]  # walked page 1 then 2, then stopped
 
 
+def test_paginate_fetches_only_the_first_page_when_not_all(monkeypatch):
+    xs = _session()
+    pages = {
+        1: {"Invoices": [{"n": 1}, {"n": 2}]},   # full page (== page_size)
+        2: {"Invoices": [{"n": 3}]},
+    }
+    seen = []
+
+    def fake_get(product, path, params=None):
+        seen.append(params["page"])
+        return pages[params["page"]]
+
+    monkeypatch.setattr(xs, "_get", fake_get)
+
+    out = xs.paginate("accounting", "Invoices", page_size=2, all_pages=False)
+
+    assert out == [{"n": 1}, {"n": 2}]  # the full first page only
+    assert seen == [1]                  # stopped despite the page being full
+
+
+def test_paginate_limit_truncates_across_pages(monkeypatch):
+    xs = _session()
+    pages = {
+        1: {"Invoices": [{"n": 1}, {"n": 2}]},
+        2: {"Invoices": [{"n": 3}, {"n": 4}]},
+        3: {"Invoices": [{"n": 5}]},
+    }
+    seen = []
+
+    def fake_get(product, path, params=None):
+        seen.append(params["page"])
+        return pages[params["page"]]
+
+    monkeypatch.setattr(xs, "_get", fake_get)
+
+    out = xs.paginate("accounting", "Invoices", page_size=2, limit=3)
+
+    assert out == [{"n": 1}, {"n": 2}, {"n": 3}]  # paged to reach 3, then truncated
+    assert seen == [1, 2]                         # stopped once >= 3 collected
+
+
 # ----------------------------------------------------------------------
 # 401 refresh-then-retry, and the two error-message shapes
 # ----------------------------------------------------------------------
@@ -224,6 +265,43 @@ def test_list_invoices_paginates_and_unwraps(monkeypatch):
     assert calls[0]["method"] == "GET"
     assert calls[0]["url"].endswith("/api.xro/2.0/Invoices")
     assert calls[0]["params"] == {"where": 'Status=="AUTHORISED"', "page": 1}
+
+
+def test_list_invoices_first_page_default_and_all_pages_walks(monkeypatch):
+    xs = _session()
+    api = AccountingAPI(xs)
+    # Two full pages (== the default page_size) then a short one. A full first
+    # page would page on were it not for the first-page default; --all keeps
+    # walking until the short page.
+    def invoices(lo, hi):
+        return [{"InvoiceID": f"i{n}"} for n in range(lo, hi)]
+
+    pages = {
+        1: {"Invoices": invoices(0, 100)},
+        2: {"Invoices": invoices(100, 200)},
+        3: {"Invoices": invoices(200, 201)},
+    }
+    seen = []
+
+    def fake_get(product, path, params=None):
+        seen.append(params["page"])
+        return pages[params["page"]]
+
+    monkeypatch.setattr(xs, "_get", fake_get)
+
+    default = api.list_invoices()                 # no flags -> first page only
+    assert len(default) == 100
+    assert seen == [1]
+
+    seen.clear()
+    everything = api.list_invoices(all_pages=True)  # --all -> walk to the short page
+    assert len(everything) == 201
+    assert seen == [1, 2, 3]
+
+    seen.clear()
+    capped = api.list_invoices(limit=150)         # --limit spans pages, then truncates
+    assert len(capped) == 150
+    assert seen == [1, 2]
 
 
 @pytest.mark.parametrize("verb, collection, status", [

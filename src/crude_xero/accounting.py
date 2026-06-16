@@ -72,12 +72,13 @@ class AccountingAPI:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _list(self, collection, *, where=None, order=None, **params):
-        """Auto-page a collection, dropping unset filters."""
+    def _list(self, collection, *, where=None, order=None, all_pages=False, limit=None, **params):
+        """List a collection (first page by default; all_pages/limit widen it), dropping unset filters."""
         query = {"where": where, "order": order}
         query.update(params)
         query = {k: v for k, v in query.items() if v is not None}
-        return self.session.paginate(BASE, collection, params=query or None)
+        return self.session.paginate(BASE, collection, params=query or None,
+                                     all_pages=all_pages, limit=limit)
 
     def _one(self, data):
         """Unwrap a single record from the list-wrapped get response."""
@@ -109,8 +110,8 @@ class AccountingAPI:
     # Accounts
     # ------------------------------------------------------------------
 
-    def list_accounts(self, where=None, order=None):
-        return self._list("Accounts", where=where, order=order)
+    def list_accounts(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Accounts", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_account(self, guid):
         return self._get_one("Accounts", guid)
@@ -128,8 +129,8 @@ class AccountingAPI:
     # Bank transactions (no hard delete; soft-delete via update Status=DELETED)
     # ------------------------------------------------------------------
 
-    def list_bank_transactions(self, where=None, order=None):
-        return self._list("BankTransactions", where=where, order=order)
+    def list_bank_transactions(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("BankTransactions", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_bank_transaction(self, guid):
         return self._get_one("BankTransactions", guid)
@@ -144,8 +145,8 @@ class AccountingAPI:
     # Bank transfers (immutable after create)
     # ------------------------------------------------------------------
 
-    def list_bank_transfers(self, where=None, order=None):
-        return self._list("BankTransfers", where=where, order=order)
+    def list_bank_transfers(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("BankTransfers", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_bank_transfer(self, guid):
         return self._get_one("BankTransfers", guid)
@@ -157,8 +158,8 @@ class AccountingAPI:
     # Batch payments (delete via Status=DELETED)
     # ------------------------------------------------------------------
 
-    def list_batch_payments(self, where=None, order=None):
-        return self._list("BatchPayments", where=where, order=order)
+    def list_batch_payments(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("BatchPayments", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_batch_payment(self, guid):
         return self._get_one("BatchPayments", guid)
@@ -173,8 +174,8 @@ class AccountingAPI:
     # Branding themes (read-only)
     # ------------------------------------------------------------------
 
-    def list_branding_themes(self):
-        return self._list("BrandingThemes")
+    def list_branding_themes(self, all_pages=False, limit=None):
+        return self._list("BrandingThemes", all_pages=all_pages, limit=limit)
 
     def get_branding_theme(self, guid):
         return self._get_one("BrandingThemes", guid)
@@ -183,8 +184,8 @@ class AccountingAPI:
     # Budgets (read-only)
     # ------------------------------------------------------------------
 
-    def list_budgets(self):
-        return self._list("Budgets")
+    def list_budgets(self, all_pages=False, limit=None):
+        return self._list("Budgets", all_pages=all_pages, limit=limit)
 
     def get_budget(self, guid):
         return self._get_one("Budgets", guid)
@@ -193,8 +194,8 @@ class AccountingAPI:
     # Contacts (archive via Status=ARCHIVED; no hard delete)
     # ------------------------------------------------------------------
 
-    def list_contacts(self, where=None, order=None):
-        return self._list("Contacts", where=where, order=order)
+    def list_contacts(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Contacts", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_contact(self, guid):
         return self._get_one("Contacts", guid)
@@ -212,8 +213,8 @@ class AccountingAPI:
     # Contact groups (and their membership)
     # ------------------------------------------------------------------
 
-    def list_contact_groups(self, where=None, order=None):
-        return self._list("ContactGroups", where=where, order=order)
+    def list_contact_groups(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("ContactGroups", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_contact_group(self, guid):
         return self._get_one("ContactGroups", guid)
@@ -234,8 +235,8 @@ class AccountingAPI:
     # Credit notes (allocate to an invoice; PDF)
     # ------------------------------------------------------------------
 
-    def list_credit_notes(self, where=None, order=None):
-        return self._list("CreditNotes", where=where, order=order)
+    def list_credit_notes(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("CreditNotes", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_credit_note(self, guid):
         return self._get_one("CreditNotes", guid)
@@ -256,8 +257,8 @@ class AccountingAPI:
     # Currencies
     # ------------------------------------------------------------------
 
-    def list_currencies(self):
-        return self._list("Currencies")
+    def list_currencies(self, all_pages=False, limit=None):
+        return self._list("Currencies", all_pages=all_pages, limit=limit)
 
     def create_currency(self, body):
         return self._create("Currencies", body)
@@ -266,8 +267,8 @@ class AccountingAPI:
     # Employees (accounting-side, not Payroll)
     # ------------------------------------------------------------------
 
-    def list_employees(self, where=None, order=None):
-        return self._list("Employees", where=where, order=order)
+    def list_employees(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Employees", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_employee(self, guid):
         return self._get_one("Employees", guid)
@@ -282,8 +283,8 @@ class AccountingAPI:
     # Invoices (email, online URL, PDF)
     # ------------------------------------------------------------------
 
-    def list_invoices(self, where=None, order=None):
-        return self._list("Invoices", where=where, order=order)
+    def list_invoices(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Invoices", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_invoice(self, guid):
         return self._get_one("Invoices", guid)
@@ -308,8 +309,8 @@ class AccountingAPI:
     # Items
     # ------------------------------------------------------------------
 
-    def list_items(self, where=None, order=None):
-        return self._list("Items", where=where, order=order)
+    def list_items(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Items", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_item(self, guid):
         return self._get_one("Items", guid)
@@ -327,20 +328,29 @@ class AccountingAPI:
     # Journals (read-only; paged by offset = last JournalNumber, not page)
     # ------------------------------------------------------------------
 
-    def list_journals(self, offset=None):
-        """Page journals via the trailing JournalNumber offset (not the page param)."""
+    def list_journals(self, offset=None, all_pages=False, limit=None):
+        """Page journals via the trailing JournalNumber offset (not the page param).
+
+        First batch only by default; all_pages walks every batch to the end, and
+        limit caps the total records (paging as needed, then truncating).
+        """
+        from crude_xero.client import PAGE_SIZE
         results = []
         cursor = offset
         while True:
             params = {"offset": cursor} if cursor is not None else None
             chunk = _extract_list(self.session._get(BASE, "Journals", params=params))
             results.extend(chunk)
-            if len(chunk) < 100:
+            if limit is not None and len(results) >= limit:
+                break
+            if len(chunk) < PAGE_SIZE:
                 break
             cursor = chunk[-1].get("JournalNumber")
             if cursor is None:
                 break
-        return results
+            if limit is None and not all_pages:
+                break
+        return results[:limit] if limit is not None else results
 
     def get_journal(self, guid):
         return self._get_one("Journals", guid)
@@ -349,8 +359,8 @@ class AccountingAPI:
     # Linked transactions
     # ------------------------------------------------------------------
 
-    def list_linked_transactions(self, **params):
-        return self._list("LinkedTransactions", **params)
+    def list_linked_transactions(self, all_pages=False, limit=None, **params):
+        return self._list("LinkedTransactions", all_pages=all_pages, limit=limit, **params)
 
     def get_linked_transaction(self, guid):
         return self._get_one("LinkedTransactions", guid)
@@ -368,8 +378,8 @@ class AccountingAPI:
     # Manual journals
     # ------------------------------------------------------------------
 
-    def list_manual_journals(self, where=None, order=None):
-        return self._list("ManualJournals", where=where, order=order)
+    def list_manual_journals(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("ManualJournals", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_manual_journal(self, guid):
         return self._get_one("ManualJournals", guid)
@@ -391,8 +401,8 @@ class AccountingAPI:
     # Overpayments (allocate to an invoice)
     # ------------------------------------------------------------------
 
-    def list_overpayments(self, where=None, order=None):
-        return self._list("Overpayments", where=where, order=order)
+    def list_overpayments(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Overpayments", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_overpayment(self, guid):
         return self._get_one("Overpayments", guid)
@@ -404,8 +414,8 @@ class AccountingAPI:
     # Payments (delete via Status=DELETED)
     # ------------------------------------------------------------------
 
-    def list_payments(self, where=None, order=None):
-        return self._list("Payments", where=where, order=order)
+    def list_payments(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Payments", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_payment(self, guid):
         return self._get_one("Payments", guid)
@@ -420,8 +430,8 @@ class AccountingAPI:
     # Payment services
     # ------------------------------------------------------------------
 
-    def list_payment_services(self):
-        return self._list("PaymentServices")
+    def list_payment_services(self, all_pages=False, limit=None):
+        return self._list("PaymentServices", all_pages=all_pages, limit=limit)
 
     def create_payment_service(self, body):
         return self._create("PaymentServices", body)
@@ -430,8 +440,8 @@ class AccountingAPI:
     # Prepayments (allocate to an invoice)
     # ------------------------------------------------------------------
 
-    def list_prepayments(self, where=None, order=None):
-        return self._list("Prepayments", where=where, order=order)
+    def list_prepayments(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Prepayments", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_prepayment(self, guid):
         return self._get_one("Prepayments", guid)
@@ -443,8 +453,8 @@ class AccountingAPI:
     # Purchase orders (PDF)
     # ------------------------------------------------------------------
 
-    def list_purchase_orders(self, where=None, order=None):
-        return self._list("PurchaseOrders", where=where, order=order)
+    def list_purchase_orders(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("PurchaseOrders", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_purchase_order(self, guid):
         return self._get_one("PurchaseOrders", guid)
@@ -462,8 +472,8 @@ class AccountingAPI:
     # Quotes (PDF)
     # ------------------------------------------------------------------
 
-    def list_quotes(self, where=None, order=None):
-        return self._list("Quotes", where=where, order=order)
+    def list_quotes(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Quotes", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_quote(self, guid):
         return self._get_one("Quotes", guid)
@@ -481,8 +491,8 @@ class AccountingAPI:
     # Receipts
     # ------------------------------------------------------------------
 
-    def list_receipts(self, where=None, order=None):
-        return self._list("Receipts", where=where, order=order)
+    def list_receipts(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Receipts", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_receipt(self, guid):
         return self._get_one("Receipts", guid)
@@ -497,8 +507,8 @@ class AccountingAPI:
     # Repeating invoices
     # ------------------------------------------------------------------
 
-    def list_repeating_invoices(self, where=None, order=None):
-        return self._list("RepeatingInvoices", where=where, order=order)
+    def list_repeating_invoices(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("RepeatingInvoices", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_repeating_invoice(self, guid):
         return self._get_one("RepeatingInvoices", guid)
@@ -527,8 +537,8 @@ class AccountingAPI:
     # Tax rates (no GUID; update/soft-delete by POSTing the whole object)
     # ------------------------------------------------------------------
 
-    def list_tax_rates(self, where=None, order=None):
-        return self._list("TaxRates", where=where, order=order)
+    def list_tax_rates(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("TaxRates", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def create_tax_rate(self, body):
         return self._create("TaxRates", body)
@@ -540,8 +550,8 @@ class AccountingAPI:
     # Tracking categories (and their options)
     # ------------------------------------------------------------------
 
-    def list_tracking_categories(self, where=None, order=None):
-        return self._list("TrackingCategories", where=where, order=order)
+    def list_tracking_categories(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("TrackingCategories", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_tracking_category(self, guid):
         return self._get_one("TrackingCategories", guid)
@@ -570,8 +580,8 @@ class AccountingAPI:
     # Users (read-only)
     # ------------------------------------------------------------------
 
-    def list_users(self, where=None, order=None):
-        return self._list("Users", where=where, order=order)
+    def list_users(self, where=None, order=None, all_pages=False, limit=None):
+        return self._list("Users", where=where, order=order, all_pages=all_pages, limit=limit)
 
     def get_user(self, guid):
         return self._get_one("Users", guid)
