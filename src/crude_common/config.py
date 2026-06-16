@@ -62,6 +62,30 @@ def read_config(config_path: Path) -> dict:
             return tomli.load(f)
 
 
+def write_config(config_path: Path, config: dict) -> None:
+    """Write the whole config back atomically (temp file in the same dir, os.replace).
+
+    For rare, user-initiated config mutations (e.g. pinning a default tenant). It
+    is not for hot-path token rotation, which lives in its own durable side file.
+    """
+    import tempfile
+
+    import tomli_w
+
+    config_path = Path(config_path)
+    fd, tmp = tempfile.mkstemp(dir=str(config_path.parent), suffix=".tmp")
+    try:
+        with os.fdopen(fd, "wb") as f:
+            tomli_w.dump(config, f)
+        os.replace(tmp, config_path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def resolve_account(config: dict, site: str, name: Optional[str]) -> dict:
     """Return the credential fields for one account of ``site``.
 
