@@ -16,7 +16,6 @@ import fcntl
 import json
 import os
 import secrets
-import tempfile
 import time
 import webbrowser
 from datetime import datetime
@@ -26,6 +25,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
+from crude_common.statestore import atomic_write, state_path
 from crude_xero.client import XeroAuthError
 
 AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
@@ -215,12 +215,10 @@ def token_store_path(account) -> Path:
 
     A rotating OAuth token is XDG *state*: it persists across restarts but is
     neither config (user-authored) nor cache (safe to delete — losing it costs a
-    browser re-consent). It lives in ``$XDG_STATE_HOME/crude`` (default
-    ``~/.local/state/crude``), independent of where ``config.toml`` was found, so
-    a dev-tree config never lands a token beside the source.
+    browser re-consent); see ``crude_common.statestore``. The default account
+    keeps ``xero_token.json``; a named account uses ``xero_token_<account>.json``.
     """
-    base = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-    return Path(base) / "crude" / ("xero_token.json" if not account else f"xero_token_{account}.json")
+    return state_path("xero_token.json" if not account else f"xero_token_{account}.json")
 
 
 def _seed_expiry(timestamp):
@@ -276,23 +274,8 @@ def load_tokens(account, xero_section) -> dict | None:
 
 
 def save_tokens(account, tokens) -> None:
-    """Persist a token set atomically (temp file + fsync + os.replace, mode 0600)."""
-    path = token_store_path(account)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".xero_token_", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(tokens, f, indent=2)
-            f.flush()
-            os.fsync(f.fileno())
-        os.chmod(tmp, 0o600)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
+    """Persist a token set atomically (mode 0600) to the durable side file."""
+    atomic_write(token_store_path(account), json.dumps(tokens, indent=2))
 
 
 @contextlib.contextmanager
