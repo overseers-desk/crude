@@ -1,3 +1,18 @@
+crude (1.1.2) unstable; urgency=medium
+
+  * crude-rezdy: full CRUD over the Rezdy Supplier API. Create, update and
+    delete products and availability sessions; manage bookings, customers,
+    extras and pickup lists; assign products to categories/rates and sessions
+    to resources; manifest check-in; voucher/company reads. Previously the
+    crude-rezdy client was read-only.
+  * crude-atdw: add `listing create` (POST /api/listings) to create a listing
+    from a JSON object; it starts as a draft until submitted.
+  * crude-skal: add the benefit resource (the global Skål benefits register).
+  * install-claude-command now advertises the new crude-rezdy write verbs and
+    crude-atdw listing create.
+
+ -- Weiwu Zhang <a@colourful.land>  Tue, 16 Jun 2026 00:00:00 +0000
+
 crude (1.1.1) unstable; urgency=medium
 
   * Add crude-sonas: command-line client for Sonas wedding-venue software.

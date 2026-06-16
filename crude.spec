@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.1.1
+Version:        1.1.2
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -78,6 +78,15 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Tue Jun 16 2026 Weiwu Zhang <a@colourful.land> - 1.1.2-1
+- crude-rezdy: full CRUD over the Rezdy Supplier API (products, availability,
+  bookings, customers, extras, pickup lists; category/rate/resource assignment;
+  manifest check-in; voucher/company reads). Previously read-only.
+- crude-atdw: add listing create (POST /api/listings); new listings start as a
+  draft until submitted.
+- crude-skal: add the benefit resource (the global Skål benefits register).
+- install-claude-command advertises the new write verbs.
+
 * Thu Jun 11 2026 Weiwu Zhang <a@colourful.land> - 1.1.1-1
 - Add crude-sonas: command-line client for Sonas wedding-venue software.
   Core enquiry verbs cover event lifecycle, guests, timelines, notes,
