@@ -84,27 +84,34 @@ def test_rezdy_paginate(crude_config):
 
 
 @pytest.mark.live
-def test_rezdy_company_get(crude_config):
-    # Exercises the generalized GET transport (_one) against a read-only resource.
+def test_rezdy_lists_vouchers(crude_config):
+    # Read-only; the API does not allow creating these (see docs/rezdy.md). The
+    # endpoint is a search needing a (possibly empty) term, exercised here.
     if not crude_config.get("rezdy", {}).get("api_key"):
         pytest.skip("no [rezdy] api_key in config")
     from crude_rezdy.cli import _make_client
 
     client = _make_client(crude_config)
-    company = client.get_company()
-    assert isinstance(company, dict)
+    items = client.list_vouchers(search="", limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("code")
 
 
 @pytest.mark.live
-def test_rezdy_lists_vouchers(crude_config):
-    # Read-only; the API does not allow creating these (see docs/rezdy.md).
+def test_rezdy_corrected_read_endpoints(crude_config):
+    # These paths differ from the obvious guess (singular /extra, /pickups,
+    # /rates/search, /resources); each returning a list proves the path is right.
     if not crude_config.get("rezdy", {}).get("api_key"):
         pytest.skip("no [rezdy] api_key in config")
     from crude_rezdy.cli import _make_client
 
     client = _make_client(crude_config)
-    items = client.list_vouchers(limit=1)
-    assert isinstance(items, list)
+    assert isinstance(client.list_extras(), list)
+    assert isinstance(client.list_pickup_lists(), list)
+    assert isinstance(client.list_rates(), list)
+    assert isinstance(client.list_categories(limit=1), list)
+    assert isinstance(client.list_resources(limit=1), list)
 
 
 @pytest.mark.live

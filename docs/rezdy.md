@@ -31,16 +31,18 @@ Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging)
 | `availability` | list, create, update, delete, batch |
 | `booking` | list, cancellations, get, quote, create, update, cancel |
 | `customer` | list, get, create, delete |
-| `extra` | list, get, create, update, delete |
-| `pickup-list` | list, get, create, update, delete |
+| `extra` | list *(`--search`)*, get, create, update, delete |
+| `pickup-list` | list *(`--search`)*, get, create, update, delete |
 | `category` | list, get, products, add-product, remove-product |
-| `rate` | list, get, add-product, remove-product |
-| `resource` | list, sessions, add-session, remove-session |
-| `manifest` | order-status, order-checkin, order-uncheck, session-status, session-checkin, session-uncheck |
-| `voucher` | list, get *(read-only)* |
-| `company` | get *(read-only)* |
+| `rate` | list *(`--name`, `--product`)*, get, add-product, remove-product |
+| `resource` | list, sessions, for-session, add-session, remove-session |
+| `manifest` | order-status, order-set, order-remove, session-status, session-set, session-remove |
+| `voucher` | list *(`--search`; empty returns all)*, get *(by code, read-only)* |
+| `company` | get *(by alias)*, find *(by name)* |
 
 `category` and `rate` writes assign or unassign a product to an existing category/rate; the categories and rates themselves are read-only in the API. `resource` writes assign or unassign a session.
+
+A few paths are not the obvious guess and follow the spec: a session is mutated by product code and local start time (`availability update --product P1 --start-local "..."`), not a session id; `manifest *-set` toggles check-in (`--checkin/--no-checkin`) for an order-session or a whole session, keyed by `--product` and `--start`/`--start-local`; `rate list` and the search-based `extra`/`pickup-list` lists take their documented query terms rather than offset paging.
 
 ## 4. Write conventions
 

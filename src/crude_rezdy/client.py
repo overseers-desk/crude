@@ -3,11 +3,17 @@
 The transport (`_request`) carries every verb; `_list`/`_one`/`_write` wrap it for
 the three response shapes. Rezdy wraps each body as
 ``{"requestStatus": {...}, "<resource>": <payload>}``, so `_payload` pulls the
-single non-status key by position rather than by a hardcoded name — one fewer
-thing to guess wrong for the less-travelled resources.
+single non-status key by position rather than by a hardcoded name.
+
+Paths and parameters here follow the published Supplier API OpenAPI document
+(developers.rezdy.com/rezdyapi/index-supplier.html); the less-obvious ones
+(singular ``/extra``, ``/rates/search``, availability keyed by product and
+startTimeLocal, the manifest check-in pair) are taken from that spec, not assumed.
 """
 
 from __future__ import annotations
+
+from urllib.parse import quote
 
 import requests
 
@@ -27,6 +33,11 @@ def _payload(data):
     if len(rest) == 1:
         return data[rest[0]]
     return data
+
+
+def _seg(value: str) -> str:
+    """URL-encode a path segment (startTimeLocal carries spaces and colons)."""
+    return quote(str(value), safe="")
 
 
 class RezdyClient:
@@ -51,7 +62,7 @@ class RezdyClient:
         in the body (a success flag plus an error message). A write that returns no
         body (e.g. 204 on DELETE) yields an empty dict.
         """
-        params = dict(params or {})
+        params = {k: v for k, v in (params or {}).items() if v is not None}
         params["apiKey"] = self.api_key
         r = self.session.request(
             method, f"{self.base_url}/v1{path}", params=params,
@@ -110,14 +121,14 @@ class RezdyClient:
     def add_product_image(self, product_code: str, body: dict) -> dict:
         return self._write("POST", f"/products/{product_code}/images", body)
 
-    def delete_product_image(self, product_code: str, image_id: str):
-        return self._write("DELETE", f"/products/{product_code}/images/{image_id}")
+    def delete_product_image(self, product_code: str, media_id: str):
+        return self._write("DELETE", f"/products/{product_code}/images/{media_id}")
 
     def get_product_pickups(self, product_code: str) -> list:
         return self._list(f"/products/{product_code}/pickups")
 
     # ------------------------------------------------------------------
-    # Availability (sessions)
+    # Availability (sessions). Mutation keys a session by product + startTimeLocal.
     # ------------------------------------------------------------------
 
     def list_availability(
@@ -145,11 +156,18 @@ class RezdyClient:
     def create_availability(self, body: dict) -> dict:
         return self._write("POST", "/availability", body)
 
-    def update_availability(self, session_id: str, body: dict) -> dict:
-        return self._write("PUT", f"/availability/{session_id}", body)
+    def update_availability(self, product_code: str, start_time_local: str, body: dict) -> dict:
+        return self._write(
+            "PUT",
+            f"/availability/product/{product_code}/startTimeLocal/{_seg(start_time_local)}",
+            body,
+        )
 
-    def delete_availability(self, session_id: str):
-        return self._write("DELETE", f"/availability/{session_id}")
+    def delete_availability(self, product_code: str, start_time_local: str):
+        return self._write(
+            "DELETE",
+            f"/availability/product/{product_code}/startTimeLocal/{_seg(start_time_local)}",
+        )
 
     def batch_availability(self, body: dict) -> dict:
         return self._write("POST", "/availability/batch", body)
@@ -235,42 +253,42 @@ class RezdyClient:
         return self._write("DELETE", f"/customers/{customer_id}")
 
     # ------------------------------------------------------------------
-    # Extras
+    # Extras (note the singular path; the search term is required)
     # ------------------------------------------------------------------
 
-    def list_extras(self, limit: int = 100, offset: int = 0) -> list:
-        return self._list("/extras", {"limit": limit, "offset": offset})
+    def list_extras(self, search: str = "") -> list:
+        return self._list("/extra", {"searchString": search})
 
     def get_extra(self, extra_id: str) -> dict:
-        return self._one(f"/extras/{extra_id}")
+        return self._one(f"/extra/{extra_id}")
 
     def create_extra(self, body: dict) -> dict:
-        return self._write("POST", "/extras", body)
+        return self._write("POST", "/extra", body)
 
     def update_extra(self, extra_id: str, body: dict) -> dict:
-        return self._write("PUT", f"/extras/{extra_id}", body)
+        return self._write("PUT", f"/extra/{extra_id}", body)
 
     def delete_extra(self, extra_id: str):
-        return self._write("DELETE", f"/extras/{extra_id}")
+        return self._write("DELETE", f"/extra/{extra_id}")
 
     # ------------------------------------------------------------------
-    # Pickup lists
+    # Pickup lists (path /pickups)
     # ------------------------------------------------------------------
 
-    def list_pickup_lists(self, limit: int = 100, offset: int = 0) -> list:
-        return self._list("/pickup-lists", {"limit": limit, "offset": offset})
+    def list_pickup_lists(self, search: str = "") -> list:
+        return self._list("/pickups", {"searchString": search})
 
     def get_pickup_list(self, pickup_list_id: str) -> dict:
-        return self._one(f"/pickup-lists/{pickup_list_id}")
+        return self._one(f"/pickups/{pickup_list_id}")
 
     def create_pickup_list(self, body: dict) -> dict:
-        return self._write("POST", "/pickup-lists", body)
+        return self._write("POST", "/pickups", body)
 
     def update_pickup_list(self, pickup_list_id: str, body: dict) -> dict:
-        return self._write("PUT", f"/pickup-lists/{pickup_list_id}", body)
+        return self._write("PUT", f"/pickups/{pickup_list_id}", body)
 
     def delete_pickup_list(self, pickup_list_id: str):
-        return self._write("DELETE", f"/pickup-lists/{pickup_list_id}")
+        return self._write("DELETE", f"/pickups/{pickup_list_id}")
 
     # ------------------------------------------------------------------
     # Categories
@@ -292,11 +310,11 @@ class RezdyClient:
         return self._write("DELETE", f"/categories/{category_id}/products/{product_code}")
 
     # ------------------------------------------------------------------
-    # Rates
+    # Rates (list is /rates/search)
     # ------------------------------------------------------------------
 
-    def list_rates(self, limit: int = 100, offset: int = 0) -> list:
-        return self._list("/rates", {"limit": limit, "offset": offset})
+    def list_rates(self, rate_name: str = None, product_code: str = None) -> list:
+        return self._list("/rates/search", {"rateName": rate_name, "productCode": product_code})
 
     def get_rate(self, rate_id: str) -> dict:
         return self._one(f"/rates/{rate_id}")
@@ -317,52 +335,79 @@ class RezdyClient:
     def list_resource_sessions(self, resource_id: str) -> list:
         return self._list(f"/resources/{resource_id}/sessions")
 
-    def list_session_resources(self, session_id: str) -> list:
-        return self._list(f"/resources/sessions/{session_id}")
+    def list_session_resources(self, session_id: str = None, product_code: str = None,
+                               start_time: str = None, start_time_local: str = None,
+                               limit: int = 100, offset: int = 0) -> list:
+        """Resources assigned to a session, found by session id or product + start time."""
+        return self._list("/resources/session", {
+            "sessionId": session_id, "productCode": product_code,
+            "startTime": start_time, "startTimeLocal": start_time_local,
+            "limit": limit, "offset": offset,
+        })
 
-    def add_session_to_resource(self, resource_id: str, session_id: str):
-        return self._write("PUT", f"/resources/{resource_id}/sessions/{session_id}")
+    def add_session_to_resource(self, resource_id: str, session_id: str, resource_order: int = None):
+        return self._write("PUT", f"/resources/{resource_id}/session/{session_id}",
+                           params={"resourceOrder": resource_order})
 
     def remove_session_from_resource(self, resource_id: str, session_id: str):
-        return self._write("DELETE", f"/resources/{resource_id}/sessions/{session_id}")
+        return self._write("DELETE", f"/resources/{resource_id}/session/{session_id}")
 
     # ------------------------------------------------------------------
-    # Manifest (check-in)
+    # Manifest (check-in). A session is keyed by productCode + start time;
+    # the order variant also takes an orderNumber. checkin is the PUT toggle.
     # ------------------------------------------------------------------
 
-    def get_order_checkin(self, order_number: str) -> dict:
-        return self._one(f"/manifest/checkin/{order_number}")
+    @staticmethod
+    def _checkin_params(product_code, order_number=None, start_time=None,
+                        start_time_local=None, checkin=None) -> dict:
+        params = {"productCode": product_code, "startTime": start_time,
+                  "startTimeLocal": start_time_local}
+        if order_number is not None:
+            params["orderNumber"] = order_number
+        if checkin is not None:
+            params["checkin"] = "true" if checkin else "false"
+        return params
 
-    def checkin_order(self, order_number: str, body: dict = None) -> dict:
-        return self._write("PUT", f"/manifest/checkin/{order_number}", body)
+    def order_checkin_status(self, product_code, order_number=None, start_time=None, start_time_local=None) -> dict:
+        return self._one("/manifest/checkinOrderSession",
+                         self._checkin_params(product_code, order_number, start_time, start_time_local))
 
-    def uncheck_order(self, order_number: str):
-        return self._write("DELETE", f"/manifest/checkin/{order_number}")
+    def set_order_checkin(self, product_code, order_number=None, start_time=None, start_time_local=None, checkin=True):
+        return self._write("PUT", "/manifest/checkinOrderSession",
+                          params=self._checkin_params(product_code, order_number, start_time, start_time_local, checkin))
 
-    def get_session_checkin(self, session_id: str) -> dict:
-        return self._one(f"/manifest/checkin/session/{session_id}")
+    def remove_order_checkin(self, order_number, product_code, start_time=None, start_time_local=None):
+        return self._write("DELETE", "/manifest/checkinOrderSession",
+                          params=self._checkin_params(product_code, order_number, start_time, start_time_local))
 
-    def checkin_session(self, session_id: str, body: dict = None) -> dict:
-        return self._write("PUT", f"/manifest/checkin/session/{session_id}", body)
+    def session_checkin_status(self, product_code, start_time=None, start_time_local=None) -> dict:
+        return self._one("/manifest/checkinSession",
+                         self._checkin_params(product_code, None, start_time, start_time_local))
 
-    def uncheck_session(self, session_id: str):
-        return self._write("DELETE", f"/manifest/checkin/session/{session_id}")
+    def set_session_checkin(self, product_code, start_time=None, start_time_local=None, checkin=True):
+        return self._write("PUT", "/manifest/checkinSession",
+                          params=self._checkin_params(product_code, None, start_time, start_time_local, checkin))
+
+    def remove_session_checkin(self, product_code, start_time=None, start_time_local=None):
+        return self._write("DELETE", "/manifest/checkinSession",
+                          params=self._checkin_params(product_code, None, start_time, start_time_local))
 
     # ------------------------------------------------------------------
-    # Vouchers (read-only) and companies (read-only)
+    # Vouchers (read-only, by code) and companies (read-only, by alias or name)
     # ------------------------------------------------------------------
 
-    def list_vouchers(self, limit: int = 100, offset: int = 0) -> list:
-        return self._list("/vouchers", {"limit": limit, "offset": offset})
+    def list_vouchers(self, search: str = "", limit: int = 100, offset: int = 0) -> list:
+        """Search vouchers; an empty search returns all."""
+        return self._list("/vouchers", {"search": search, "limit": limit, "offset": offset})
 
-    def get_voucher(self, voucher_id: str) -> dict:
-        return self._one(f"/vouchers/{voucher_id}")
+    def get_voucher(self, voucher_code: str) -> dict:
+        return self._one(f"/vouchers/{voucher_code}")
 
-    def get_company(self, company_alias: str = None) -> dict:
-        """Get the caller's company, or a named one by alias."""
-        if company_alias:
-            return self._one(f"/companies/{company_alias}")
-        return self._one("/companies")
+    def get_company_by_alias(self, company_alias: str) -> dict:
+        return self._one(f"/companies/alias/{company_alias}")
+
+    def get_company_by_name(self, company_name: str) -> dict:
+        return self._one(f"/companies/name/{_seg(company_name)}")
 
     # ------------------------------------------------------------------
     # Name resolution (id/code -> human name), cached per kind
