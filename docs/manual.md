@@ -32,9 +32,9 @@ username = "your-username"
 password = "your-password"
 ```
 
-Credentials are never hard-coded or passed as flags. The JWT token is not stored in this file; it is cached to a temporary file (`crude_atdw_token` in the system temp directory) by the `login` command and on automatic re-authentication.
+Credentials are never hard-coded or passed as flags. The JWT token is not stored in this file; it is cached to a durable file under `$XDG_STATE_HOME/crude` (default `~/.local/state/crude/atdw_token`), written atomically with mode `0600`, by the `login` command and on automatic re-authentication. The token survives a reboot; if it is lost, the next command re-authenticates silently from the stored credentials.
 
-A second ATDW account can live in a `[atdw.<name>]` subtable and is selected with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`); see the repository `README.md` for the shared multi-account model. Each account caches its own token: the default account keeps the bare `crude_atdw_token` filename, a named account uses `crude_atdw_token_<name>`.
+A second ATDW account can live in a `[atdw.<name>]` subtable and is selected with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`); see the repository `README.md` for the shared multi-account model. Each account caches its own token: the default account keeps the bare `atdw_token` filename, a named account uses `atdw_token_<name>`.
 
 ## Auto-login
 
@@ -48,7 +48,7 @@ If no cached token is present, or if an API call returns 401 (token expired), th
 
 ### `crude-atdw login`
 
-Reads `username` and `password` from the `[atdw]` section, performs the 3-step OAuth2 implicit grant flow against `oauth.atdw-online.com.au`, and caches the resulting JWT to the temp file.
+Reads `username` and `password` from the `[atdw]` section, performs the 3-step OAuth2 implicit grant flow against `oauth.atdw-online.com.au`, and caches the resulting JWT to the durable file under `~/.local/state/crude`.
 
 ```
 crude-atdw login

@@ -2,26 +2,25 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
 import requests
 
 from crude_common.config import account as _account
+from crude_common.statestore import atomic_write, state_path
 
 API_BASE = "https://australia.skal.org"
 AU_NC_ID = 1000
 
 
 def session_path() -> Path:
-    """Temp file caching the session cookie, namespaced by the selected account.
+    """The durable session-cookie cache file, namespaced by the selected account.
 
-    The default account keeps the bare ``crude_skal_session`` name; a named
-    account gets a suffix so two accounts never share a session.
+    Lives under ``$XDG_STATE_HOME/crude`` (see ``crude_common.statestore``). The
+    default account keeps the bare ``skal_session`` name; a named account gets a
+    suffix so two accounts never share a session.
     """
-    name = "crude_skal_session"
-    a = _account()
-    return Path(tempfile.gettempdir()) / (f"{name}_{a}" if a else name)
+    return state_path("skal_session", _account())
 
 
 class SkalClient:
@@ -35,9 +34,9 @@ class SkalClient:
     # ------------------------------------------------------------------
 
     def _update_session(self, session_id: str) -> None:
-        """Replace the session cookie and persist to temp file."""
+        """Replace the session cookie and persist it durably."""
         self.session.cookies.set("session_id", session_id, domain="australia.skal.org")
-        session_path().write_text(session_id)
+        atomic_write(session_path(), session_id)
 
     def _try_refresh(self) -> bool:
         """Attempt to re-authenticate using stored credentials. Returns True on success."""

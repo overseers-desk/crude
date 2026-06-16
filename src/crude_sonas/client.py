@@ -8,8 +8,9 @@ fetch pattern are all documented in ``docs/sonas.md`` (the single source); this
 module implements them.
 
 Reads are DDP subscriptions (collect documents until ``ready``); writes are DDP
-method calls. Auth caches the Meteor resume token in a temp file and resumes from
-it, falling back to a full password+fingerprint login.
+method calls. Auth caches the Meteor resume token in a durable side file (see
+``crude_common.statestore``) and resumes from it, falling back to a full
+password+fingerprint login.
 """
 
 from __future__ import annotations
@@ -19,13 +20,13 @@ import os
 import socket
 import ssl
 import struct
-import tempfile
 import time
 import json as _json
 from datetime import datetime, timezone
 from pathlib import Path
 
 from crude_common.config import account as _account
+from crude_common.statestore import atomic_write, state_path
 
 HOST, PORT, WS_PATH = "app.sonas.events", 443, "/websocket"
 ORIGIN = "https://app.sonas.events"
@@ -230,10 +231,14 @@ def date_str(value) -> str:
 # ----------------------------------------------------------------------
 
 def token_path() -> Path:
-    """Temp file caching the Meteor resume token, namespaced by selected account."""
-    name = "crude_sonas_token"
-    a = _account()
-    return Path(tempfile.gettempdir()) / (f"{name}_{a}" if a else name)
+    """Durable side file caching the Meteor resume token, namespaced by account.
+
+    Lives under ``$XDG_STATE_HOME/crude`` (see ``crude_common.statestore``) so a
+    reboot does not discard it — losing the resume token forces a fresh login,
+    which from an unseen device or network re-triggers the one-time
+    device-verification email (docs/sonas.md §3).
+    """
+    return state_path("sonas_token", _account())
 
 
 # Enums for human-readable output (see docs/sonas.md for the full tables).
@@ -279,7 +284,7 @@ class SonasClient:
             res = sonas_login(self.conn, self.user, self.digest, self.fingerprint)
             token = res.get("token") or ""
             if token:
-                cache.write_text(token)
+                atomic_write(cache, token)
         self._token = token
         tenant = self.tenant or self._discover_tenant()
         ddp_call(self.conn, "selectTenant", [{"docId": tenant, "loginToken": self._token}])

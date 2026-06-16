@@ -16,6 +16,7 @@ from crude_common.config import (
     read_config as _read_config,
     resolve_account as _resolve_account,
 )
+from crude_common.statestore import atomic_write
 
 app = typer.Typer(help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.")
 listing_app = typer.Typer(help="ATDW listings.")
@@ -44,7 +45,7 @@ def _get_token(config: dict) -> str:
         except Exception as e:
             typer.echo(f"Auto-login failed: {e}", err=True)
             raise typer.Exit(1)
-        cache.write_text(token)
+        atomic_write(cache, token)
         return token
     typer.echo(
         "No cached token and no credentials found. Run `crude-atdw login` first.",
@@ -88,7 +89,7 @@ def login():
 
     from crude_atdw.client import token_path
     cache = token_path()
-    cache.write_text(token)
+    atomic_write(cache, token)
     typer.echo(f"Login successful. Token cached in {cache}")
     typer.echo(f"Token (first 40 chars): {token[:40]}...")
 

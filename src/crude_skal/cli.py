@@ -16,6 +16,7 @@ from crude_common.config import (
     resolve_account as _resolve_account,
     s as _s,
 )
+from crude_common.statestore import atomic_write
 
 app = typer.Typer(help="crude-skal — Skål Australia member portal.")
 member_app = typer.Typer(help="Skål members.")
@@ -50,7 +51,7 @@ def _get_session(config: dict) -> str:
     skal = _resolve_account(config, "skal", _account())
     session_id = skal.get("session_id", "")
     if session_id:
-        cache.write_text(session_id)
+        atomic_write(cache, session_id)
         return session_id
 
     username = skal.get("username")
@@ -63,7 +64,7 @@ def _get_session(config: dict) -> str:
         except Exception as e:
             typer.echo(f"Auto-login failed: {e}", err=True)
             raise typer.Exit(1)
-        cache.write_text(session_id)
+        atomic_write(cache, session_id)
         return session_id
 
     typer.echo(
@@ -123,7 +124,7 @@ def login():
 
     from crude_skal.client import session_path
     cache = session_path()
-    cache.write_text(session_id)
+    atomic_write(cache, session_id)
 
     # Write back to config.toml so the session persists across installs, into the
     # selected account's subtable when one is named, else the bare [skal] section.

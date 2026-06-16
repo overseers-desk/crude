@@ -73,14 +73,17 @@ built from `added`/`changed`/`removed` messages (minimongo-style).
 
 Login lives in `auth.py` and `SonasClient._ensure` (`client.py`). At a high
 level it is a customised Meteor accounts-password login carrying a device
-fingerprint, with the Meteor resume token cached in a temp file and reused. Read
-the code for the wire details.
+fingerprint, with the Meteor resume token cached under `$XDG_STATE_HOME/crude`
+(default `~/.local/state/crude/sonas_token`, mode `0600`) and reused. Read the
+code for the wire details.
 
 Operational note: a login from a device
 fingerprint or network the server has not seen returns a `verification-error` and
 emails a one-time link; opening it once trusts that device, after which logins
 resume silently. `sonas_login` detects this and prints guidance. A
-`too-many-requests` rate limiter also exists, which the cached resume token avoids.
+`too-many-requests` rate limiter also exists, which the cached resume token
+avoids. The cache is durable, so a reboot does not discard the resume token and
+re-trigger that verification email.
 
 ---
 
