@@ -1,8 +1,9 @@
 """Typer CLI for the Rezdy Supplier API: crude-rezdy."""
 
 import json
+import sys
 from datetime import datetime, time, timezone as _utc
-from typing import Optional
+from typing import Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
@@ -18,13 +19,31 @@ from crude_common.config import (
     s as _s,
 )
 
-app = typer.Typer(help="crude-rezdy — Rezdy Supplier API (products, availability, bookings).")
+app = typer.Typer(help="crude-rezdy — Rezdy Supplier API (products, availability, bookings, and more).")
 product_app = typer.Typer(help="Rezdy products.")
 availability_app = typer.Typer(help="Rezdy availability (sessions).")
 booking_app = typer.Typer(help="Rezdy bookings.")
+customer_app = typer.Typer(help="Rezdy customers.")
+extra_app = typer.Typer(help="Rezdy extras (add-ons).")
+pickup_app = typer.Typer(help="Rezdy pickup lists.")
+category_app = typer.Typer(help="Rezdy categories (and their product membership).")
+rate_app = typer.Typer(help="Rezdy rates (and their product membership).")
+resource_app = typer.Typer(help="Rezdy resources (and their session assignment).")
+manifest_app = typer.Typer(help="Rezdy manifest / check-in.")
+voucher_app = typer.Typer(help="Rezdy vouchers (read-only).")
+company_app = typer.Typer(help="Rezdy company (read-only).")
 app.add_typer(product_app, name="product")
 app.add_typer(availability_app, name="availability")
 app.add_typer(booking_app, name="booking")
+app.add_typer(customer_app, name="customer")
+app.add_typer(extra_app, name="extra")
+app.add_typer(pickup_app, name="pickup-list")
+app.add_typer(category_app, name="category")
+app.add_typer(rate_app, name="rate")
+app.add_typer(resource_app, name="resource")
+app.add_typer(manifest_app, name="manifest")
+app.add_typer(voucher_app, name="voucher")
+app.add_typer(company_app, name="company")
 console = Console()
 
 register_claude_command(app)
@@ -68,6 +87,11 @@ def _make_client(config: dict):
     return RezdyClient(api_key, environment=environment)
 
 
+def _client():
+    """The configured rezdy client for the selected account."""
+    return _make_client(_read_config(_find_config()))
+
+
 def _account_timezone(config: dict) -> ZoneInfo:
     """The selected rezdy account's timezone, for the client-side instant filters."""
     return _parse_timezone(_resolve_account(config, "rezdy", _account()))
@@ -87,6 +111,88 @@ def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
         local = datetime(y, m, d, bound.hour, bound.minute, bound.second, tzinfo=tz)
         return local.astimezone(_utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return date_str
+
+
+# ----------------------------------------------------------------------
+# Shared command plumbing
+# ----------------------------------------------------------------------
+
+
+def _read_data(data: Optional[str], file: Optional[str], required: bool = True) -> dict:
+    """Resolve a write body: --data inline JSON, then -f file, then stdin.
+
+    With required False (the update verbs, where typed flags may carry the whole
+    change) an absent body yields an empty dict and stdin is left alone.
+    """
+    if data is not None:
+        raw = data
+    elif file is not None:
+        with open(file, "r") as f:
+            raw = f.read()
+    elif required and not sys.stdin.isatty():
+        raw = sys.stdin.read()
+    else:
+        if required:
+            typer.echo("Error: provide JSON via --data, -f/--file, or stdin.", err=True)
+            raise typer.Exit(1)
+        return {}
+    try:
+        parsed = json.loads(raw)
+    except ValueError as e:
+        typer.echo(f"Error: invalid JSON: {e}", err=True)
+        raise typer.Exit(1)
+    if not isinstance(parsed, dict):
+        typer.echo("Error: JSON body must be an object.", err=True)
+        raise typer.Exit(1)
+    return parsed
+
+
+def _do_write(action: Callable, what: str, *, confirm: Optional[str] = None,
+              yes: bool = False, output_json: bool = False) -> None:
+    """Write command body: confirm if asked, run the action, report the outcome."""
+    if confirm and not yes:
+        typer.confirm(confirm, abort=True)
+    try:
+        result = action()
+    except Exception as e:
+        typer.echo(f"Error: {what}: {e}", err=True)
+        raise typer.Exit(1)
+    if output_json:
+        typer.echo(json.dumps(result if result is not None else {"ok": True}, indent=2, default=str))
+        return
+    typer.echo(f"{what}: done.")
+    if isinstance(result, dict) and result:
+        typer.echo(json.dumps(result, default=str))
+
+
+def _emit_list(items: list, columns: list, what: str, output_json: bool,
+               header_style: str = "bold magenta") -> None:
+    """Render a list of records as a table, or raw JSON with --json.
+
+    `columns` is a list of (header, key) where key is a field name or a callable
+    taking the record.
+    """
+    if output_json:
+        typer.echo(json.dumps(items, indent=2, default=str))
+        return
+    table = Table(show_header=True, header_style=header_style)
+    for header, _ in columns:
+        table.add_column(header)
+    for it in items:
+        row = []
+        for _, key in columns:
+            val = key(it) if callable(key) else it.get(key)
+            row.append(_s(val))
+        table.add_row(*row)
+    console.print(table)
+    typer.echo(f"\n{len(items)} {what}(s) found.")
+
+
+def _emit_record(item: dict, output_json: bool) -> None:
+    if output_json:
+        typer.echo(json.dumps(item, indent=2, default=str))
+        return
+    _render_record(item)
 
 
 def _customer_name(booking: dict) -> str:
@@ -129,6 +235,11 @@ def _render_record(item: dict) -> None:
     console.print(table)
 
 
+# ----------------------------------------------------------------------
+# Products
+# ----------------------------------------------------------------------
+
+
 @product_app.command("list")
 def list_products(
     search: Optional[str] = typer.Option(None, "--search", help="Filter by name, product code, or internal code."),
@@ -137,35 +248,18 @@ def list_products(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List products."""
-    config = _read_config(_find_config())
-    client = _make_client(config)
-
+    client = _client()
     try:
         items = client.list_products(search=search, limit=limit, offset=offset)
     except Exception as e:
         typer.echo(f"Error fetching products: {e}", err=True)
         raise typer.Exit(1)
-
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("Code", style="dim")
-    table.add_column("Name")
-    table.add_column("Type")
-    table.add_column("Price", justify="right")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("productCode")),
-            _s(item.get("name")),
-            _s(item.get("productType")),
-            _s(item.get("advertisedPrice")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} product(s) found.")
+    _emit_list(items, [
+        ("Code", "productCode"),
+        ("Name", "name"),
+        ("Type", "productType"),
+        ("Price", "advertisedPrice"),
+    ], "product", output_json)
 
 
 @product_app.command("get")
@@ -174,19 +268,138 @@ def get_product(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """Show a single product."""
-    config = _read_config(_find_config())
-    client = _make_client(config)
-
+    client = _client()
     try:
         item = client.get_product(product_code)
     except Exception as e:
         typer.echo(f"Error fetching product {product_code}: {e}", err=True)
         raise typer.Exit(1)
+    _emit_record(item, output_json)
 
-    if output_json:
-        typer.echo(json.dumps(item, indent=2))
-        return
-    _render_record(item)
+
+@product_app.command("create")
+def create_product(
+    data: Optional[str] = typer.Option(None, "--data", help="Product object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create a product from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.create_product(body), "create product",
+              confirm="Create this product?", yes=yes, output_json=output_json)
+
+
+@product_app.command("update")
+def update_product(
+    product_code: str = typer.Argument(..., help="Product code to update."),
+    name: Optional[str] = typer.Option(None, "--name", help="Set the product name."),
+    terms: Optional[str] = typer.Option(None, "--terms", help="Set the product's terms & conditions."),
+    data: Optional[str] = typer.Option(None, "--data", help="Partial JSON overlaying the fetched product."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON overlay from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Update a product (read-merge-write).
+
+    The current product is fetched, the supplied flags and --data overlay it, and
+    the merged object is written back, so a single field (e.g. --terms) changes
+    without dropping the rest.
+    """
+    client = _client()
+    flags = {"name": name, "terms": terms}
+    _merge_update(
+        lambda: client.get_product(product_code),
+        lambda merged: client.update_product(product_code, merged),
+        data, file, flags, f"update product {product_code}", yes, output_json,
+    )
+
+
+@product_app.command("delete")
+def delete_product(
+    product_code: str = typer.Argument(..., help="Product code to delete."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Delete a product."""
+    client = _client()
+    _do_write(lambda: client.delete_product(product_code), f"delete product {product_code}",
+              confirm=f"Delete product {product_code}?", yes=yes, output_json=output_json)
+
+
+@product_app.command("image-add")
+def add_product_image(
+    product_code: str = typer.Argument(..., help="Product code."),
+    data: Optional[str] = typer.Option(None, "--data", help="Image object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Add an image to a product."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.add_product_image(product_code, body),
+              f"add image to {product_code}", yes=yes, output_json=output_json)
+
+
+@product_app.command("image-remove")
+def remove_product_image(
+    product_code: str = typer.Argument(..., help="Product code."),
+    image_id: str = typer.Argument(..., help="Image id to remove."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove an image from a product."""
+    client = _client()
+    _do_write(lambda: client.delete_product_image(product_code, image_id),
+              f"remove image {image_id} from {product_code}",
+              confirm=f"Remove image {image_id} from {product_code}?", yes=yes, output_json=output_json)
+
+
+@product_app.command("pickups")
+def product_pickups(
+    product_code: str = typer.Argument(..., help="Product code."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List a product's pickup locations."""
+    client = _client()
+    try:
+        items = client.get_product_pickups(product_code)
+    except Exception as e:
+        typer.echo(f"Error fetching pickups: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("Name", "locationName"),
+        ("Address", "address"),
+        ("Pickup time", "pickupTime"),
+    ], "pickup", output_json)
+
+
+def _merge_update(get_fn: Callable, update_fn: Callable, data: Optional[str],
+                  file: Optional[str], flags: dict, what: str, yes: bool,
+                  output_json: bool) -> None:
+    """Fetch a record, overlay flags and --data, write it back.
+
+    A flag left at None is not part of the change; an explicit empty string is
+    (so --terms "" clears the field).
+    """
+    current = get_fn()
+    if not current:
+        typer.echo(f"Error: {what}: record not found.", err=True)
+        raise typer.Exit(1)
+    overlay = _read_data(data, file, required=False)
+    overlay.update({k: v for k, v in flags.items() if v is not None})
+    if not overlay:
+        typer.echo("Error: nothing to update; pass a flag or --data.", err=True)
+        raise typer.Exit(1)
+    merged = {**current, **overlay}
+    _do_write(lambda: update_fn(merged), what, confirm=f"{what}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Availability (sessions)
+# ----------------------------------------------------------------------
 
 
 @availability_app.command("list")
@@ -199,9 +412,7 @@ def list_availability(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List availability sessions for a product within a date range."""
-    config = _read_config(_find_config())
-    client = _make_client(config)
-
+    client = _client()
     try:
         items = client.list_availability(
             product, from_, to, min_availability=min_availability, limit=limit
@@ -209,27 +420,80 @@ def list_availability(
     except Exception as e:
         typer.echo(f"Error fetching availability: {e}", err=True)
         raise typer.Exit(1)
+    if not output_json:
+        # Confirm which product the code names, resolving best-effort.
+        try:
+            label = client.product_names().get(product)
+        except Exception:
+            label = None
+        typer.echo(f"Product: {label} ({product})" if label else f"Product: {product}")
+    _emit_list(items, [
+        ("Session ID", "id"),
+        ("Start", "startTimeLocal"),
+        ("End", "endTimeLocal"),
+        ("Seats", "seatsAvailable"),
+    ], "session", output_json, header_style="bold green")
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
 
-    table = Table(show_header=True, header_style="bold green")
-    table.add_column("Session ID", style="dim")
-    table.add_column("Start")
-    table.add_column("End")
-    table.add_column("Seats", justify="right")
+@availability_app.command("create")
+def create_availability(
+    data: Optional[str] = typer.Option(None, "--data", help="Session object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create an availability session from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.create_availability(body), "create session",
+              confirm="Create this session?", yes=yes, output_json=output_json)
 
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("startTimeLocal")),
-            _s(item.get("endTimeLocal")),
-            _s(item.get("seatsAvailable")),
-        )
 
-    console.print(table)
-    typer.echo(f"\n{len(items)} session(s) found.")
+@availability_app.command("update")
+def update_availability(
+    session_id: str = typer.Argument(..., help="Session id to update."),
+    data: Optional[str] = typer.Option(None, "--data", help="Full session object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Update an availability session (full object; the API has no single-session read to merge against)."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.update_availability(session_id, body),
+              f"update session {session_id}", confirm=f"Update session {session_id}?",
+              yes=yes, output_json=output_json)
+
+
+@availability_app.command("delete")
+def delete_availability(
+    session_id: str = typer.Argument(..., help="Session id to delete."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Delete an availability session."""
+    client = _client()
+    _do_write(lambda: client.delete_availability(session_id), f"delete session {session_id}",
+              confirm=f"Delete session {session_id}?", yes=yes, output_json=output_json)
+
+
+@availability_app.command("batch")
+def batch_availability(
+    data: Optional[str] = typer.Option(None, "--data", help="Batch object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Batch-update availability from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.batch_availability(body), "batch availability update",
+              confirm="Apply this batch availability update?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Bookings
+# ----------------------------------------------------------------------
 
 
 @booking_app.command("list")
@@ -389,19 +653,695 @@ def get_booking(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """Show a single booking."""
-    config = _read_config(_find_config())
-    client = _make_client(config)
-
+    client = _client()
     try:
         item = client.get_booking(order_number)
     except Exception as e:
         typer.echo(f"Error fetching booking {order_number}: {e}", err=True)
         raise typer.Exit(1)
+    _emit_record(item, output_json)
 
-    if output_json:
-        typer.echo(json.dumps(item, indent=2))
-        return
-    _render_record(item)
+
+@booking_app.command("quote")
+def quote_booking(
+    data: Optional[str] = typer.Option(None, "--data", help="Booking object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the quote."),
+):
+    """Quote a booking's price without creating or charging it."""
+    client = _client()
+    body = _read_data(data, file)
+    try:
+        result = client.quote_booking(body)
+    except Exception as e:
+        typer.echo(f"Error quoting booking: {e}", err=True)
+        raise typer.Exit(1)
+    typer.echo(json.dumps(result, indent=2, default=str))
+
+
+@booking_app.command("create")
+def create_booking(
+    data: Optional[str] = typer.Option(None, "--data", help="Booking object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    notify: bool = typer.Option(False, "--notify", help="Let Rezdy send customer/supplier emails (default off)."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create a booking from a JSON body.
+
+    sendNotifications defaults off so a test booking does not email anyone; pass
+    --notify to enable. The flag is authoritative over any sendNotifications in
+    --data.
+    """
+    client = _client()
+    body = _read_data(data, file)
+    body["sendNotifications"] = notify
+    _do_write(lambda: client.create_booking(body), "create booking",
+              confirm="Create this booking? (a real order)", yes=yes, output_json=output_json)
+
+
+@booking_app.command("update")
+def update_booking(
+    order_number: str = typer.Argument(..., help="Order number to update."),
+    data: Optional[str] = typer.Option(None, "--data", help="Partial JSON (the API accepts status, customer, participants)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Update a booking (status, customer, or participants)."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.update_booking(order_number, body),
+              f"update booking {order_number}", confirm=f"Update booking {order_number}?",
+              yes=yes, output_json=output_json)
+
+
+@booking_app.command("cancel")
+def cancel_booking(
+    order_number: str = typer.Argument(..., help="Order number to cancel."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Cancel a booking."""
+    client = _client()
+    _do_write(lambda: client.cancel_booking(order_number), f"cancel booking {order_number}",
+              confirm=f"Cancel booking {order_number}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Customers
+# ----------------------------------------------------------------------
+
+
+@customer_app.command("list")
+def list_customers(
+    search: Optional[str] = typer.Option(None, "--search", help="Filter by name or email."),
+    limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List customers."""
+    client = _client()
+    try:
+        items = client.list_customers(search=search, limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching customers: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", lambda c: " ".join(p for p in (c.get("firstName"), c.get("lastName")) if p)),
+        ("Email", "email"),
+        ("Phone", "phone"),
+    ], "customer", output_json)
+
+
+@customer_app.command("get")
+def get_customer(
+    customer_id: str = typer.Argument(..., help="Customer id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single customer."""
+    client = _client()
+    try:
+        item = client.get_customer(customer_id)
+    except Exception as e:
+        typer.echo(f"Error fetching customer {customer_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@customer_app.command("create")
+def create_customer(
+    data: Optional[str] = typer.Option(None, "--data", help="Customer object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create a customer from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.create_customer(body), "create customer",
+              confirm="Create this customer?", yes=yes, output_json=output_json)
+
+
+@customer_app.command("delete")
+def delete_customer(
+    customer_id: str = typer.Argument(..., help="Customer id to delete."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Delete a customer."""
+    client = _client()
+    _do_write(lambda: client.delete_customer(customer_id), f"delete customer {customer_id}",
+              confirm=f"Delete customer {customer_id}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Extras
+# ----------------------------------------------------------------------
+
+
+@extra_app.command("list")
+def list_extras(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List extras (add-ons)."""
+    client = _client()
+    try:
+        items = client.list_extras(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching extras: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Price", "price"),
+        ("Type", "extraPriceType"),
+    ], "extra", output_json)
+
+
+@extra_app.command("get")
+def get_extra(
+    extra_id: str = typer.Argument(..., help="Extra id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single extra."""
+    client = _client()
+    try:
+        item = client.get_extra(extra_id)
+    except Exception as e:
+        typer.echo(f"Error fetching extra {extra_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@extra_app.command("create")
+def create_extra(
+    data: Optional[str] = typer.Option(None, "--data", help="Extra object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create an extra from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.create_extra(body), "create extra",
+              confirm="Create this extra?", yes=yes, output_json=output_json)
+
+
+@extra_app.command("update")
+def update_extra(
+    extra_id: str = typer.Argument(..., help="Extra id to update."),
+    name: Optional[str] = typer.Option(None, "--name", help="Set the extra name."),
+    data: Optional[str] = typer.Option(None, "--data", help="Partial JSON overlaying the fetched extra."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON overlay from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Update an extra (read-merge-write)."""
+    client = _client()
+    _merge_update(
+        lambda: client.get_extra(extra_id),
+        lambda merged: client.update_extra(extra_id, merged),
+        data, file, {"name": name}, f"update extra {extra_id}", yes, output_json,
+    )
+
+
+@extra_app.command("delete")
+def delete_extra(
+    extra_id: str = typer.Argument(..., help="Extra id to delete."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Delete an extra."""
+    client = _client()
+    _do_write(lambda: client.delete_extra(extra_id), f"delete extra {extra_id}",
+              confirm=f"Delete extra {extra_id}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Pickup lists
+# ----------------------------------------------------------------------
+
+
+@pickup_app.command("list")
+def list_pickup_lists(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List pickup lists."""
+    client = _client()
+    try:
+        items = client.list_pickup_lists(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching pickup lists: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Locations", lambda p: len(p.get("pickupLocations") or [])),
+    ], "pickup list", output_json)
+
+
+@pickup_app.command("get")
+def get_pickup_list(
+    pickup_list_id: str = typer.Argument(..., help="Pickup list id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single pickup list."""
+    client = _client()
+    try:
+        item = client.get_pickup_list(pickup_list_id)
+    except Exception as e:
+        typer.echo(f"Error fetching pickup list {pickup_list_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@pickup_app.command("create")
+def create_pickup_list(
+    data: Optional[str] = typer.Option(None, "--data", help="Pickup list object as JSON (or -f / stdin)."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Create a pickup list from a JSON body."""
+    client = _client()
+    body = _read_data(data, file)
+    _do_write(lambda: client.create_pickup_list(body), "create pickup list",
+              confirm="Create this pickup list?", yes=yes, output_json=output_json)
+
+
+@pickup_app.command("update")
+def update_pickup_list(
+    pickup_list_id: str = typer.Argument(..., help="Pickup list id to update."),
+    name: Optional[str] = typer.Option(None, "--name", help="Set the pickup list name."),
+    data: Optional[str] = typer.Option(None, "--data", help="Partial JSON overlaying the fetched pickup list."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON overlay from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Update a pickup list (read-merge-write)."""
+    client = _client()
+    _merge_update(
+        lambda: client.get_pickup_list(pickup_list_id),
+        lambda merged: client.update_pickup_list(pickup_list_id, merged),
+        data, file, {"name": name}, f"update pickup list {pickup_list_id}", yes, output_json,
+    )
+
+
+@pickup_app.command("delete")
+def delete_pickup_list(
+    pickup_list_id: str = typer.Argument(..., help="Pickup list id to delete."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Delete a pickup list."""
+    client = _client()
+    _do_write(lambda: client.delete_pickup_list(pickup_list_id),
+              f"delete pickup list {pickup_list_id}",
+              confirm=f"Delete pickup list {pickup_list_id}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Categories
+# ----------------------------------------------------------------------
+
+
+@category_app.command("list")
+def list_categories(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List categories."""
+    client = _client()
+    try:
+        items = client.list_categories(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching categories: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Visible", "visible"),
+    ], "category", output_json)
+
+
+@category_app.command("get")
+def get_category(
+    category_id: str = typer.Argument(..., help="Category id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single category."""
+    client = _client()
+    try:
+        item = client.get_category(category_id)
+    except Exception as e:
+        typer.echo(f"Error fetching category {category_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@category_app.command("products")
+def category_products(
+    category_id: str = typer.Argument(..., help="Category id."),
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List the products in a category."""
+    client = _client()
+    try:
+        items = client.list_category_products(category_id, limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching category products: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("Code", "productCode"),
+        ("Name", "name"),
+        ("Type", "productType"),
+    ], "product", output_json)
+
+
+@category_app.command("add-product")
+def category_add_product(
+    category_id: str = typer.Argument(..., help="Category id."),
+    product_code: str = typer.Argument(..., help="Product code to add."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Add a product to a category."""
+    client = _client()
+    _do_write(lambda: client.add_product_to_category(category_id, product_code),
+              f"add {product_code} to category {category_id}", yes=yes, output_json=output_json)
+
+
+@category_app.command("remove-product")
+def category_remove_product(
+    category_id: str = typer.Argument(..., help="Category id."),
+    product_code: str = typer.Argument(..., help="Product code to remove."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove a product from a category."""
+    client = _client()
+    _do_write(lambda: client.remove_product_from_category(category_id, product_code),
+              f"remove {product_code} from category {category_id}",
+              confirm=f"Remove {product_code} from category {category_id}?",
+              yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Rates
+# ----------------------------------------------------------------------
+
+
+@rate_app.command("list")
+def list_rates(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List rates."""
+    client = _client()
+    try:
+        items = client.list_rates(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching rates: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Type", "type"),
+    ], "rate", output_json)
+
+
+@rate_app.command("get")
+def get_rate(
+    rate_id: str = typer.Argument(..., help="Rate id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single rate."""
+    client = _client()
+    try:
+        item = client.get_rate(rate_id)
+    except Exception as e:
+        typer.echo(f"Error fetching rate {rate_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@rate_app.command("add-product")
+def rate_add_product(
+    rate_id: str = typer.Argument(..., help="Rate id."),
+    product_code: str = typer.Argument(..., help="Product code to add."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Add a product to a rate."""
+    client = _client()
+    _do_write(lambda: client.add_product_to_rate(rate_id, product_code),
+              f"add {product_code} to rate {rate_id}", yes=yes, output_json=output_json)
+
+
+@rate_app.command("remove-product")
+def rate_remove_product(
+    rate_id: str = typer.Argument(..., help="Rate id."),
+    product_code: str = typer.Argument(..., help="Product code to remove."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove a product from a rate."""
+    client = _client()
+    _do_write(lambda: client.remove_product_from_rate(rate_id, product_code),
+              f"remove {product_code} from rate {rate_id}",
+              confirm=f"Remove {product_code} from rate {rate_id}?",
+              yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Resources
+# ----------------------------------------------------------------------
+
+
+@resource_app.command("list")
+def list_resources(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List resources."""
+    client = _client()
+    try:
+        items = client.list_resources(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching resources: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Capacity", "capacity"),
+    ], "resource", output_json)
+
+
+@resource_app.command("sessions")
+def resource_sessions(
+    resource_id: str = typer.Argument(..., help="Resource id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List the sessions assigned to a resource."""
+    client = _client()
+    try:
+        items = client.list_resource_sessions(resource_id)
+    except Exception as e:
+        typer.echo(f"Error fetching resource sessions: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("Session ID", "id"),
+        ("Start", "startTimeLocal"),
+        ("End", "endTimeLocal"),
+    ], "session", output_json)
+
+
+@resource_app.command("add-session")
+def resource_add_session(
+    resource_id: str = typer.Argument(..., help="Resource id."),
+    session_id: str = typer.Argument(..., help="Session id to assign."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Assign a session to a resource."""
+    client = _client()
+    _do_write(lambda: client.add_session_to_resource(resource_id, session_id),
+              f"add session {session_id} to resource {resource_id}",
+              yes=yes, output_json=output_json)
+
+
+@resource_app.command("remove-session")
+def resource_remove_session(
+    resource_id: str = typer.Argument(..., help="Resource id."),
+    session_id: str = typer.Argument(..., help="Session id to remove."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove a session from a resource."""
+    client = _client()
+    _do_write(lambda: client.remove_session_from_resource(resource_id, session_id),
+              f"remove session {session_id} from resource {resource_id}",
+              confirm=f"Remove session {session_id} from resource {resource_id}?",
+              yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Manifest (check-in)
+# ----------------------------------------------------------------------
+
+
+@manifest_app.command("order-status")
+def order_checkin_status(
+    order_number: str = typer.Argument(..., help="Order number."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show an order's check-in status."""
+    client = _client()
+    try:
+        item = client.get_order_checkin(order_number)
+    except Exception as e:
+        typer.echo(f"Error fetching check-in for {order_number}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@manifest_app.command("order-checkin")
+def order_checkin(
+    order_number: str = typer.Argument(..., help="Order number to check in."),
+    data: Optional[str] = typer.Option(None, "--data", help="Optional check-in body as JSON."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Check in an order."""
+    client = _client()
+    body = _read_data(data, file, required=False) or None
+    _do_write(lambda: client.checkin_order(order_number, body),
+              f"check in order {order_number}", yes=yes, output_json=output_json)
+
+
+@manifest_app.command("order-uncheck")
+def order_uncheck(
+    order_number: str = typer.Argument(..., help="Order number to remove check-in for."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove an order's check-in."""
+    client = _client()
+    _do_write(lambda: client.uncheck_order(order_number),
+              f"remove check-in for order {order_number}",
+              confirm=f"Remove check-in for order {order_number}?", yes=yes, output_json=output_json)
+
+
+@manifest_app.command("session-status")
+def session_checkin_status(
+    session_id: str = typer.Argument(..., help="Session id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a session's check-in status."""
+    client = _client()
+    try:
+        item = client.get_session_checkin(session_id)
+    except Exception as e:
+        typer.echo(f"Error fetching check-in for session {session_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@manifest_app.command("session-checkin")
+def session_checkin(
+    session_id: str = typer.Argument(..., help="Session id to check in."),
+    data: Optional[str] = typer.Option(None, "--data", help="Optional check-in body as JSON."),
+    file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Check in a session."""
+    client = _client()
+    body = _read_data(data, file, required=False) or None
+    _do_write(lambda: client.checkin_session(session_id, body),
+              f"check in session {session_id}", yes=yes, output_json=output_json)
+
+
+@manifest_app.command("session-uncheck")
+def session_uncheck(
+    session_id: str = typer.Argument(..., help="Session id to remove check-in for."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+):
+    """Remove a session's check-in."""
+    client = _client()
+    _do_write(lambda: client.uncheck_session(session_id),
+              f"remove check-in for session {session_id}",
+              confirm=f"Remove check-in for session {session_id}?", yes=yes, output_json=output_json)
+
+
+# ----------------------------------------------------------------------
+# Vouchers (read-only) and company (read-only)
+# ----------------------------------------------------------------------
+
+
+@voucher_app.command("list")
+def list_vouchers(
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """List vouchers. (Creating vouchers is not in the public API; see docs/rezdy.md.)"""
+    client = _client()
+    try:
+        items = client.list_vouchers(limit=limit, offset=offset)
+    except Exception as e:
+        typer.echo(f"Error fetching vouchers: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_list(items, [
+        ("ID", "id"),
+        ("Code", "code"),
+        ("Type", "type"),
+        ("Balance", "balance"),
+        ("Status", "status"),
+    ], "voucher", output_json)
+
+
+@voucher_app.command("get")
+def get_voucher(
+    voucher_id: str = typer.Argument(..., help="Voucher id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show a single voucher."""
+    client = _client()
+    try:
+        item = client.get_voucher(voucher_id)
+    except Exception as e:
+        typer.echo(f"Error fetching voucher {voucher_id}: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
+
+
+@company_app.command("get")
+def get_company(
+    alias: Optional[str] = typer.Argument(None, help="Company alias; omit for the caller's own company."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+):
+    """Show the company record."""
+    client = _client()
+    try:
+        item = client.get_company(alias)
+    except Exception as e:
+        typer.echo(f"Error fetching company: {e}", err=True)
+        raise typer.Exit(1)
+    _emit_record(item, output_json)
 
 
 if __name__ == "__main__":
