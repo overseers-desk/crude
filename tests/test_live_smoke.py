@@ -204,3 +204,32 @@ def test_sonas_tabular_read(crude_config):
             assert rows[0].get("_id")
     finally:
         client.close()
+
+
+@pytest.mark.live
+def test_xero_reads_organisation(crude_config):
+    xero = crude_config.get("xero", {})
+    if not (xero.get("client_id") and xero.get("client_secret")):
+        pytest.skip("no [xero] credentials in config")
+    from crude_xero.cli import _make_client
+
+    client = _make_client(crude_config)
+    org = client.accounting.get_organisation()
+    assert isinstance(org, dict)
+    assert org.get("OrganisationID") or org.get("Name")
+
+
+@pytest.mark.live
+def test_xero_lists_accounts(crude_config):
+    # Accounts sit under accounting.settings(.read); also exercises the paging
+    # walk's stop on an unpaged collection (Accounts ignores the page param).
+    xero = crude_config.get("xero", {})
+    if not (xero.get("client_id") and xero.get("client_secret")):
+        pytest.skip("no [xero] credentials in config")
+    from crude_xero.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.accounting.list_accounts()
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("AccountID")
