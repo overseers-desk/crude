@@ -26,8 +26,9 @@ Description: CRUD-style command-line clients for sites without a public API
  records on sites that lack a usable public API, under one predictable
  <site> <resource> <verb> grammar.
  .
- Five sites ship as their own binaries: crude-atdw (ATDW tourism listings),
+ Six sites ship as their own binaries: crude-atdw (ATDW tourism listings),
  crude-skal (Skal Australia member portal), crude-rezdy (Rezdy products,
- availability, and bookings), crude-deputy (Deputy workforce management), and
- crude-sonas (Sonas wedding-venue software). The crude command lists them and
- carries the shared --version and install-claude-command flags.
+ availability, and bookings), crude-deputy (Deputy workforce management),
+ crude-sonas (Sonas wedding-venue software), and crude-xero (Xero accounting).
+ The crude command lists them and carries the shared --version and
+ install-claude-command flags.

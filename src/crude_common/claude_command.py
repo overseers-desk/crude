@@ -36,13 +36,13 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), and app.sonas.events (Sonas wedding-venue events).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), and xero.com (Xero accounting).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`). Add `--json` to any read command for machine-readable output.
 
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
@@ -222,6 +222,29 @@ The finance, mail, and terms writes ship uncalled (they touch finance/Xero, send
 Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
 
 `<catalog>` is one of the read-only catalog resources: supplier, service, drinks-package, package, template, category, venue, user. --search matches a case-insensitive substring anywhere in the document.
+
+## crude-xero (xero.com)
+
+Xero accounting over the official OAuth2 APIs. Credentials in `[xero]` (`client_id`, `client_secret`, `redirect_uri` = a localhost loopback, `scopes`); tokens cache in `~/.config/crude/xero_token.json` and refresh automatically. One Xero login can reach several organisations (tenants); pick one with `--tenant/-t <name|id>` (distinct from `--account`, which picks the connection). Writes need write scopes enabled on the Xero app, then a fresh `crude-xero auth`.
+
+    crude-xero auth [--manual] [--no-browser]      # one-time browser consent
+    crude-xero tenants                              # list reachable organisations
+    crude-xero tenant use <name|id>                 # pin a default tenant
+    crude-xero organisation get
+    crude-xero <resource> list [--where "<filter>"] [--order "<field>"] [--json]
+    crude-xero <resource> get <guid>
+    crude-xero <resource> create (--data '<json>' | -f file | stdin) [--yes]
+    crude-xero <resource> update <guid> (--data '<json>' | -f file | stdin) [--yes]
+    crude-xero <resource> delete <guid> [--yes]
+
+Accounting resources: account, bank-transaction, bank-transfer, batch-payment, branding-theme (ro), budget (ro), contact, contact-group, credit-note, currency, employee, invoice, item, journal (ro), linked-transaction, manual-journal, organisation (ro), overpayment, payment, payment-service, prepayment, purchase-order, quote, receipt, repeating-invoice, report (ro), tax-rate, tracking-category, user. Not every resource takes every verb: read-only ones are list/get only; bank-transfer/currency/payment-service have no update; `payment`/`batch-payment` delete and `contact` archive post a status change rather than hard-deleting. Irregular verbs: `invoice email <guid>` (sends real mail), the binary `invoice online-url` and the `*.pdf` getters (`invoice`, `quote`, `purchase-order`, `credit-note`) write to `--out <path>`; `credit-note`/`overpayment`/`prepayment allocate <guid> --data ...`; `contact-group member add/remove`; `tracking-category option add/update/delete`; `tax-rate update` posts the whole object (no guid).
+
+    crude-xero report list
+    crude-xero report balance-sheet|profit-and-loss|trial-balance|aged-receivables|aged-payables|bank-summary|bas|gst|executive-summary|budget-summary [--date] [--from-date] [--to-date] [--param KEY=VALUE]
+    crude-xero attachment list|get|add --on <resource> --id <guid> [--file ...] [--out ...] [--mime ...]
+    crude-xero history list|add --on <resource> --id <guid> [--note ...]
+
+`update` is read-merge-write: crude fetches the object, overlays your `--data`/flags, and posts the whole back, so an update changes only what you pass. The other Xero APIs (Payroll, Files, Assets, Projects, BankFeeds, Finance) are planned but not in this binary yet; see the crude repo docs/xero.md.
 """
 
 

@@ -1,17 +1,19 @@
 # crude
 
-CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and-write access to one's own data on sites that lack a usable public API. Each site is reached by reverse-engineering its login and calling its internal endpoints, and every site is driven through one predictable command surface:
+CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and-write access to one's own data. Some sites lack a usable public API and are reached by reverse-engineering a login and calling internal endpoints; others ride a documented public API. Either way, every site is driven through one predictable command surface:
 
 ```
 crude-<site> <resource> <verb> [id] [flags]
 ```
 
-Four sites ship today, each as its own console binary:
+Six sites ship today, each as its own console binary:
 
 - `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
 - `crude-rezdy`: Rezdy Supplier API for products, availability, and bookings (REST, API key).
 - `crude-deputy`: Deputy workforce management: employees, rosters, timesheets, leave, and a generic resource sub-app for any Deputy object (REST, permanent API token).
+- `crude-sonas`: Sonas wedding-venue software (Meteor DDP backend, session token).
+- `crude-xero`: Xero accounting over the official OAuth2 APIs (REST, OAuth2 with automatic token refresh).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -46,11 +48,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the four site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the six site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all four sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all six sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 
@@ -161,3 +163,6 @@ crude-rezdy booking list --json
 - `docs/manual.md`: full ATDW command reference with flag tables and filter syntax
 - `docs/APIs.md`: reverse-engineered ATDW API reference
 - `docs/skal-api.md`: Skål portal API reference and club IDs
+- `docs/rezdy.md`: Rezdy command surface and API boundary
+- `docs/sonas.md`: Sonas resource map and DDP protocol
+- `docs/xero.md`: Xero command surface, auth, and tenant model
