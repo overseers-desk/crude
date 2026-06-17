@@ -48,10 +48,23 @@ These were confirmed against a live production account; treat them as ground tru
   (snake_case query params, ISO-8601 UTC); confirmed filtering (a 2020 window returned 0, a recent
   window returned the page cap). The `--to` bound is the exclusive next-local-midnight, so a
   half-open `[from, to)` range covers the whole to-date regardless of zone.
+- **Payouts group (verified live):** all snake_case. Paths: `GET /api/v1/beneficiaries` (+ `/{id}`),
+  writes `POST /api/v1/beneficiaries/create|update/{id}|delete/{id}`; `GET /api/v1/transfers`
+  (+ `/{id}`), `POST /api/v1/transfers/create`; `GET /api/v1/fx/rates/current`,
+  `GET /api/v1/fx/conversions` (+ `/{id}`), `POST /api/v1/fx/conversions/create`. A beneficiary's
+  bank fields are nested under `beneficiary.bank_details` (`account_name`, `account_currency`,
+  `bank_country_code`, ...); a conversion uses `conversion_id`, `buy/sell_currency`, `buy/sell_amount`,
+  `client_rate`, `status`, `created_at`, `settlement_cutoff_at`.
+- **FX endpoints are date-versioned.** `GET /fx/rates/current` and the `/fx/conversions` endpoints
+  return `400 incorrect_version` unless an `x-api-version` header is sent; `2024-06-30` works
+  (`FxAPI` sends it on every call). The other groups answer on the account's default version.
+- **Write convention:** money/data writes are `POST .../create|update/{id}|delete/{id}` (not
+  PUT/DELETE). A transfer or conversion body needs an idempotency `request_id`; crude fills a uuid4
+  when the caller omits one (a caller wanting retry-idempotency supplies their own).
 
 ## Command surface
 
-Core treasury reads (Step 1, shipped):
+Core treasury reads (read-only):
 
     crude-airwallex login                                   # confirm credentials, report token expiry
     crude-airwallex account get
@@ -60,6 +73,22 @@ Core treasury reads (Step 1, shipped):
     crude-airwallex transaction list [--currency] [--status] [--from] [--to] [--all] [--limit]
     crude-airwallex transaction get <id>
 
-Add `--json` to any read for the raw API object. `--from`/`--to` take `YYYY-MM-DD` local dates.
+Payouts (reads, plus confirm-gated money/data writes):
 
-Payouts, Payments Acceptance, and Issuing are added in later modules.
+    crude-airwallex beneficiary list [--entity-type] [--from] [--to] [--all] [--limit]
+    crude-airwallex beneficiary get <id>
+    crude-airwallex beneficiary create (--data | -f | stdin) [--yes]
+    crude-airwallex beneficiary update <id> (--data | -f | stdin) [--yes]
+    crude-airwallex beneficiary delete <id> [--yes]
+    crude-airwallex transfer list [--status] [--from] [--to] [--all] [--limit]
+    crude-airwallex transfer get <id>
+    crude-airwallex transfer create (--data | -f | stdin) [--yes]     # MOVES REAL MONEY
+    crude-airwallex fx-rate current --buy <ccy> --sell <ccy> [--amount]
+    crude-airwallex conversion list [--from] [--to] [--all] [--limit]
+    crude-airwallex conversion get <id>
+    crude-airwallex conversion create (--data | -f | stdin) [--yes]   # MOVES REAL MONEY
+
+Add `--json` to any read for the raw API object. `--from`/`--to` take `YYYY-MM-DD` local dates.
+Money-moving verbs (`transfer create`, `conversion create`) prompt unless `--yes`.
+
+Payments Acceptance and Issuing are added in later modules.

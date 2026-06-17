@@ -128,11 +128,15 @@ def login():
     typer.echo(f"Logged in. Token valid until {when} (local time).")
 
 
-# Attach the resource sub-apps. Core treasury (account, balance, transaction) ships
-# now; payouts, payments-acceptance, and issuing are added as those modules land.
-from crude_airwallex import cli_core  # noqa: E402
+# Attach the resource sub-apps. Core treasury (account, balance, transaction) and
+# Payouts (beneficiary, transfer, fx-rate, conversion) ship now; payments-acceptance
+# and issuing are added as those modules land.
+from crude_airwallex import cli_beneficiaries, cli_core, cli_fx, cli_transfers  # noqa: E402
 
 cli_core.register(app)
+cli_beneficiaries.register(app)
+cli_transfers.register(app)
+cli_fx.register(app)
 
 
 if __name__ == "__main__":

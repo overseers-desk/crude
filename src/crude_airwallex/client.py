@@ -161,11 +161,13 @@ class AirwallexSession:
     # Pagination
     # ------------------------------------------------------------------
 
-    def paginate(self, path, *, params=None, page_size=PAGE_SIZE, limit=None, all_pages=True):
+    def paginate(self, path, *, params=None, page_size=PAGE_SIZE, limit=None, all_pages=True,
+                 headers=None):
         """Page a collection via page_num/page_size, stopping on ``has_more`` False.
 
         `all_pages` walks every page; False fetches only the first. `limit` caps the
         total records, paging as needed and then truncating. page_num is 0-based.
+        `headers` are sent on every page request (e.g. the FX endpoints' x-api-version).
         """
         results = []
         base = dict(params or {})
@@ -173,7 +175,7 @@ class AirwallexSession:
         page = 0
         while True:
             base["page_num"] = page
-            data = self._get(path, params=base)
+            data = self._get(path, params=base, headers=headers)
             chunk = _items(data)
             if not chunk:
                 break
@@ -215,12 +217,18 @@ class AirwallexSession:
 class AirwallexClient:
     """Facade composing the per-product method groups over one AirwallexSession.
 
-    Step 1 composes only the core treasury reads (account, balances, financial
-    transactions). Payouts, Payments Acceptance, and Issuing are added as those
-    modules land.
+    Composes the core treasury reads (account, balances, financial transactions) and
+    the Payouts group (beneficiaries, transfers, FX rates and conversions). Payments
+    Acceptance and Issuing are added as those modules land.
     """
 
     def __init__(self, session: AirwallexSession):
         from crude_airwallex.core import CoreAPI
+        from crude_airwallex.beneficiaries import BeneficiariesAPI
+        from crude_airwallex.transfers import TransfersAPI
+        from crude_airwallex.fx import FxAPI
         self.session = session
         self.core = CoreAPI(session)
+        self.beneficiaries = BeneficiariesAPI(session)
+        self.transfers = TransfersAPI(session)
+        self.fx = FxAPI(session)

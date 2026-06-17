@@ -330,3 +330,47 @@ def test_airwallex_lists_one_transaction(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("id")
+
+
+@pytest.mark.live
+def test_airwallex_lists_one_beneficiary(crude_config):
+    # Payouts beneficiaries: snake_case, with the bank details under a nested
+    # `beneficiary` object and the id at `beneficiary_id`.
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.beneficiaries.list_beneficiaries(limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("beneficiary_id")
+
+
+@pytest.mark.live
+def test_airwallex_lists_one_conversion(crude_config):
+    # FX conversions are date-versioned: the endpoint 400s without x-api-version,
+    # which FxAPI sends. snake_case id at `conversion_id`.
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.fx.list_conversions(limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("conversion_id")
+
+
+@pytest.mark.live
+def test_airwallex_lists_transfers(crude_config):
+    # Read-only: the list shape, not content (the account may have no transfers).
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.transfers.list_transfers(limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("id")
