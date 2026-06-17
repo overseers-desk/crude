@@ -6,7 +6,7 @@ crude is a lightweight command-line tool for CRUD access (create, read, update, 
 crude-<site> <resource> <verb> [id] [flags]
 ```
 
-Six sites ship today, each as its own console binary:
+Seven sites ship today, each as its own console binary:
 
 - `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
@@ -14,6 +14,7 @@ Six sites ship today, each as its own console binary:
 - `crude-deputy`: Deputy workforce management: employees, rosters, timesheets, leave, and a generic resource sub-app for any Deputy object (REST, permanent API token).
 - `crude-sonas`: Sonas wedding-venue software (Meteor DDP backend, session token).
 - `crude-xero`: Xero accounting over the official OAuth2 APIs (REST, OAuth2 with automatic token refresh).
+- `crude-airwallex`: Airwallex global payments and transactions, balances, payouts, payment acceptance, and issuing (REST, API-key bearer token).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -48,11 +49,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the six site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the seven site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all six sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all seven sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 
@@ -158,6 +159,22 @@ crude-skal member get 184914 --json
 crude-rezdy booking list --json
 ```
 
+## Airwallex usage (`crude-airwallex`)
+
+Airwallex authenticates with a `client_id` and `api_key` (both generated under Developer > API keys in the Airwallex console), set in the `[airwallex]` section; there is no separate login step, though `crude-airwallex login` confirms the credentials and reports the token's expiry. All timestamps print in your computer's local timezone, and `--from`/`--to` filters are read as local dates.
+
+```
+crude-airwallex balance current
+crude-airwallex transaction list --from 2026-05-01 --to 2026-06-17 --limit 20
+crude-airwallex transaction get <id>
+crude-airwallex beneficiary list
+crude-airwallex conversion list
+crude-airwallex pa payment-intent list
+crude-airwallex issuing card list
+```
+
+The command groups are the treasury reads (`account`, `balance`, `transaction`), Payouts (`beneficiary`, `transfer`, `fx-rate`, `conversion`), Payments Acceptance (the `pa` group), and Issuing (the `issuing` group). Reads accept `--json`. Verbs that move money (`transfer create`, `conversion create`, `pa payment-intent create`, `pa refund create`, and the like) prompt for confirmation unless you pass `--yes`. Some products need separate enablement on your Airwallex account; a call to one that is not enabled reports that plainly rather than failing obscurely. The full command surface and the verified API specifics are in `docs/airwallex.md`.
+
 ## Further reference
 
 - `docs/manual.md`: full ATDW command reference with flag tables and filter syntax
@@ -166,3 +183,4 @@ crude-rezdy booking list --json
 - `docs/rezdy.md`: Rezdy command surface and API boundary
 - `docs/sonas.md`: Sonas resource map and DDP protocol
 - `docs/xero.md`: Xero command surface, auth, and tenant model
+- `docs/airwallex.md`: Airwallex command surface, auth, and the verified API behaviour

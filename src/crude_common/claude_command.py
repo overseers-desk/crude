@@ -36,13 +36,13 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), and xero.com (Xero accounting).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), and airwallex.com (Airwallex payments and transactions).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on sites that lack a usable public API. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`). Add `--json` to any read command for machine-readable output.
 
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
@@ -245,6 +245,28 @@ Accounting resources: account, bank-transaction, bank-transfer, batch-payment, b
     crude-xero history list|add --on <resource> --id <guid> [--note ...]
 
 `update` is read-merge-write: crude fetches the object, overlays your `--data`/flags, and posts the whole back, so an update changes only what you pass. The other Xero APIs (Payroll, Files, Assets, Projects, BankFeeds, Finance) are planned but not in this binary yet; see the crude repo docs/xero.md.
+
+## crude-airwallex (airwallex.com)
+
+Airwallex global payments and transactions over the official REST API. Credentials in `[airwallex]` (`client_id`, `api_key`; optional `environment = "demo"`, optional `on_behalf_of` for platform accounts); the bearer token is fetched on first use and cached in `~/.local/state/crude/airwallex_token.json`, refreshed on expiry. There is no consent step; `crude-airwallex login` just confirms the credentials. All timestamps are shown in the machine's local timezone, and `--from`/`--to` are read as local YYYY-MM-DD dates converted to UTC.
+
+    crude-airwallex login                                   # confirm credentials, report token expiry
+    crude-airwallex account get
+    crude-airwallex balance current
+    crude-airwallex balance history [--currency] [--from] [--to] [--limit]
+    crude-airwallex transaction list [--currency] [--status] [--from] [--to] [--all] [--limit]
+    crude-airwallex transaction get <id>
+    crude-airwallex beneficiary list|get|create|update|delete
+    crude-airwallex transfer list|get ; transfer create (--data | -f | stdin) [--yes]      # moves real money
+    crude-airwallex fx-rate current --buy <ccy> --sell <ccy> [--amount]
+    crude-airwallex conversion list|get ; conversion create (--data | -f | stdin) [--yes]  # moves real money
+    crude-airwallex pa payment-intent list|get|create|confirm|capture|cancel
+    crude-airwallex pa refund list|get|create ; pa customer list|get|create|update|delete
+    crude-airwallex pa payment-consent list|get ; pa payment-link list|get|create
+    crude-airwallex issuing card list|get|create|update ; issuing cardholder list|get|create|update
+    crude-airwallex issuing authorization list|get ; issuing transaction list|get
+
+Add `--json` to any read for the raw object. Money-moving verbs (transfer/conversion create, pa payment-intent create/confirm/capture, pa refund create, pa payment-link create) prompt unless `--yes`. The `pa` and `issuing` groups need those products enabled on the account; a disabled product reports "API access for this resource has been disabled". Field-name casing is not uniform (financial_transactions is camelCase, the others snake_case); the verified surface and specifics are in the crude repo docs/airwallex.md.
 """
 
 

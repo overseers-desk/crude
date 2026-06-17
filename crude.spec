@@ -22,12 +22,12 @@ crude provides command-line clients for reading and editing your own
 records on sites that lack a usable public API, under one predictable
 <site> <resource> <verb> grammar.
 
-Six sites ship as their own binaries: crude-atdw (ATDW tourism listings),
+Seven sites ship as their own binaries: crude-atdw (ATDW tourism listings),
 crude-skal (Skal Australia member portal), crude-rezdy (Rezdy products,
 availability, and bookings), crude-deputy (Deputy workforce management),
-crude-sonas (Sonas wedding-venue software), and crude-xero (Xero accounting).
-The crude command lists them and carries the shared --version and
-install-claude-command flags.
+crude-sonas (Sonas wedding-venue software), crude-xero (Xero accounting), and
+crude-airwallex (Airwallex global payments and transactions). The crude command
+lists them and carries the shared --version and install-claude-command flags.
 
 %prep
 %autosetup -n %{name}-%{version}
@@ -56,7 +56,8 @@ for spec in \
     crude-rezdy:crude_rezdy.cli \
     crude-deputy:crude_deputy.cli \
     crude-sonas:crude_sonas.cli \
-    crude-xero:crude_xero.cli; do
+    crude-xero:crude_xero.cli \
+    crude-airwallex:crude_airwallex.cli; do
     name=${spec%%:*}
     module=${spec##*:}
     cat > %{buildroot}/usr/bin/${name} << ENTRY
@@ -77,6 +78,7 @@ done
 /usr/bin/crude-deputy
 /usr/bin/crude-sonas
 /usr/bin/crude-xero
+/usr/bin/crude-airwallex
 /usr/lib/python*/site-packages/crude_*/
 /usr/lib/python*/site-packages/crude-*.dist-info/
 

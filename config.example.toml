@@ -31,6 +31,13 @@ redirect_uri = "http://localhost:8910/callback"  # must match a redirect URI reg
 # default_tenant = "..."  # optional; pin one organisation when the login reaches several (else use --tenant)
 # Run `crude-xero auth` once to grant access; tokens cache in ~/.local/state/crude/xero_token.json and refresh automatically.
 
+[airwallex]
+client_id = "your-airwallex-client-id"
+api_key = "your-airwallex-api-key"  # generate both under Developer > API keys in the Airwallex console
+# environment = "demo"   # optional; "demo"/"sandbox" hits api-demo.airwallex.com, else production
+# on_behalf_of = "..."   # optional; a connected-account id for platform (Scale) accounts
+# The bearer is fetched on first use and cached in ~/.local/state/crude/airwallex_token.json (re-logs-in on expiry).
+
 # Multiple accounts on one site
 # -----------------------------
 # The bare [site] section above is the "default" account. Hold a second account on

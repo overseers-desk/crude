@@ -1,6 +1,7 @@
 # crude
 
-CRUD-style command-line clients for sites without a usable public API, under one
+CRUD-style command-line clients for your own data on a handful of sites, some
+without a usable public API and some over a documented one, under one
 `crude-<site> <resource> <verb>` grammar. Each site ships as its own
 `crude-<site>` binary; the `crude` launcher lists them and carries the shared
 `--version` and `install-claude-command` flags. The binaries are declared in
