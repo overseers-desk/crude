@@ -1,6 +1,6 @@
 # crude
 
-CRUD-Engine (crude) is a lightweight command-line tool for programmatic read-and-write access to one's own data. Some sites lack a usable public API and are reached by reverse-engineering a login and calling internal endpoints; others ride a documented public API. Either way, every site is driven through one predictable command surface:
+crude is a lightweight command-line tool for CRUD access (create, read, update, delete) to your own data. Some sites lack a usable public API and are reached by reverse-engineering a login and calling internal endpoints; others ride a documented public API. Either way, every site is driven through one predictable command surface:
 
 ```
 crude-<site> <resource> <verb> [id] [flags]
