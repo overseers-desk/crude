@@ -29,6 +29,7 @@ from crude_sonas.client import (
     EVENT_TYPE,
     date_str,
     to_ejson_date,
+    to_ejson_date_end,
 )
 
 app = typer.Typer(help="crude-sonas — Sonas wedding-venue software (app.sonas.events).")
@@ -230,15 +231,14 @@ def _range_params(from_: Optional[str], to: Optional[str]) -> list:
     """EJSON [from, to] params for the *ByDateRange pubs; default all time,
     the same wide range `event list` uses."""
     return [to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS},
-            to_ejson_date(to) if to else {"$date": EPOCH_2100_MS}]
+            to_ejson_date_end(to) if to else {"$date": EPOCH_2100_MS}]
 
 
 def _dt_str(value) -> str:
-    """Render an EJSON datetime as YYYY-MM-DD HH:MM (UTC); pass others through."""
+    """Render an EJSON datetime as YYYY-MM-DD HH:MM in local time; pass others through."""
     if isinstance(value, dict) and "$date" in value:
-        from datetime import datetime, timezone
-        return datetime.fromtimestamp(
-            value["$date"] / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M")
+        from datetime import datetime
+        return datetime.fromtimestamp(value["$date"] / 1000).strftime("%Y-%m-%d %H:%M")
     return _s(value)
 
 

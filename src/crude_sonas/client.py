@@ -22,7 +22,7 @@ import ssl
 import struct
 import time
 import json as _json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from crude_common.config import account as _account
@@ -214,15 +214,39 @@ def _drain(conn, secs):
 # ----------------------------------------------------------------------
 
 def to_ejson_date(yyyy_mm_dd: str) -> dict:
-    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    """Encode a typed YYYY-MM-DD as an EJSON date at local midnight.
+
+    Sonas stores an event date as venue-local midnight, so a typed date is read in
+    the machine's local timezone (the venue's, for an operator on site), not UTC.
+    A naive datetime's ``.timestamp()`` is interpreted as local time.
+    """
+    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d")
+    return {"$date": int(dt.timestamp() * 1000)}
+
+
+def to_ejson_date_end(yyyy_mm_dd: str) -> dict:
+    """EJSON exclusive upper bound for a date-range filter: local midnight of the
+    day after ``yyyy_mm_dd``.
+
+    Sonas's *ByDateRange pubs match ``from <= date < to`` on the event's start
+    date, so to include every event on the to-date the upper bound must be the
+    next day's local midnight, not the to-date's own midnight.
+    """
+    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d") + timedelta(days=1)
     return {"$date": int(dt.timestamp() * 1000)}
 
 
 def date_str(value) -> str:
-    """Render an EJSON date ({"$date": ms}) as YYYY-MM-DD; pass other values through."""
+    """Render an EJSON date ({"$date": ms}) as YYYY-MM-DD in local time.
+
+    Rendered in the machine's local timezone (the venue's, on site) to match how
+    Sonas stores venue-local dates. A UTC render shows the prior calendar day for
+    any zone east of UTC — a Brisbane (+10) wedding stored as local midnight is
+    the previous day in UTC. Pass other values through.
+    """
     if isinstance(value, dict) and "$date" in value:
         ms = value["$date"]
-        return datetime.fromtimestamp(ms / 1000, timezone.utc).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
     return "" if value is None else str(value)
 
 
@@ -377,7 +401,7 @@ class SonasClient:
         """Events whose date falls in [from, to] (default all time). Returns docs
         with the document id merged in under ``_id``."""
         frm = to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS}
-        to_d = to_ejson_date(to) if to else {"$date": EPOCH_2100_MS}
+        to_d = to_ejson_date_end(to) if to else {"$date": EPOCH_2100_MS}
         return self.read_pub("eventsByDateRange", [frm, to_d], collection="events")
 
     def get_event(self, event_id: str) -> dict:
