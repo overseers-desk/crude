@@ -31,6 +31,7 @@ crude-rezdy = "crude_rezdy.cli:app"
 crude-deputy = "crude_deputy.cli:app"
 crude-sonas = "crude_sonas.cli:app"
 crude-xero = "crude_xero.cli:app"
+crude-airwallex = "crude_airwallex.cli:app"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
