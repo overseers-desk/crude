@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.1.2
+Version:        1.2.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -81,6 +81,18 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Wed Jun 17 2026 Weiwu Zhang <a@colourful.land> - 1.2.0-1
+- Add crude-xero: Xero accounting over the official OAuth2 APIs. Accounting API
+  CRUD (accounts, bank transactions, contacts, invoices, bills, credit notes,
+  items, payments, purchase orders, quotes, manual journals, tax rates, tracking
+  categories, reports, attachments, history) with first-page-by-default listing
+  plus --all/--limit, and multi-tenant selection (--tenant). The one-time
+  crude-xero auth runs a browser consent (localhost loopback, or --manual);
+  the rotating token is stored and renewed automatically.
+- Durable token store: site tokens persist under $XDG_STATE_HOME/crude (default
+  ~/.local/state/crude) via a shared crude_common.statestore, so they survive a
+  reboot; crude-atdw, crude-skal and crude-sonas adopt it.
+
 * Tue Jun 16 2026 Weiwu Zhang <a@colourful.land> - 1.1.2-1
 - crude-rezdy: full CRUD over the Rezdy Supplier API (products, availability,
   bookings, customers, extras, pickup lists; category/rate/resource assignment;

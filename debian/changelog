@@ -1,3 +1,20 @@
+crude (1.2.0) unstable; urgency=medium
+
+  * Add crude-xero: command-line client for Xero accounting over the official
+    OAuth2 APIs. Covers the Accounting API (accounts, bank transactions and
+    transfers, contacts and groups, invoices, bills, credit notes, items,
+    payments, purchase orders, quotes, manual journals, tax rates, tracking
+    categories, reports, attachments and history) with list/get/create/update/
+    delete, first-page listing plus --all and --limit, and multi-tenant
+    selection (--tenant). The one-time `crude-xero auth` runs a browser consent
+    (localhost loopback, or --manual paste); the rotating token is stored and
+    renewed automatically.
+  * Durable token store: site tokens now persist under $XDG_STATE_HOME/crude
+    (default ~/.local/state/crude) via a shared crude_common.statestore, so they
+    survive a reboot; crude-atdw, crude-skal and crude-sonas adopt it.
+
+ -- Weiwu Zhang <a@colourful.land>  Wed, 17 Jun 2026 11:00:20 +1000
+
 crude (1.1.2) unstable; urgency=medium
 
   * crude-rezdy: full CRUD over the Rezdy Supplier API. Create, update and
