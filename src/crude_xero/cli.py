@@ -53,7 +53,8 @@ DEFAULT_SCOPES = (
     "openid profile email offline_access "
     "accounting.transactions accounting.contacts accounting.settings "
     "accounting.attachments accounting.journals.read accounting.reports.read "
-    "accounting.budgets.read"
+    "accounting.budgets.read "
+    "files assets projects"
 )
 
 app = typer.Typer(
@@ -334,10 +335,20 @@ def tenant_use(
     )
 
 
-# Attach the Accounting resource sub-apps and the cross-cutting sub-apps.
-from crude_xero import cli_accounting, cli_crosscutting  # noqa: E402
+# Attach the Accounting resource sub-apps, the Files/Assets/Projects sub-apps, and
+# the cross-cutting sub-apps.
+from crude_xero import (  # noqa: E402
+    cli_accounting,
+    cli_assets,
+    cli_crosscutting,
+    cli_files,
+    cli_projects,
+)
 
 cli_accounting.register(app)
+cli_files.register(app)
+cli_assets.register(app)
+cli_projects.register(app)
 cli_crosscutting.register(app)
 
 

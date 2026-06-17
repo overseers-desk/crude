@@ -320,7 +320,13 @@ class XeroClient:
 
     def __init__(self, session: XeroSession):
         from crude_xero.accounting import AccountingAPI
+        from crude_xero.assets import AssetsAPI
+        from crude_xero.files import FilesAPI
+        from crude_xero.projects import ProjectsAPI
         self.session = session
         self.accounting = AccountingAPI(session)
-        # Later phases add: self.files, self.assets, self.projects (Phase 2),
-        # self.payroll (Phase 3), self.bankfeeds, self.finance (Phase 4).
+        self.files = FilesAPI(session)
+        self.assets = AssetsAPI(session)
+        self.projects = ProjectsAPI(session)
+        # Later phases add: self.payroll (Phase 3),
+        # self.bankfeeds, self.finance (Phase 4).
