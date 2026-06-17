@@ -218,10 +218,9 @@ class AirwallexClient:
     """Facade composing the per-product method groups over one AirwallexSession.
 
     Composes the core treasury reads (account, balances, financial transactions),
-    the Payouts group (beneficiaries, transfers, FX rates and conversions), the
+    the Payouts group (beneficiaries, transfers, FX rates and conversions), and the
     Payments Acceptance group (payment intents, refunds, customers, payment consents,
-    payment links), and the Issuing group (cards, cardholders, authorizations,
-    transactions).
+    payment links).
     """
 
     def __init__(self, session: AirwallexSession):
@@ -230,11 +229,9 @@ class AirwallexClient:
         from crude_airwallex.transfers import TransfersAPI
         from crude_airwallex.fx import FxAPI
         from crude_airwallex.payments import PaymentsAPI
-        from crude_airwallex.issuing import IssuingAPI
         self.session = session
         self.core = CoreAPI(session)
         self.beneficiaries = BeneficiariesAPI(session)
         self.transfers = TransfersAPI(session)
         self.fx = FxAPI(session)
         self.payments = PaymentsAPI(session)
-        self.issuing = IssuingAPI(session)

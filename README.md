@@ -14,7 +14,7 @@ Seven sites ship today, each as its own console binary:
 - `crude-deputy`: Deputy workforce management: employees, rosters, timesheets, leave, and a generic resource sub-app for any Deputy object (REST, permanent API token).
 - `crude-sonas`: Sonas wedding-venue software (Meteor DDP backend, session token).
 - `crude-xero`: Xero accounting over the official OAuth2 APIs (REST, OAuth2 with automatic token refresh).
-- `crude-airwallex`: Airwallex global payments and transactions, balances, payouts, payment acceptance, and issuing (REST, API-key bearer token).
+- `crude-airwallex`: Airwallex global payments and transactions, balances, payouts, and payment acceptance (REST, API-key bearer token).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -170,10 +170,9 @@ crude-airwallex transaction get <id>
 crude-airwallex beneficiary list
 crude-airwallex conversion list
 crude-airwallex pa payment-intent list
-crude-airwallex issuing card list
 ```
 
-The command groups are the treasury reads (`account`, `balance`, `transaction`), Payouts (`beneficiary`, `transfer`, `fx-rate`, `conversion`), Payments Acceptance (the `pa` group), and Issuing (the `issuing` group). Reads accept `--json`. Verbs that move money (`transfer create`, `conversion create`, `pa payment-intent create`, `pa refund create`, and the like) prompt for confirmation unless you pass `--yes`. Some products need separate enablement on your Airwallex account; a call to one that is not enabled reports that plainly rather than failing obscurely. The full command surface and the verified API specifics are in `docs/airwallex.md`.
+The command groups are the treasury reads (`account`, `balance`, `transaction`), Payouts (`beneficiary`, `transfer`, `fx-rate`, `conversion`), and Payments Acceptance (the `pa` group). Reads accept `--json`. Verbs that move money (`transfer create`, `conversion create`, `pa payment-intent create`, `pa refund create`, and the like) prompt for confirmation unless you pass `--yes`. Some products need separate enablement on your Airwallex account; a call to one that is not enabled reports that plainly rather than failing obscurely. The full command surface and the verified API specifics are in `docs/airwallex.md`.
 
 ## Further reference
 

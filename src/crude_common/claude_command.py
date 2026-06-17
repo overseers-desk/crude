@@ -263,10 +263,8 @@ Airwallex global payments and transactions over the official REST API. Credentia
     crude-airwallex pa payment-intent list|get|create|confirm|capture|cancel
     crude-airwallex pa refund list|get|create ; pa customer list|get|create|update|delete
     crude-airwallex pa payment-consent list|get ; pa payment-link list|get|create
-    crude-airwallex issuing card list|get|create|update ; issuing cardholder list|get|create|update
-    crude-airwallex issuing authorization list|get ; issuing transaction list|get
 
-Add `--json` to any read for the raw object. Money-moving verbs (transfer/conversion create, pa payment-intent create/confirm/capture, pa refund create, pa payment-link create) prompt unless `--yes`. The `pa` and `issuing` groups need those products enabled on the account; a disabled product reports "API access for this resource has been disabled". Field-name casing is not uniform (financial_transactions is camelCase, the others snake_case); the verified surface and specifics are in the crude repo docs/airwallex.md.
+Add `--json` to any read for the raw object. Money-moving verbs (transfer/conversion create, pa payment-intent create/confirm/capture, pa refund create, pa payment-link create) prompt unless `--yes`. The `pa` group needs Payments Acceptance enabled on the account; a product that is not enabled reports "API access for this resource has been disabled". Field-name casing is not uniform (financial_transactions is camelCase, the others snake_case); the verified surface and specifics are in the crude repo docs/airwallex.md.
 """
 
 
