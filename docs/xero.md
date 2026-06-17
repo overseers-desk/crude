@@ -1,8 +1,8 @@
 # Xero client: command surface and API boundary
 
-Reference for `crude-xero`. Source: Xero's public REST APIs, documented at `https://developer.xero.com/documentation/api/`. Xero is not one API but seven products (Accounting, Payroll, Files, Assets, Projects, BankFeeds, Finance) sharing one OAuth2 transport. This binary ships the **Accounting API** (`api.xro/2.0`) in full and the **Files**, **Assets**, and **Projects** APIs, plus the shared auth and tenant machinery; the remaining three products (Payroll, BankFeeds, Finance) are registered in the transport's base-path table but have no command coverage yet (see Roadmap). This document covers configuration, the auth and tenant model, the transport, the command surface, the write conventions, and the boundary of what the binary exposes.
+Reference for `crude-xero`. Source: Xero's public REST APIs, documented at `https://developer.xero.com/documentation/api/`. Xero is not one API but seven products (Accounting, Payroll, Files, Assets, Projects, BankFeeds, Finance) sharing one OAuth2 transport. This binary ships all seven: the **Accounting API** (`api.xro/2.0`) in full, plus **Files**, **Assets**, **Projects**, **Payroll** (AU only), **BankFeeds**, and **Finance**, over the shared auth and tenant machinery. BankFeeds and Finance are **access-gated**: built and wired, but usable only after Xero grants restricted API access to the app (see Section 5). This document covers configuration, the auth and tenant model, the transport, the command surface, the write conventions, and the boundary of what the binary exposes.
 
-The unit suite (`tests/test_xero.py`, `tests/test_xero_auth.py`) pins the transport (header injection, paging, 401-refresh-retry, 429 back-off, the Xero error shapes), the token store (atomic write, 0600, rotation, never-clobber-on-failure, the config-seed migration), the soft-delete-as-status writes, the cross-cutting attachment whitelist, and `report get <name>` routing. The Files, Assets, and Projects method groups have their own suites (`tests/test_xero_files.py`, `tests/test_xero_assets.py`, `tests/test_xero_projects.py`), each pinning that product's distinct list-envelope unwrap, its base path, and the HTTP method of each verb (the Files multipart upload, the create/delete routings).
+The unit suite (`tests/test_xero.py`, `tests/test_xero_auth.py`) pins the transport (header injection, paging, 401-refresh-retry, 429 back-off, the Xero error shapes), the token store (atomic write, 0600, rotation, never-clobber-on-failure, the config-seed migration), the soft-delete-as-status writes, the cross-cutting attachment whitelist, and `report get <name>` routing. Each non-Accounting product has its own suite (`tests/test_xero_files.py`, `tests/test_xero_assets.py`, `tests/test_xero_projects.py`, `tests/test_xero_payroll.py`, `tests/test_xero_bankfeeds.py`, `tests/test_xero_finance.py`), pinning that product's distinct list-envelope unwrap, its base path, and the HTTP method of each verb (the Files multipart upload, the Payroll POST-to-create/update, the BankFeeds batch envelopes, the create/delete routings).
 
 ---
 
@@ -20,7 +20,7 @@ redirect_uri  = "http://localhost:8910/callback" # a localhost loopback, registe
 # default_tenant = "..."  # tenant name or id to use when several organisations are reachable
 ```
 
-`client_id` and `client_secret` are required. `redirect_uri` must be a `http://localhost:PORT/path` (or `127.0.0.1`) loopback that is also registered as an allowed redirect URI on the Xero app; the loopback server's port is derived from it. When `redirect_uri` is unset the binary falls back to `http://localhost:8910/callback`. When `scopes` is unset it requests a default grant of `openid profile email offline_access accounting.transactions accounting.contacts accounting.settings accounting.attachments accounting.journals.read accounting.reports.read accounting.budgets.read files assets projects` — the read+write Accounting scopes plus read-only journals/reports/budgets, and the read+write Files, Assets, and Projects scopes (read is implied by each write scope). `default_tenant` pins one organisation; it is written by `crude-xero tenant use` and read at tenant resolution.
+`client_id` and `client_secret` are required. `redirect_uri` must be a `http://localhost:PORT/path` (or `127.0.0.1`) loopback that is also registered as an allowed redirect URI on the Xero app; the loopback server's port is derived from it. When `redirect_uri` is unset the binary falls back to `http://localhost:8910/callback`. When `scopes` is unset it requests a default grant of `openid profile email offline_access accounting.transactions accounting.contacts accounting.settings accounting.attachments accounting.journals.read accounting.reports.read accounting.budgets.read files assets projects payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings`: the read+write Accounting scopes plus read-only journals/reports/budgets, and the read+write Files, Assets, Projects, and Payroll AU scopes (read is implied by each write scope). The BankFeeds and Finance scopes are deliberately left out of the default, because those products are access-gated and requesting their scopes before Xero grants access returns `invalid_scope` and breaks `crude-xero auth` (see Section 5). `default_tenant` pins one organisation; it is written by `crude-xero tenant use` and read at tenant resolution.
 
 **Tokens live in a durable side file, not in config.** Xero rotates the refresh token on every refresh (single-use), access tokens last 30 minutes, and there is no stored password to silently re-login, so the rotating token is kept in `$XDG_STATE_HOME/crude/xero_token.json` (default `~/.local/state/crude/xero_token.json`; or `xero_token_<account>.json` for a named account), written atomically (temp file + `fsync` + `os.replace`, mode `0600`) under an `flock`, seeded once from the `[xero]` config tokens if present. A rotating OAuth token is XDG *state*: it persists across restarts, but is not config (it is program-managed, not user-authored) and not cache (losing it costs a browser re-consent). Any `access_token`/`refresh_token`/`timestamp` left in the `[xero]` config block is read **once** as a migration seed, written into the side file, then ignored; the side file is authoritative thereafter. A naive (non-timezone-aware) seed `timestamp` is treated as already-expired, forcing a refresh while keeping the refresh token.
 
@@ -57,11 +57,11 @@ The seven product base paths, all under `https://api.xero.com/`:
 | Files | `files.xro/1.0/` | shipped (Phase 2) |
 | Assets | `assets.xro/1.0/` | shipped (Phase 2) |
 | Projects | `projects.xro/2.0/` | shipped (Phase 2) |
-| Payroll (AU) | `payroll.xro/2.0/` | forthcoming (Phase 3, AU only) |
-| BankFeeds | `bankfeeds.xro/1.0/` | forthcoming (Phase 4, partner-gated) |
-| Finance | `finance.xro/1.0/` | forthcoming (Phase 4, elevated scope) |
+| Payroll (AU) | `payroll.xro/2.0/` | shipped (Phase 3, AU only) |
+| BankFeeds | `bankfeeds.xro/1.0/` | shipped, but **access-gated** (Phase 4, see below) |
+| Finance | `finance.xro/1.0/` | shipped, but **access-gated** (Phase 4, see below) |
 
-All seven base paths are registered in the transport. Accounting, Files, Assets, and Projects have command coverage; Payroll, BankFeeds, and Finance are listed for orientation (see Roadmap).
+All seven products have command coverage. BankFeeds and Finance are wired but access-gated: Xero must grant the app restricted API access before their scopes can be consented (see Section 5).
 
 **Paging.** Accounting collections page through the `page` query parameter, 100 records a page. A `list` returns the first page by default; `--all` walks every page, and `--limit N` collects up to N records across pages (`--all` wins if both are given). Journals are the exception — they page by an `offset` cursor set to the trailing `JournalNumber` of the previous chunk (`journal list --offset N` starts after that number). List commands take Xero's own `--where` filter and `--order` sort expressions, except the read-only flat collections (branding themes, budgets, currencies, payment services) which take neither.
 
@@ -176,6 +176,58 @@ The Projects time-tracking product: projects, their nested tasks and time entrie
 - `project update` is a PATCH status change rather than a full-object read-merge-write: pass `--status <state>` (e.g. `INPROGRESS`, `CLOSED`) or a JSON `--data` body.
 - `task` and `time-entry` verbs take `--project <id>` (the parent) plus the child id as an argument where one is needed. Their `list` accepts `--page`/`--page-size`; `project list` also takes `--states` and `--contact` filters. `update` on a task or time entry is the usual read-merge-write PUT.
 
+### Payroll AU (`payroll.xro/2.0`)
+
+The Australian payroll product. **AU only**: the New Zealand and UK payroll APIs have different shapes and are not implemented. Payroll AU creates and updates both with POST (its own convention), unlike Accounting's PUT-to-create. Read-only resources are marked **(ro)**; verbs in *italics* are the irregular ones described below the table.
+
+| Resource | Verbs |
+|---|---|
+| `pay-employee` | list, get, create, update |
+| `pay-run` | list, get, create, update |
+| `pay-item` | *list*, *create*, *update* |
+| `timesheet` | list, get, create, update, delete |
+| `leave-application` | list, get, create, update |
+| `super-fund` | list, get, create, update |
+| `payroll-calendar` | list, get, create |
+| `payslip` **(ro)** | get |
+| `payroll-settings` **(ro)** | get |
+
+- `pay-item` is a single object keyed by category (EarningsRates, DeductionTypes, LeaveTypes, ReimbursementTypes), not a flat paged collection, so its `list` renders as a record (use `--json` for the category entries) and its `create`/`update` POST the category array straight to `PayItems` with no element id.
+- `payslip` is get-only (by id); `payroll-settings` is a read-only singleton.
+
+### BankFeeds (`bankfeeds.xro/1.0`)
+
+Bank-feed connections and the statements pushed against them. **Access-gated**: the commands exist, but a `bankfeeds` consent is refused until Xero grants the app access (see the note below). Verbs in *italics* are irregular.
+
+| Resource | Verbs |
+|---|---|
+| `feed-connection` | list, get, create, *delete* |
+| `statement` | list, get, create |
+
+- Both `list` verbs page on `--page`/`--page-size`.
+- `create` on either resource takes a batch body `{"items":[{...}]}`. `feed-connection delete` POSTs a delete-request batch of the same shape, because BankFeeds exposes no HTTP DELETE.
+
+### Finance (`finance.xro/1.0`)
+
+Cash validation, bank-statement accounting, financial statements, and accounting-activity reports. The whole product is **read-only**. **Access-gated**: the commands exist, but a `finance.*` consent is refused until Xero grants the app access (see the note below). Verbs in *italics* are the named-endpoint groups.
+
+| Resource | Verbs |
+|---|---|
+| `cash-validation` **(ro)** | get |
+| `bank-statement` **(ro)** | get |
+| `financial-statement` **(ro)** | *named statement* |
+| `activity` **(ro)** | *named activity* |
+
+- `cash-validation get` takes `--balance-date`; `bank-statement get` takes `--bank-account`, `--from-date`, `--to-date`, and `--summary-only`.
+- `financial-statement` carries one command per statement (`balance-sheet`, `profit-loss`, `cash-flow`, `trial-balance`) and `activity` one per accounting activity (`account-usage`, `lock-history`, `report-history`, `user-activities`). Each builds its query from `--date`/`--from-date`/`--to-date` plus `--param KEY=VALUE` (repeatable), mirroring the Accounting `report` group.
+
+### Access-gating: BankFeeds and Finance
+
+BankFeeds and Finance need Xero to grant the app **restricted API access** before their scopes can be consented. Until that grant, a consent that includes a `finance.*` or `bankfeeds` scope is rejected (`crude-xero auth` fails with `invalid_scope`; confirmed for `finance.statements.read`), so those scopes are kept out of the default grant. The commands are built and wired, and begin working as soon as access is granted: add the relevant scopes to config `scopes` and run `crude-xero auth` again.
+
+- BankFeeds: `bankfeeds`
+- Finance: `finance.statements.read finance.cashvalidation.read finance.accountingactivity.read finance.bankstatementsplus.read`
+
 ## 6. Write conventions
 
 - **JSON bodies.** `create`, `update`, `allocate`, the membership/option adds, and `tax-rate update` take their body from `--data '<json>'`, `-f/--file <path>`, or piped stdin.
@@ -188,15 +240,16 @@ The Projects time-tracking product: projects, their nested tasks and time entrie
 
 ## 7. Roadmap
 
-Accounting (Phase 1) and Files, Assets, Projects (Phase 2) are shipped; their command surfaces are documented in Section 5. The remaining three products are planned for later phases and are **not implemented** in this binary. Each phase is additive (a new client module, its CLI sub-apps, and the scope strings), reusing the Phase 1 auth and tenant path:
+All seven products are implemented; their command surfaces are in Section 5. The build landed in additive phases, each a new client module, its CLI sub-apps, and the scope strings, reusing the Phase 1 auth and tenant path:
 
-- **Phase 2 — Files, Assets, Projects (done).** Document storage and associations, the fixed-asset register, and the Projects time-tracking product. Added the `files assets projects` scopes to the default grant.
-- **Phase 3 — Payroll.** **Australian payroll only** (`payroll.xro/2.0`). The New Zealand and UK payroll APIs have different shapes and are not planned.
-- **Phase 4 — BankFeeds and Finance.** BankFeeds is **partner-application gated** (needs Xero approval) and Finance needs an **elevated scope**, so both ship last.
+- **Phase 1, Accounting.** The full `api.xro/2.0` resource surface, plus the auth and tenant machinery every later phase reuses.
+- **Phase 2, Files, Assets, Projects.** Document storage and associations, the fixed-asset register, and the Projects time-tracking product. Added the `files assets projects` scopes to the default grant.
+- **Phase 3, Payroll AU.** Australian payroll only (`payroll.xro/2.0`); the New Zealand and UK payroll APIs have different shapes and are not implemented. Added the `payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings` scopes to the default grant.
+- **Phase 4, BankFeeds and Finance.** Wired but **access-gated**: Xero must grant the app restricted API access before their scopes can be consented, so their scopes stay out of the default grant (see Section 5). Even once Finance access is granted, bank **reconciliation cannot be driven programmatically**: the public APIs expose no endpoint to mark a bank transaction reconciled (reconciliation is a dashboard-only action), and Finance's BankStatementsPlus read (`bank-statement get`) is the closest reconciliation-relevant data the API offers.
 
 ## 8. What the API does not expose / caveats
 
 - **AU BAS/GST report.** `report bas` and `report gst` both map to a `BASReport` endpoint name that is **unverified** against the live API; confirm the endpoint name against the Xero reports documentation before relying on it.
-- **NZ/UK payroll.** Not planned (Phase 3 is AU-only); only the accounting-side `employee` resource exists here, which is distinct from the Payroll API's employee.
+- **NZ/UK payroll.** Not implemented; Payroll is AU only. The Accounting API's `employee` resource is distinct from the Payroll API's `pay-employee`.
 - **Attachment/history coverage is partial.** Only the whitelisted Accounting resources (Section 5) take attachments or history through this binary; other resources, and all non-Accounting products, have none.
 - **Dashboard-only features.** Anything Xero exposes only through its web dashboard with no public API endpoint is out of scope; this binary is a thin client over the documented public APIs.

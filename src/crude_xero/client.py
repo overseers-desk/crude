@@ -321,12 +321,19 @@ class XeroClient:
     def __init__(self, session: XeroSession):
         from crude_xero.accounting import AccountingAPI
         from crude_xero.assets import AssetsAPI
+        from crude_xero.bankfeeds import BankFeedsAPI
         from crude_xero.files import FilesAPI
+        from crude_xero.finance import FinanceAPI
+        from crude_xero.payroll import PayrollAU
         from crude_xero.projects import ProjectsAPI
         self.session = session
         self.accounting = AccountingAPI(session)
         self.files = FilesAPI(session)
         self.assets = AssetsAPI(session)
         self.projects = ProjectsAPI(session)
-        # Later phases add: self.payroll (Phase 3),
-        # self.bankfeeds, self.finance (Phase 4).
+        self.payroll = PayrollAU(session)
+        self.bankfeeds = BankFeedsAPI(session)
+        self.finance = FinanceAPI(session)
+        # All seven products are now composed: Accounting (Phase 1); Files,
+        # Assets, Projects (Phase 2); Payroll AU (Phase 3); BankFeeds, Finance
+        # (Phase 4, access-gated — see docs/xero.md).

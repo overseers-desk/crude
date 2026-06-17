@@ -47,14 +47,21 @@ from crude_xero.client import XeroClient, XeroError, XeroSession
 # config (the port is derived from the URI).
 DEFAULT_REDIRECT_URI = "http://localhost:8910/callback"
 
-# A sensible accounting read+write grant when config sets no `scopes`. offline_access
-# is required for refresh tokens; journals/reports/budgets are read-only scopes.
+# A sensible accounting+payroll read+write grant when config sets no `scopes`.
+# offline_access is required for refresh tokens; journals/reports/budgets are
+# read-only scopes. The BankFeeds (`bankfeeds`) and Finance (`finance.*`) scopes
+# are deliberately absent: those products are access-gated, so requesting their
+# scopes in the default consent returns invalid_scope and breaks `crude-xero
+# auth`. The user adds them to config `scopes` once Xero grants access (see
+# docs/xero.md).
 DEFAULT_SCOPES = (
     "openid profile email offline_access "
     "accounting.transactions accounting.contacts accounting.settings "
     "accounting.attachments accounting.journals.read accounting.reports.read "
     "accounting.budgets.read "
-    "files assets projects"
+    "files assets projects "
+    "payroll.employees payroll.payruns payroll.payslip "
+    "payroll.timesheets payroll.settings"
 )
 
 app = typer.Typer(
@@ -340,8 +347,11 @@ def tenant_use(
 from crude_xero import (  # noqa: E402
     cli_accounting,
     cli_assets,
+    cli_bankfeeds,
     cli_crosscutting,
     cli_files,
+    cli_finance,
+    cli_payroll,
     cli_projects,
 )
 
@@ -349,6 +359,9 @@ cli_accounting.register(app)
 cli_files.register(app)
 cli_assets.register(app)
 cli_projects.register(app)
+cli_payroll.register(app)
+cli_bankfeeds.register(app)
+cli_finance.register(app)
 cli_crosscutting.register(app)
 
 
