@@ -33,7 +33,11 @@ from crude_airwallex import auth
 from crude_airwallex.client import AirwallexAuthError, AirwallexClient, AirwallexError, AirwallexSession
 
 app = typer.Typer(
-    help="crude-airwallex — Airwallex global payments and transactions over the REST API."
+    help="crude-airwallex — Airwallex global payments and transactions over the REST API.",
+    # Never let a traceback print frame locals: auth.login's locals hold the api_key,
+    # and Typer's default rich traceback would dump them on any unhandled error. The
+    # source lines (variable names) still show; the values never do.
+    pretty_exceptions_show_locals=False,
 )
 
 # The --on-behalf-of selection for this invocation, set by the root callback.
