@@ -233,3 +233,69 @@ def test_xero_lists_accounts(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("AccountID")
+
+
+def _xero_payroll_or_skip(crude_config):
+    """A Xero client for a payroll read, skipping when creds or scope are absent.
+
+    The Payroll product needs both [xero] credentials and a granted `payroll.*`
+    scope; without the scope the read returns 401/403, which is a skip (nothing
+    to test here), not a failure.
+    """
+    xero = crude_config.get("xero", {})
+    if not (xero.get("client_id") and xero.get("client_secret")):
+        pytest.skip("no [xero] credentials in config")
+    from crude_xero.cli import _make_client
+
+    return _make_client(crude_config)
+
+
+@pytest.mark.live
+def test_xero_lists_payroll_employees(crude_config):
+    from crude_xero.client import XeroError
+
+    client = _xero_payroll_or_skip(crude_config)
+    try:
+        items = client.payroll.list_employees()
+    except XeroError as e:
+        if e.status in (401, 403):
+            pytest.skip("token lacks the payroll scope")
+        raise
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("employeeID")  # camelCase: the unified Payroll API
+
+
+@pytest.mark.live
+def test_xero_lists_pay_runs(crude_config):
+    # Pay runs are list-only (no detail/update endpoint); the list is the surface.
+    from crude_xero.client import XeroError
+
+    client = _xero_payroll_or_skip(crude_config)
+    try:
+        items = client.payroll.list_pay_runs()
+    except XeroError as e:
+        if e.status in (401, 403):
+            pytest.skip("token lacks the payroll scope")
+        raise
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("payRunID")
+
+
+@pytest.mark.live
+def test_xero_lists_earnings_rates(crude_config):
+    # Pins the renamed endpoint: the unified API splits the classic PayItems
+    # object into separate EarningsRates / Reimbursements collections.
+    from crude_xero.client import XeroError
+
+    client = _xero_payroll_or_skip(crude_config)
+    try:
+        items = client.payroll.list_earnings_rates()
+    except XeroError as e:
+        if e.status in (401, 403):
+            pytest.skip("token lacks the payroll scope")
+        raise
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("earningsRateID")
