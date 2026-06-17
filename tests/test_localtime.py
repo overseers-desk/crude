@@ -47,6 +47,12 @@ def test_format_local_naive_is_assumed_utc(brisbane_tz):
     assert format_local("2026-06-17T14:00:00") == "2026-06-18 00:00"
 
 
+def test_format_local_handles_airwallex_millisecond_offset(brisbane_tz):
+    # The live financial_transactions format: ISO-8601 with milliseconds and a
+    # +00:00 offset. 07:53 UTC is 17:53 in Brisbane (+10).
+    assert format_local("2026-06-17T07:53:44.068+00:00") == "2026-06-17 17:53"
+
+
 def test_to_utc_iso_is_start_of_local_day(brisbane_tz):
     assert to_utc_iso("2026-06-18") == "2026-06-17T14:00:00Z"
 

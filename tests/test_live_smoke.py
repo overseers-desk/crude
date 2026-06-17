@@ -299,3 +299,31 @@ def test_xero_lists_earnings_rates(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("earningsRateID")
+
+
+@pytest.mark.live
+def test_airwallex_lists_current_balances(crude_config):
+    # Exercises the real api-key login path and the snake_case balances envelope.
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.core.list_current_balances()
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("currency")
+
+
+@pytest.mark.live
+def test_airwallex_lists_one_transaction(crude_config):
+    # The financial_transactions endpoint returns camelCase fields (id, createdAt).
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    client = _make_client(crude_config)
+    items = client.core.list_financial_transactions(limit=1)
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("id")

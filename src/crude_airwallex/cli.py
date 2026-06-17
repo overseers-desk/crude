@@ -261,8 +261,8 @@ def transaction_list(
             ("Net", "net"),
             ("Fee", "fee"),
             ("Status", "status"),
-            ("Type", "financial_transaction_type"),
-            ("Created", _ts("created_at")),
+            ("Type", "transactionType"),
+            ("Created", _ts("createdAt")),
         ],
         "transaction",
         output_json,
@@ -275,8 +275,10 @@ def transaction_get(
     output_json: bool = _JSON,
 ):
     """Show one financial transaction by id."""
+    # The financial_transactions endpoint returns camelCase fields (createdAt,
+    # transactionType, settledAt), unlike the snake_case balances/account endpoints.
     rec = _client().core.get_financial_transaction(txn_id)
-    _emit_record(_localize(rec, ("created_at", "settled_at", "updated_at")), output_json)
+    _emit_record(_localize(rec, ("createdAt", "settledAt", "estimatedSettledAt")), output_json)
 
 
 if __name__ == "__main__":
