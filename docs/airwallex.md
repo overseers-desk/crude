@@ -61,6 +61,12 @@ These were confirmed against a live production account; treat them as ground tru
 - **Write convention:** money/data writes are `POST .../create|update/{id}|delete/{id}` (not
   PUT/DELETE). A transfer or conversion body needs an idempotency `request_id`; crude fills a uuid4
   when the caller omits one (a caller wanting retry-idempotency supplies their own).
+- **Payments Acceptance group (verified live, enabled on this account):** all snake_case, under
+  `/api/v1/pa/`: `payment_intents` (+ `/{id}`, writes `/create`, `/{id}/confirm|capture|cancel`),
+  `refunds`, `customers`, `payment_consents` (read-only), `payment_links`. No version header needed
+  (unlike FX). A payment-intent uses `id`, `amount`, `currency`, `merchant_order_id`, `status`,
+  `captured_amount`, `created_at`. A reusable payment link carries `default_currency` rather than a
+  fixed `currency`. payment-intent/refund/payment-link create take an idempotency `request_id`.
 
 ## Command surface
 
@@ -88,7 +94,19 @@ Payouts (reads, plus confirm-gated money/data writes):
     crude-airwallex conversion get <id>
     crude-airwallex conversion create (--data | -f | stdin) [--yes]   # MOVES REAL MONEY
 
-Add `--json` to any read for the raw API object. `--from`/`--to` take `YYYY-MM-DD` local dates.
-Money-moving verbs (`transfer create`, `conversion create`) prompt unless `--yes`.
+Payments Acceptance (the `pa` group; reads, plus confirm-gated money writes):
 
-Payments Acceptance and Issuing are added in later modules.
+    crude-airwallex pa payment-intent list [--status] [--from] [--to] [--all] [--limit]
+    crude-airwallex pa payment-intent get <id>
+    crude-airwallex pa payment-intent create (--data | -f | stdin) [--yes]            # REQUESTS REAL MONEY
+    crude-airwallex pa payment-intent confirm|capture|cancel <id> (--data|-f|stdin) [--yes]
+    crude-airwallex pa refund list/get ; pa refund create (--data | -f | stdin) [--yes]   # MOVES REAL MONEY
+    crude-airwallex pa customer list/get/create/update/delete
+    crude-airwallex pa payment-consent list/get
+    crude-airwallex pa payment-link list/get ; pa payment-link create (--data|-f|stdin) [--yes]
+
+Add `--json` to any read for the raw API object. `--from`/`--to` take `YYYY-MM-DD` local dates.
+Money-moving verbs (`transfer create`, `conversion create`, `pa payment-intent create/confirm/capture`,
+`pa refund create`, `pa payment-link create`) prompt unless `--yes`.
+
+Issuing is added in a later module.

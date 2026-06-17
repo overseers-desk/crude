@@ -374,3 +374,53 @@ def test_airwallex_lists_transfers(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("id")
+
+
+def _airwallex_pa_or_skip(crude_config):
+    """A client for a Payments Acceptance read, skipping when creds or pa are absent.
+
+    The `pa` group needs the Payments Acceptance product enabled on the account;
+    a disabled account answers with a 401/403/404, which is a skip (nothing to test
+    here), not a failure. An enabled account answers with a (possibly empty) page.
+    """
+    if not crude_config.get("airwallex", {}).get("client_id"):
+        pytest.skip("no [airwallex] credentials in config")
+    from crude_airwallex.cli import _make_client
+
+    return _make_client(crude_config)
+
+
+@pytest.mark.live
+def test_airwallex_lists_pa_customers(crude_config):
+    # Payments Acceptance customers: snake_case `id`. Shape-only; tolerates empty
+    # (an account using pa only for inbound links may have no saved customers).
+    from crude_airwallex.client import AirwallexError
+
+    client = _airwallex_pa_or_skip(crude_config)
+    try:
+        items = client.payments.list_customers(limit=1)
+    except AirwallexError as e:
+        if e.status in (401, 403, 404):
+            pytest.skip("Payments Acceptance not enabled on this account")
+        raise
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("id")
+
+
+@pytest.mark.live
+def test_airwallex_lists_pa_payment_intents(crude_config):
+    # Payments Acceptance payment intents: snake_case `id` (e.g. int_...). Shape-only;
+    # tolerates empty.
+    from crude_airwallex.client import AirwallexError
+
+    client = _airwallex_pa_or_skip(crude_config)
+    try:
+        items = client.payments.list_payment_intents(limit=1)
+    except AirwallexError as e:
+        if e.status in (401, 403, 404):
+            pytest.skip("Payments Acceptance not enabled on this account")
+        raise
+    assert isinstance(items, list)
+    if items:
+        assert items[0].get("id")
