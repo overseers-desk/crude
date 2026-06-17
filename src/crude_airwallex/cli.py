@@ -129,12 +129,13 @@ def login():
 
 
 # Attach the resource sub-apps. Core treasury (account, balance, transaction),
-# Payouts (beneficiary, transfer, fx-rate, conversion), and Payments Acceptance (the
-# nested `pa` group) ship now; issuing is added as that module lands.
+# Payouts (beneficiary, transfer, fx-rate, conversion), Payments Acceptance (the
+# nested `pa` group), and Issuing (the nested `issuing` group).
 from crude_airwallex import (  # noqa: E402
     cli_beneficiaries,
     cli_core,
     cli_fx,
+    cli_issuing,
     cli_payments,
     cli_transfers,
 )
@@ -144,6 +145,7 @@ cli_beneficiaries.register(app)
 cli_transfers.register(app)
 cli_fx.register(app)
 cli_payments.register(app)
+cli_issuing.register(app)
 
 
 if __name__ == "__main__":

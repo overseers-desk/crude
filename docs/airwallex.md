@@ -67,6 +67,21 @@ These were confirmed against a live production account; treat them as ground tru
   (unlike FX). A payment-intent uses `id`, `amount`, `currency`, `merchant_order_id`, `status`,
   `captured_amount`, `created_at`. A reusable payment link carries `default_currency` rather than a
   fixed `currency`. payment-intent/refund/payment-link create take an idempotency `request_id`.
+- **Issuing group (paths recognized; product gated on this account):** under `/api/v1/issuing/`:
+  `cards`, `cardholders`, `authorizations`, `transactions`, each GET-list + `/{id}`. Writes use a
+  split convention: a new object POSTs to `cards|cardholders/create`, while an update POSTs to the
+  resource-then-action `cards|cardholders/{id}/update` (not the Payouts `/update/{id}` shape). The
+  issuing list date filters are `from_created_date` / `to_created_date` (the `_date` form, defaulting
+  to a 30-day window), not the `_at` form core/pa take. All four list endpoints returned
+  `403 access_denied_not_enabled` ("API access for this resource has been disabled") on the live
+  production account, so issuing is not enabled here: the paths are recognized (a product-enablement
+  gate, not a routing 404 nor an `incorrect_version`), and no `x-api-version` header was needed to
+  reach the gate, but the response field names rest on Airwallex docs, not live observation:
+  snake_case card `card_id`, a masked `card_number`, `card_status`, `cardholder_id`, `name_on_card`,
+  `created_at`; transaction `transaction_id`. crude reads only the masked card number and never calls
+  the sensitive-details / full-PAN endpoint. card/cardholder create fill an idempotency `request_id`;
+  an update is a partial body (an issued card round-trips read-only fields the update endpoint
+  rejects). Whether a version header is required once issuing is enabled is untested.
 
 ## Command surface
 
@@ -105,8 +120,22 @@ Payments Acceptance (the `pa` group; reads, plus confirm-gated money writes):
     crude-airwallex pa payment-consent list/get
     crude-airwallex pa payment-link list/get ; pa payment-link create (--data|-f|stdin) [--yes]
 
+Issuing (the `issuing` group; reads, plus confirm-gated card/cardholder writes):
+
+    crude-airwallex issuing card list [--status] [--cardholder] [--from] [--to] [--all] [--limit]
+    crude-airwallex issuing card get <id>                                   # the card number is masked
+    crude-airwallex issuing card create (--data | -f | stdin) [--yes]       # PROVISIONS A REAL CARD
+    crude-airwallex issuing card update <id> (--data | -f | stdin) [--yes]  # freeze/cancel a live card
+    crude-airwallex issuing cardholder list/get
+    crude-airwallex issuing cardholder create (--data | -f | stdin) [--yes]
+    crude-airwallex issuing cardholder update <id> (--data | -f | stdin) [--yes]
+    crude-airwallex issuing authorization list [--status] [--card] [--from] [--to] [--all] [--limit]
+    crude-airwallex issuing authorization get <id>
+    crude-airwallex issuing transaction list [--status] [--card] [--from] [--to] [--all] [--limit]
+    crude-airwallex issuing transaction get <id>
+
 Add `--json` to any read for the raw API object. `--from`/`--to` take `YYYY-MM-DD` local dates.
 Money-moving verbs (`transfer create`, `conversion create`, `pa payment-intent create/confirm/capture`,
-`pa refund create`, `pa payment-link create`) prompt unless `--yes`.
-
-Issuing is added in a later module.
+`pa refund create`, `pa payment-link create`) prompt unless `--yes`. The issuing writes (`card
+create`/`update`, `cardholder create`/`update`) also prompt: a card create provisions a real spending
+instrument and a card update can freeze or cancel a live card.
