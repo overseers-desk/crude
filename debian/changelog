@@ -1,3 +1,15 @@
+crude (1.2.1) unstable; urgency=medium
+
+  * Add crude-airwallex: command-line client for Airwallex. Covers Payouts
+    (beneficiaries, transfers, FX conversions), Payments Acceptance (payment
+    intents, consents, payment methods, authorisations), and Financial
+    Transactions. Auth via API key stored in the durable state store.
+  * crude-xero: extend with Files, Assets, Projects, Payroll AU, BankFeeds,
+    and Finance products; fix Payroll API base URL (payroll.xro/1.0).
+  * crude-sonas: render and filter event dates in local time, not UTC.
+
+ -- Weiwu Zhang <a@colourful.land>  Wed, 18 Jun 2026 10:00:00 +1000
+
 crude (1.2.0) unstable; urgency=medium
 
   * Add crude-xero: command-line client for Xero accounting over the official

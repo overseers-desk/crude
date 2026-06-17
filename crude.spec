@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.2.0
+Version:        1.2.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -83,6 +83,15 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Wed Jun 18 2026 Weiwu Zhang <a@colourful.land> - 1.2.1-1
+- Add crude-airwallex: command-line client for Airwallex. Covers Payouts
+  (beneficiaries, transfers, FX conversions), Payments Acceptance (payment
+  intents, consents, payment methods, authorisations), and Financial
+  Transactions. Auth via API key stored in the durable state store.
+- crude-xero: extend with Files, Assets, Projects, Payroll AU, BankFeeds,
+  and Finance products; fix Payroll API base URL (payroll.xro/1.0).
+- crude-sonas: render and filter event dates in local time, not UTC.
+
 * Wed Jun 17 2026 Weiwu Zhang <a@colourful.land> - 1.2.0-1
 - Add crude-xero: Xero accounting over the official OAuth2 APIs. Accounting API
   CRUD (accounts, bank transactions, contacts, invoices, bills, credit notes,
