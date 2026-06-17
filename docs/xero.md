@@ -57,7 +57,7 @@ The seven product base paths, all under `https://api.xero.com/`:
 | Files | `files.xro/1.0/` | shipped (Phase 2) |
 | Assets | `assets.xro/1.0/` | shipped (Phase 2) |
 | Projects | `projects.xro/2.0/` | shipped (Phase 2) |
-| Payroll (AU) | `payroll.xro/2.0/` | shipped (Phase 3, AU only) |
+| Payroll (AU) | `payroll.xro/1.0/` | shipped (Phase 3, AU only) |
 | BankFeeds | `bankfeeds.xro/1.0/` | shipped, but **access-gated** (Phase 4, see below) |
 | Finance | `finance.xro/1.0/` | shipped, but **access-gated** (Phase 4, see below) |
 
@@ -176,23 +176,25 @@ The Projects time-tracking product: projects, their nested tasks and time entrie
 - `project update` is a PATCH status change rather than a full-object read-merge-write: pass `--status <state>` (e.g. `INPROGRESS`, `CLOSED`) or a JSON `--data` body.
 - `task` and `time-entry` verbs take `--project <id>` (the parent) plus the child id as an argument where one is needed. Their `list` accepts `--page`/`--page-size`; `project list` also takes `--states` and `--contact` filters. `update` on a task or time entry is the usual read-merge-write PUT.
 
-### Payroll (`payroll.xro/2.0`)
+### Payroll AU (`payroll.xro/1.0`)
 
-Payroll runs on the unified, camelCase Payroll platform (the API shape Xero shares across AU, NZ, and UK), not the classic PascalCase Payroll AU product. Every response wraps its payload in a metadata envelope (`{id, providerName, dateTimeUTC, httpStatusCode, pagination:{page,pageSize,pageCount,itemCount}, problem, <camelCasePlural>}`) and dates are ISO strings. A create POSTs to the collection and an update POSTs to the element (Payroll has no PUT), unlike Accounting's PUT-to-create. Read-only resources are marked **(ro)**.
+The classic Australian Payroll product. **AU only**: the New Zealand and UK payrolls are Xero's separate unified `payroll.xro/2.0` platform and are not implemented. Every response wraps its payload under the resource's PascalCase plural key beside the `{Id, Status, ProviderName, DateTimeUTC}` envelope scalars, and dates are `/Date(ms)/` strings. A create POSTs to the collection and an update POSTs to the element (Payroll AU has no PUT), unlike Accounting's PUT-to-create. Read-only resources are marked **(ro)**; verbs in *italics* are the irregular ones described below the table.
 
 | Resource | Verbs |
 |---|---|
 | `pay-employee` | list, get, create, update |
-| `pay-run` | list, create |
-| `pay-run-calendar` | list, get, create |
-| `earnings-rate` | list, get, create, update |
-| `reimbursement` | list, get, create, update |
+| `pay-run` | list, get, create, update |
+| `pay-item` | *list*, *create*, *update* |
 | `timesheet` | list, get, create, update, delete |
+| `leave-application` | list, get, create, update |
+| `super-fund` | list, get, create, update |
+| `payroll-calendar` | list, get, create |
+| `payslip` **(ro)** | get |
 | `payroll-settings` **(ro)** | get |
 
-- `pay-run` is list/create only. The single-pay-run detail (`GET PayRuns/{id}`) and the element update are not served (405/404), and with them go the payslip lines, so there is no `get`, no `update`, and no per-run payslip read (Section 8). A run's totals come from the list. Note: `GET PayRuns?page=2` is observed to return HTTP 500 server-side (other pages return normally), so `pay-run list --all` can fail partway past two pages; fetch a bounded page set with `--limit`.
-- `earnings-rate` and `reimbursement` are this platform's separate resources for what the classic API grouped under a single `PayItems` object.
-- `payroll-settings` is a read-only singleton wrapping the linked payroll accounts.
+- `pay-run get` returns the run's detail with its `Payslips` array (each entry carrying the employee plus their wages, tax, super, and net pay); `payslip get` returns one payslip's per-line breakdown (`EarningsLines`, `DeductionLines`, `SuperannuationLines`, `TaxLines`, `NetPay`). "Which staff were paid in a given run, and how much" is answered by `pay-run get` then `payslip get`.
+- `pay-item` is a single object keyed by category (EarningsRates, DeductionTypes, LeaveTypes, ReimbursementTypes), not a flat paged collection, so its `list` renders as a record (use `--json` for the category entries) and its `create`/`update` POST the category array straight to `PayItems` with no element id.
+- `payslip` is get-only (by id); `payroll-settings` is a read-only singleton.
 
 ### BankFeeds (`bankfeeds.xro/1.0`)
 
@@ -243,13 +245,12 @@ All seven products are implemented; their command surfaces are in Section 5. The
 
 - **Phase 1, Accounting.** The full `api.xro/2.0` resource surface, plus the auth and tenant machinery every later phase reuses.
 - **Phase 2, Files, Assets, Projects.** Document storage and associations, the fixed-asset register, and the Projects time-tracking product. Added the `files assets projects` scopes to the default grant.
-- **Phase 3, Payroll.** The `payroll.xro/2.0` unified Payroll platform (camelCase, the shape Xero shares across AU, NZ, and UK, not the classic PascalCase AU product). Added the `payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings` scopes to the default grant.
+- **Phase 3, Payroll AU.** The classic `payroll.xro/1.0` Australian payroll product (PascalCase). Added the `payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings` scopes to the default grant.
 - **Phase 4, BankFeeds and Finance.** Wired but **access-gated**: Xero must grant the app restricted API access before their scopes can be consented, so their scopes stay out of the default grant (see Section 5). Even once Finance access is granted, bank **reconciliation cannot be driven programmatically**: the public APIs expose no endpoint to mark a bank transaction reconciled (reconciliation is a dashboard-only action), and Finance's BankStatementsPlus read (`bank-statement get`) is the closest reconciliation-relevant data the API offers.
 
 ## 8. What the API does not expose / caveats
 
 - **AU BAS/GST report.** `report bas` and `report gst` both map to a `BASReport` endpoint name that is **unverified** against the live API; confirm the endpoint name against the Xero reports documentation before relying on it.
-- **Unified Payroll platform.** Payroll runs on the `payroll.xro/2.0` unified, camelCase API (the shape shared across AU, NZ, and UK), not the classic PascalCase AU product. The Accounting API's `employee` resource is distinct from the Payroll API's `pay-employee`.
-- **Payslips and pay-run detail.** The Payroll API serves no single-pay-run read (`GET PayRuns/{id}` → 405) and no payslip endpoint (`Payslips` → 404/405). Payslip-level data (which staff were paid in a given run, and each one's gross and net) is therefore not reachable through the API; `pay-run list` gives the runs and their period totals only. The `payroll.payslip` scope is requested but currently has no served endpoint.
+- **Classic AU Payroll API.** Payroll uses `payroll.xro/1.0`, the classic PascalCase AU product. Xero's unified `payroll.xro/2.0` platform also answers for this organisation but is a partial deployment (no payslips, no single-pay-run detail, and the super-fund, leave, and pay-item resources absent), so 1.0 is the version wired. The Accounting API's `employee` resource is distinct from the Payroll API's `pay-employee`.
 - **Attachment/history coverage is partial.** Only the whitelisted Accounting resources (Section 5) take attachments or history through this binary; other resources, and all non-Accounting products, have none.
 - **Dashboard-only features.** Anything Xero exposes only through its web dashboard with no public API endpoint is out of scope; this binary is a thin client over the documented public APIs.

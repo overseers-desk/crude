@@ -1,17 +1,17 @@
-"""Payroll API resource sub-apps for crude-xero.
+"""Payroll AU API resource sub-apps for crude-xero.
 
-`register(app)` attaches one sub-`Typer` per Payroll resource: `pay-employee`,
-`pay-run` (list/create only), `pay-run-calendar`, `earnings-rate`,
-`reimbursement`, `timesheet`, and the read-only singleton `payroll-settings`. The
-uniform verbs (list/get/create/update/delete) are built by a local `_resource`
-factory — like the Assets CLI's, trimmed and bound to the `XeroClient.payroll`
-facade group — because `cli_accounting._resource` is bound to `.accounting` and
-creates with PUT, whereas Payroll creates and updates both with POST. `pay-run`
-omits get/update because the single-pay-run detail and element update are not
-served by the API (405/404), leaving the pay-run resource read-as-a-list only.
-`payroll-settings` is a read-only singleton added explicitly. Reads render with
-the shared `_emit_list`/`_emit_record`; writes go through `_do_write`/
-`_merge_update`, with confirm-before-write.
+`register(app)` attaches one sub-`Typer` per Payroll AU resource: `pay-employee`,
+`pay-run`, `pay-item`, `timesheet`, `leave-application`, `super-fund`,
+`payroll-calendar`, the read-only `payslip`, and the read-only singleton
+`payroll-settings`. The uniform verbs (list/get/create/update/delete) are built by
+a local `_resource` factory — like the Assets CLI's, trimmed and bound to the
+`XeroClient.payroll` facade group — because `cli_accounting._resource` is bound to
+`.accounting` and creates with PUT, whereas Payroll AU creates and updates both
+with POST. The irregular shapes are added explicitly: `pay-item` is a grouped
+object (so its `list` renders as a record and its create/update POST the body
+straight to `PayItems` with no element), and `payslip`/`payroll-settings` are
+read-only. Reads render with the shared `_emit_list`/`_emit_record`; writes go
+through `_do_write`/`_merge_update`, with confirm-before-write.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _client(*args, **kwargs):
 
 
 def _payroll(*args, **kwargs):
-    """The Payroll method group off the configured client facade (`.payroll`)."""
+    """The Payroll AU method group off the configured client facade (`.payroll`)."""
     return _client(*args, **kwargs).payroll
 
 
@@ -50,32 +50,33 @@ def _list_hint(items: list, fetch_all: bool, limit: Optional[int]) -> None:
         )
 
 
-# Table columns per resource (Payroll fields are camelCase, unlike Accounting).
+# Table columns per resource (Payroll AU fields are PascalCase, like Accounting).
 _EMPLOYEE_COLS = [
-    ("ID", "employeeID"), ("First", "firstName"), ("Last", "lastName"),
-    ("Email", "email"), ("Start", "startDate"), ("End", "endDate"),
+    ("ID", "EmployeeID"), ("First", "FirstName"), ("Last", "LastName"),
+    ("Email", "Email"), ("Status", "Status"), ("Start", "StartDate"),
 ]
 _PAY_RUN_COLS = [
-    ("ID", "payRunID"), ("Calendar", "payrollCalendarID"),
-    ("Start", "periodStartDate"), ("End", "periodEndDate"),
-    ("Payment", "paymentDate"), ("Status", "payRunStatus"),
-    ("Cost", "totalCost"), ("Pay", "totalPay"),
-]
-_CALENDAR_COLS = [
-    ("ID", "payrollCalendarID"), ("Name", "name"), ("Type", "calendarType"),
-    ("Start", "periodStartDate"), ("End", "periodEndDate"), ("Payment", "paymentDate"),
-]
-_EARNINGS_RATE_COLS = [
-    ("ID", "earningsRateID"), ("Name", "name"), ("Earnings", "earningsType"),
-    ("Rate", "rateType"), ("Units", "typeOfUnits"), ("Current", "currentRecord"),
-]
-_REIMBURSEMENT_COLS = [
-    ("ID", "reimbursementID"), ("Name", "name"),
-    ("Account", "accountID"), ("Current", "currentRecord"),
+    ("ID", "PayRunID"), ("Calendar", "PayrollCalendarID"),
+    ("Start", "PayRunPeriodStartDate"), ("End", "PayRunPeriodEndDate"),
+    ("Payment", "PaymentDate"), ("Status", "PayRunStatus"),
 ]
 _TIMESHEET_COLS = [
-    ("ID", "timesheetID"), ("Employee", "employeeID"), ("Calendar", "payrollCalendarID"),
-    ("Start", "startDate"), ("End", "endDate"), ("Status", "status"), ("Hours", "totalHours"),
+    ("ID", "TimesheetID"), ("Employee", "EmployeeID"),
+    ("Start", "StartDate"), ("End", "EndDate"),
+    ("Status", "Status"), ("Hours", "Hours"),
+]
+_LEAVE_COLS = [
+    ("ID", "LeaveApplicationID"), ("Employee", "EmployeeID"),
+    ("Type", "LeaveTypeID"), ("PayOut", "PayOutType"),
+    ("Start", "StartDate"), ("End", "EndDate"),
+]
+_SUPER_FUND_COLS = [
+    ("ID", "SuperFundID"), ("Name", "Name"), ("Type", "Type"),
+    ("ABN", "ABN"), ("BSB", "BSB"),
+]
+_CALENDAR_COLS = [
+    ("ID", "PayrollCalendarID"), ("Name", "Name"), ("Type", "CalendarType"),
+    ("Start", "StartDate"), ("Payment", "PaymentDate"),
 ]
 
 
@@ -93,9 +94,9 @@ def _resource(
 ) -> typer.Typer:
     """Create a resource sub-app with the standard verbs and return it.
 
-    Like the Assets CLI's factory, trimmed to the verbs the Payroll resources
+    Like the Assets CLI's factory, trimmed to the verbs the Payroll AU resources
     share and bound to the `.payroll` group. Create POSTs to the collection and
-    update is a read-merge-write POST to the element (both Payroll's convention).
+    update is a read-merge-write POST to the element (both Payroll AU's convention).
     Irregular verbs are added to the returned sub-app by the caller.
     """
     sub = typer.Typer(help=f"Xero {label}.")
@@ -152,7 +153,7 @@ def _resource(
 
     if update_fn:
 
-        @sub.command("update", help=f"Update {_a(label)} {label} (read-merge-write; Payroll POSTs the element).")
+        @sub.command("update", help=f"Update {_a(label)} {label} (read-merge-write; Payroll AU POSTs the element).")
         def _update(
             guid: str = typer.Argument(..., help=f"{label} id (GUID) to update."),
             data: Optional[str] = typer.Option(None, "--data", help="Partial JSON overlaying the fetched record."),
@@ -197,7 +198,7 @@ def _resource(
 
 
 def register(app: typer.Typer) -> None:
-    """Attach the Payroll resource sub-apps to the root app."""
+    """Attach the Payroll AU resource sub-apps to the root app."""
 
     _resource(
         app, "pay-employee", "payroll employee", _EMPLOYEE_COLS,
@@ -205,30 +206,13 @@ def register(app: typer.Typer) -> None:
         create_fn="create_employee", update_fn="update_employee",
     )
 
-    # Pay runs are list/create only: GET PayRuns/{id} (405) and the element POST
-    # (404) are not served, so there is no get/update/delete to expose.
     _resource(
         app, "pay-run", "pay run", _PAY_RUN_COLS,
-        list_fn="list_pay_runs", create_fn="create_pay_run",
+        list_fn="list_pay_runs", get_fn="get_pay_run",
+        create_fn="create_pay_run", update_fn="update_pay_run",
     )
 
-    _resource(
-        app, "pay-run-calendar", "pay run calendar", _CALENDAR_COLS,
-        list_fn="list_pay_run_calendars", get_fn="get_pay_run_calendar",
-        create_fn="create_pay_run_calendar",
-    )
-
-    _resource(
-        app, "earnings-rate", "earnings rate", _EARNINGS_RATE_COLS,
-        list_fn="list_earnings_rates", get_fn="get_earnings_rate",
-        create_fn="create_earnings_rate", update_fn="update_earnings_rate",
-    )
-
-    _resource(
-        app, "reimbursement", "reimbursement", _REIMBURSEMENT_COLS,
-        list_fn="list_reimbursements", get_fn="get_reimbursement",
-        create_fn="create_reimbursement", update_fn="update_reimbursement",
-    )
+    _register_pay_item(app)
 
     _resource(
         app, "timesheet", "timesheet", _TIMESHEET_COLS,
@@ -237,7 +221,95 @@ def register(app: typer.Typer) -> None:
         delete_fn="delete_timesheet",
     )
 
+    _resource(
+        app, "leave-application", "leave application", _LEAVE_COLS,
+        list_fn="list_leave_applications", get_fn="get_leave_application",
+        create_fn="create_leave_application", update_fn="update_leave_application",
+    )
+
+    _resource(
+        app, "super-fund", "super fund", _SUPER_FUND_COLS,
+        list_fn="list_super_funds", get_fn="get_super_fund",
+        create_fn="create_super_fund", update_fn="update_super_fund",
+    )
+
+    _resource(
+        app, "payroll-calendar", "payroll calendar", _CALENDAR_COLS,
+        list_fn="list_payroll_calendars", get_fn="get_payroll_calendar",
+        create_fn="create_payroll_calendar",
+    )
+
+    _register_payslip(app)
     _register_settings(app)
+
+
+def _register_pay_item(app: typer.Typer) -> None:
+    """The `pay-item` sub-app: a grouped-object list, plus POST-to-PayItems writes.
+
+    PayItems is not a flat paged collection but a single object keyed by category
+    (EarningsRates, DeductionTypes, LeaveTypes, ReimbursementTypes), so `list`
+    renders it as a record (use --json for the categories' contents). It has no
+    element path, so create and update both POST the body straight to PayItems.
+    """
+    pay_item = typer.Typer(help="Xero pay items (a grouped object by category).")
+    app.add_typer(pay_item, name="pay-item")
+
+    @pay_item.command("list", help="Show the pay items, grouped by category (use --json for the entries).")
+    def _list(
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ):
+        try:
+            item = _payroll().list_pay_items()
+        except Exception as e:
+            typer.echo(f"Error fetching pay items: {e}", err=True)
+            raise typer.Exit(1)
+        _emit_record(item, output_json)
+
+    @pay_item.command("create", help="Create a pay item from a JSON body (the category array, e.g. EarningsRates).")
+    def _create(
+        data: Optional[str] = typer.Option(None, "--data", help="Pay item(s) as JSON (or -f / stdin)."),
+        file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+        yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+    ):
+        body = _read_data(data, file)
+        _do_write(
+            lambda: _payroll().create_pay_item(body),
+            "create pay item", confirm="Create this pay item?",
+            yes=yes, output_json=output_json,
+        )
+
+    @pay_item.command("update", help="Update a pay item (POSTs the whole category array to PayItems; no element id).")
+    def _update(
+        data: Optional[str] = typer.Option(None, "--data", help="Pay item(s) as JSON (or -f / stdin)."),
+        file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
+        yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
+    ):
+        body = _read_data(data, file)
+        _do_write(
+            lambda: _payroll().update_pay_item(body),
+            "update pay item", confirm="Update this pay item?",
+            yes=yes, output_json=output_json,
+        )
+
+
+def _register_payslip(app: typer.Typer) -> None:
+    """The read-only `payslip` sub-app (get by id only)."""
+    payslip = typer.Typer(help="Xero payslips (read-only).")
+    app.add_typer(payslip, name="payslip")
+
+    @payslip.command("get", help="Show a single payslip.")
+    def _get(
+        guid: str = typer.Argument(..., help="Payslip id (GUID)."),
+        output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ):
+        try:
+            item = _payroll().get_payslip(guid)
+        except Exception as e:
+            typer.echo(f"Error fetching payslip {guid}: {e}", err=True)
+            raise typer.Exit(1)
+        _emit_record(item, output_json)
 
 
 def _register_settings(app: typer.Typer) -> None:

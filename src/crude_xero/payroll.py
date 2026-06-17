@@ -1,29 +1,25 @@
-"""Xero Payroll API (payroll.xro/2.0) method group over a XeroSession.
+"""Xero Payroll AU API (payroll.xro/1.0) method group over a XeroSession.
 
-This is the unified, camelCase Payroll platform shared with Payroll NZ/UK, not
-the classic PascalCase Payroll AU product. Every response is wrapped in a
-metadata envelope and the payload sits under a camelCase plural key:
+One method group for the Australian Payroll product: employees, pay runs (whose
+detail carries the run's payslips), pay items, timesheets, leave applications,
+super funds, payroll calendars, and the read-only payslip and settings. Payroll
+AU departs from Accounting in two ways the rest of the file leans on:
 
-    {"id":..., "providerName":..., "dateTimeUTC":..., "httpStatusCode":"OK",
-     "pagination":{"page":1,"pageSize":100,"pageCount":2,"itemCount":115},
-     "problem":null, "employees":[...]}
+* Verbs. Payroll AU has no PUT — a create is a POST to the collection and an
+  update is a POST to the element (``POST Employees/{id}``), so this group's
+  ``_create``/``_update`` both POST, unlike Accounting's PUT-create/POST-update.
+* Envelope. A collection comes back under its plural resource key beside the
+  ``{Id, Status, ProviderName, DateTimeUTC}`` envelope scalars
+  (``{"Employees":[...], "Status":"OK", ...}``). The scalars are not lists, so the
+  single-list-key heuristic in ``_extract_list`` resolves to the plural key,
+  reused here for the list/get unwrap; `paginate` walks the `page` query param.
 
-A single record comes back the same way under the camelCase *singular* key
-(``{"employee":{...}}``), and dates are ISO strings (``"2021-10-25T00:00:00"``),
-not Accounting's ``/Date()/``. Because the unwrap helpers key off value *type* —
-the lone list for a collection, the lone non-``pagination`` dict for a detail —
-they are casing-agnostic and need no per-field knowledge; ``paginate`` walks the
-``page`` query param as for Accounting.
-
-Payroll departs from Accounting in its verbs: there is no PUT — a create POSTs to
-the collection and an update POSTs to the element (``POST Employees/{id}``), so
-this group's ``_create``/``_update`` both POST.
-
-Pay runs are list-only: the single-pay-run detail (``GET PayRuns/{id}``, 405) and
-the element update (404) are not served, and with them go the payslip lines — so
-payslip-level "who was paid" data is not reachable through this API. Earnings
-rates and reimbursements are the platform's split of what the classic API grouped
-under PayItems. Settings is a read-only singleton wrapping the linked accounts.
+Two shapes break that envelope and get handled on their own: ``PayItems`` comes
+back as a single grouped object keyed by category (``EarningsRates``,
+``DeductionTypes``, ``LeaveTypes``, ``ReimbursementTypes``), each a list, not a
+flat paged collection; and a ``Payslip`` or ``Settings`` get wraps a single
+object under its key rather than a one-element list — so `_one` falls back to the
+lone dict value beside the envelope scalars for those.
 """
 
 from __future__ import annotations
@@ -42,7 +38,7 @@ class PayrollAU:
     # ------------------------------------------------------------------
 
     def _list(self, collection, *, all_pages=False, limit=None):
-        """Page a Payroll collection via the `page` query param.
+        """Page a Payroll AU collection via the `page` query param.
 
         First page only by default; `all_pages` walks to the end and `limit` caps
         the total records (paging as needed, then truncating).
@@ -50,12 +46,12 @@ class PayrollAU:
         return self.session.paginate(BASE, collection, all_pages=all_pages, limit=limit)
 
     def _one(self, data):
-        """Unwrap a single record from a Payroll get response.
+        """Unwrap a single record from a Payroll AU get response.
 
-        A detail wraps the record under its camelCase singular key alongside the
-        envelope metadata (``{"employee":{...}, "pagination":{...}, ...}``); pull
-        the lone non-``pagination`` dict value. A collection-shaped body (record
-        under a one-element list) is handled first by `_extract_list`. Falls back
+        Most resources wrap the record as a one-element list under the plural key
+        (``{"Employees":[{...}]}``) — pull the first element. Payslip and Settings
+        instead wrap a single object under their key (``{"Payslip":{...}}``) —
+        fall back to the lone dict value beside the envelope scalars. Falls back
         to the whole dict for any other shape.
         """
         if not isinstance(data, dict):
@@ -63,7 +59,7 @@ class PayrollAU:
         items = _extract_list(data)
         if items:
             return items[0]
-        objs = [v for k, v in data.items() if isinstance(v, dict) and k != "pagination"]
+        objs = [v for v in data.values() if isinstance(v, dict)]
         if len(objs) == 1:
             return objs[0]
         return data
@@ -72,11 +68,11 @@ class PayrollAU:
         return self._one(self.session._get(BASE, f"{collection}/{guid}"))
 
     def _create(self, collection, body):
-        """Create via POST to the collection (Payroll has no PUT)."""
+        """Create via POST to the collection (Payroll AU has no PUT)."""
         return self.session._post(BASE, collection, json=body)
 
     def _update(self, collection, guid, body):
-        """Update via POST to the element (Payroll's soft-update convention)."""
+        """Update via POST to the element (Payroll AU's soft-update convention)."""
         return self.session._post(BASE, f"{collection}/{guid}", json=body)
 
     def _delete(self, collection, guid):
@@ -99,59 +95,46 @@ class PayrollAU:
         return self._update("Employees", guid, body)
 
     # ------------------------------------------------------------------
-    # Pay runs (list-only: the detail/update element routes are not served)
+    # Pay runs
     # ------------------------------------------------------------------
 
     def list_pay_runs(self, all_pages=False, limit=None):
         return self._list("PayRuns", all_pages=all_pages, limit=limit)
 
+    def get_pay_run(self, guid):
+        return self._get_one("PayRuns", guid)
+
     def create_pay_run(self, body):
         return self._create("PayRuns", body)
 
-    # ------------------------------------------------------------------
-    # Pay run calendars
-    # ------------------------------------------------------------------
-
-    def list_pay_run_calendars(self, all_pages=False, limit=None):
-        return self._list("PayRunCalendars", all_pages=all_pages, limit=limit)
-
-    def get_pay_run_calendar(self, guid):
-        return self._get_one("PayRunCalendars", guid)
-
-    def create_pay_run_calendar(self, body):
-        return self._create("PayRunCalendars", body)
+    def update_pay_run(self, guid, body):
+        return self._update("PayRuns", guid, body)
 
     # ------------------------------------------------------------------
-    # Earnings rates
+    # Pay items (grouped object, not a flat list; create/update both POST PayItems)
     # ------------------------------------------------------------------
 
-    def list_earnings_rates(self, all_pages=False, limit=None):
-        return self._list("EarningsRates", all_pages=all_pages, limit=limit)
+    def list_pay_items(self):
+        """Return the PayItems group, keyed by category, each category a list.
 
-    def get_earnings_rate(self, guid):
-        return self._get_one("EarningsRates", guid)
+        Unlike the other Payroll AU collections, PayItems comes back as a single
+        grouped object (``{"PayItems": {"EarningsRates": [...], ...}}``), so it is
+        returned whole rather than run through the list unwrap. Falls back to the
+        raw body if the ``PayItems`` key is absent.
+        """
+        data = self.session._get(BASE, "PayItems")
+        if isinstance(data, dict):
+            return data.get("PayItems", data)
+        return data
 
-    def create_earnings_rate(self, body):
-        return self._create("EarningsRates", body)
+    def create_pay_item(self, body):
+        """Create a pay item (POST PayItems; the body carries the category array)."""
+        return self._create("PayItems", body)
 
-    def update_earnings_rate(self, guid, body):
-        return self._update("EarningsRates", guid, body)
-
-    # ------------------------------------------------------------------
-    # Reimbursements
-    # ------------------------------------------------------------------
-
-    def list_reimbursements(self, all_pages=False, limit=None):
-        return self._list("Reimbursements", all_pages=all_pages, limit=limit)
-
-    def get_reimbursement(self, guid):
-        return self._get_one("Reimbursements", guid)
-
-    def create_reimbursement(self, body):
-        return self._create("Reimbursements", body)
-
-    def update_reimbursement(self, guid, body):
-        return self._update("Reimbursements", guid, body)
+    def update_pay_item(self, body):
+        """Update a pay item (POST PayItems; there is no element path, so the whole
+        category array is POSTed back, mirroring Accounting's GUID-less tax-rate update)."""
+        return self._create("PayItems", body)
 
     # ------------------------------------------------------------------
     # Timesheets (full CRUD, including a hard delete)
@@ -171,6 +154,58 @@ class PayrollAU:
 
     def delete_timesheet(self, guid):
         return self._delete("Timesheets", guid)
+
+    # ------------------------------------------------------------------
+    # Leave applications
+    # ------------------------------------------------------------------
+
+    def list_leave_applications(self, all_pages=False, limit=None):
+        return self._list("LeaveApplications", all_pages=all_pages, limit=limit)
+
+    def get_leave_application(self, guid):
+        return self._get_one("LeaveApplications", guid)
+
+    def create_leave_application(self, body):
+        return self._create("LeaveApplications", body)
+
+    def update_leave_application(self, guid, body):
+        return self._update("LeaveApplications", guid, body)
+
+    # ------------------------------------------------------------------
+    # Super funds
+    # ------------------------------------------------------------------
+
+    def list_super_funds(self, all_pages=False, limit=None):
+        return self._list("SuperFunds", all_pages=all_pages, limit=limit)
+
+    def get_super_fund(self, guid):
+        return self._get_one("SuperFunds", guid)
+
+    def create_super_fund(self, body):
+        return self._create("SuperFunds", body)
+
+    def update_super_fund(self, guid, body):
+        return self._update("SuperFunds", guid, body)
+
+    # ------------------------------------------------------------------
+    # Payroll calendars (no update verb in the Payroll AU contract)
+    # ------------------------------------------------------------------
+
+    def list_payroll_calendars(self, all_pages=False, limit=None):
+        return self._list("PayrollCalendars", all_pages=all_pages, limit=limit)
+
+    def get_payroll_calendar(self, guid):
+        return self._get_one("PayrollCalendars", guid)
+
+    def create_payroll_calendar(self, body):
+        return self._create("PayrollCalendars", body)
+
+    # ------------------------------------------------------------------
+    # Payslip (read-only; singular-object envelope)
+    # ------------------------------------------------------------------
+
+    def get_payslip(self, guid):
+        return self._one(self.session._get(BASE, f"Payslip/{guid}"))
 
     # ------------------------------------------------------------------
     # Settings (read-only singleton; singular-object envelope)

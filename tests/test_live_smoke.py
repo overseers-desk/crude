@@ -263,12 +263,11 @@ def test_xero_lists_payroll_employees(crude_config):
         raise
     assert isinstance(items, list)
     if items:
-        assert items[0].get("employeeID")  # camelCase: the unified Payroll API
+        assert items[0].get("EmployeeID")
 
 
 @pytest.mark.live
 def test_xero_lists_pay_runs(crude_config):
-    # Pay runs are list-only (no detail/update endpoint); the list is the surface.
     from crude_xero.client import XeroError
 
     client = _xero_payroll_or_skip(crude_config)
@@ -280,25 +279,29 @@ def test_xero_lists_pay_runs(crude_config):
         raise
     assert isinstance(items, list)
     if items:
-        assert items[0].get("payRunID")
+        assert items[0].get("PayRunID")
 
 
 @pytest.mark.live
-def test_xero_lists_earnings_rates(crude_config):
-    # Pins the renamed endpoint: the unified API splits the classic PayItems
-    # object into separate EarningsRates / Reimbursements collections.
+def test_xero_pay_run_detail_carries_payslips(crude_config):
+    # The pay-run detail (GET PayRuns/{id}) carries the run's payslips: the
+    # per-employee paid-this-run data, reachable on payroll.xro/1.0.
     from crude_xero.client import XeroError
 
     client = _xero_payroll_or_skip(crude_config)
     try:
-        items = client.payroll.list_earnings_rates()
+        runs = client.payroll.list_pay_runs()
+        if not runs:
+            pytest.skip("no pay runs to read a detail against")
+        detail = client.payroll.get_pay_run(runs[0]["PayRunID"])
     except XeroError as e:
         if e.status in (401, 403):
             pytest.skip("token lacks the payroll scope")
         raise
-    assert isinstance(items, list)
-    if items:
-        assert items[0].get("earningsRateID")
+    payslips = detail.get("Payslips")
+    assert isinstance(payslips, list)
+    if payslips:
+        assert payslips[0].get("PayslipID") and payslips[0].get("EmployeeID")
 
 
 @pytest.mark.live

@@ -19,7 +19,7 @@ import requests
 
 PRODUCT_BASES = {
     "accounting": "https://api.xero.com/api.xro/2.0/",
-    "payroll_au": "https://api.xero.com/payroll.xro/2.0/",
+    "payroll_au": "https://api.xero.com/payroll.xro/1.0/",
     "files": "https://api.xero.com/files.xro/1.0/",
     "assets": "https://api.xero.com/assets.xro/1.0/",
     "projects": "https://api.xero.com/projects.xro/2.0/",

@@ -1,14 +1,14 @@
-"""Unit tests for the crude-xero Payroll (payroll.xro/2.0) method group — no network.
+"""Unit tests for the crude-xero Payroll AU (payroll.xro/1.0) method group — no network.
 
-These pin the behaviours the Payroll client hinges on against the unified,
-camelCase Payroll platform (not the classic PascalCase Payroll AU): the
-camelCase-plural-key + `pagination` list-envelope unwrap, the singular-key get
-unwrap (a detail wraps the record under its camelCase singular key beside the
-envelope metadata), the POST-for-create (Payroll has no PUT) and
-POST-to-element-for-update verbs, and the timesheet hard delete. The
-`payroll.xro/2.0` base path rides every call. The inner `requests.Session` is
-monkeypatched, so nothing reaches the network — the tests target `PayrollAU` with
-a mock session directly, not through the client facade.
+These pin the behaviours the Payroll AU client hinges on: the plural-key
+list-envelope unwrap (a collection arrives under its plural key beside the
+`{Id, Status, ProviderName, DateTimeUTC}` envelope scalars), the one-element-list
+vs singular-object get unwrap (Payslip/Settings wrap a single object, not a
+one-element list), the POST-for-create (Payroll AU has no PUT) and
+POST-to-element-for-update verbs, the grouped PayItems object, and the timesheet
+hard delete. The `payroll.xro/1.0` base path rides every call. The inner
+`requests.Session` is monkeypatched, so nothing reaches the network — the tests
+target `PayrollAU` with a mock session directly, not through the client facade.
 """
 
 from __future__ import annotations
@@ -71,155 +71,144 @@ def _api(monkeypatch, response):
     return api, calls
 
 
-def _envelope(**kw):
-    """Wrap a payload in the Payroll metadata envelope the live API returns."""
-    base = {"id": "req-1", "providerName": "test", "dateTimeUTC": "2026-06-17T00:00:00",
-            "httpStatusCode": "OK", "problem": None}
+def _env(**kw):
+    """Wrap a payload in the Payroll AU 1.0 metadata envelope the live API returns."""
+    base = {"Id": "req-1", "Status": "OK", "ProviderName": "test",
+            "DateTimeUTC": "/Date(1700000000000)/"}
     base.update(kw)
     return base
 
 
 # ----------------------------------------------------------------------
-# _one — camelCase singular-key vs one-element-list, beside envelope metadata
+# _one — plural-key one-element list vs singular-object envelope
 # ----------------------------------------------------------------------
-
-
-def test_one_unwraps_a_singular_key_beside_envelope_metadata():
-    api = PayrollAU(_session())
-    data = _envelope(pagination={"page": 1}, employee={"employeeID": "e1", "firstName": "Pat"})
-    assert api._one(data) == {"employeeID": "e1", "firstName": "Pat"}
 
 
 def test_one_unwraps_a_one_element_list_under_the_plural_key():
     api = PayrollAU(_session())
-    assert api._one({"employees": [{"employeeID": "e1"}], "pagination": {"page": 1}}) == {"employeeID": "e1"}
+    assert api._one(_env(Employees=[{"EmployeeID": "e1"}])) == {"EmployeeID": "e1"}
+
+
+def test_one_unwraps_a_singular_object_envelope():
+    api = PayrollAU(_session())
+    # Payslip/Settings wrap a single object beside the envelope scalars, not a list.
+    assert api._one(_env(Payslip={"PayslipID": "p1"})) == {"PayslipID": "p1"}
+    assert api._one(_env(Settings={"DaysInPayrollYear": 365})) == {"DaysInPayrollYear": 365}
 
 
 def test_one_tolerates_odd_shapes():
     api = PayrollAU(_session())
     assert api._one("nope") == {}
-    # No list and no lone non-pagination dict -> the whole dict falls through.
-    assert api._one({"a": 1, "b": 2}) == {"a": 1, "b": 2}
+    assert api._one({"a": 1, "b": 2}) == {"a": 1, "b": 2}  # no list, no lone dict -> whole dict
 
 
 # ----------------------------------------------------------------------
-# Employees — list (paged, plural-key unwrap), get (singular key), create/update verbs
+# Employees — list (paged, plural-key unwrap), get, create (POST), update (POST element)
 # ----------------------------------------------------------------------
 
 
 def test_list_employees_unwraps_plural_key_and_pages(monkeypatch):
-    payload = _envelope(
-        pagination={"page": 1, "pageSize": 100, "pageCount": 1, "itemCount": 1},
-        employees=[{"employeeID": "e1"}])
-    api, calls = _api(monkeypatch, _FakeResp(payload))
+    api, calls = _api(monkeypatch, _FakeResp(_env(Employees=[{"EmployeeID": "e1"}])))
 
     out = api.list_employees()
 
-    assert out == [{"employeeID": "e1"}]
+    assert out == [{"EmployeeID": "e1"}]
     assert len(calls) == 1
     assert calls[0]["method"] == "GET"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Employees")
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Employees")
     assert calls[0]["params"] == {"page": 1}
 
 
-def test_get_employee_unwraps_singular_key_and_routes(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(
-        _envelope(pagination={"page": 1}, employee={"employeeID": "e1", "firstName": "Pat"})))
+def test_get_employee_unwraps_and_routes(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(Employees=[{"EmployeeID": "e1", "FirstName": "Pat"}])))
 
     out = api.get_employee("e1")
 
-    assert out == {"employeeID": "e1", "firstName": "Pat"}
+    assert out == {"EmployeeID": "e1", "FirstName": "Pat"}
     assert calls[0]["method"] == "GET"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Employees/e1")
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Employees/e1")
 
 
 def test_create_employee_is_a_post_to_the_collection(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(_envelope(employee={"employeeID": "e1"})))
+    api, calls = _api(monkeypatch, _FakeResp(_env(Employees=[{"EmployeeID": "e1"}])))
 
-    api.create_employee({"firstName": "Pat", "lastName": "Lee"})
+    api.create_employee({"FirstName": "Pat", "LastName": "Lee"})
 
-    assert calls[0]["method"] == "POST"  # not PUT — Payroll has no PUT
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Employees")
-    assert calls[0]["json"] == {"firstName": "Pat", "lastName": "Lee"}
+    assert calls[0]["method"] == "POST"  # not PUT — Payroll AU has no PUT
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Employees")
+    assert calls[0]["json"] == {"FirstName": "Pat", "LastName": "Lee"}
 
 
 def test_update_employee_is_a_post_to_the_element(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(_envelope(employee={"employeeID": "e1"})))
+    api, calls = _api(monkeypatch, _FakeResp(_env(Employees=[{"EmployeeID": "e1"}])))
 
-    api.update_employee("e1", {"email": "pat@example.com"})
+    api.update_employee("e1", {"Status": "ACTIVE"})
 
     assert calls[0]["method"] == "POST"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Employees/e1")
-    assert calls[0]["json"] == {"email": "pat@example.com"}
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Employees/e1")
+    assert calls[0]["json"] == {"Status": "ACTIVE"}
 
 
 # ----------------------------------------------------------------------
-# Pay runs — list (plural unwrap) and create only; no get/update (405/404 routes)
+# Pay runs — get (detail carries Payslips), create (POST), update (POST element)
 # ----------------------------------------------------------------------
 
 
-def test_list_pay_runs_unwraps_plural_key(monkeypatch):
-    payload = _envelope(
-        pagination={"page": 1, "pageSize": 100, "pageCount": 4, "itemCount": 364},
-        payRuns=[{"payRunID": "r1", "payRunStatus": "Posted"}])
-    api, calls = _api(monkeypatch, _FakeResp(payload))
+def test_get_pay_run_unwraps_detail_with_payslips(monkeypatch):
+    detail = {"PayRunID": "r1", "PayRunStatus": "POSTED",
+              "Payslips": [{"PayslipID": "p1", "EmployeeID": "e1"}]}
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayRuns=[detail])))
 
-    out = api.list_pay_runs()
+    out = api.get_pay_run("r1")
 
-    assert out == [{"payRunID": "r1", "payRunStatus": "Posted"}]
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/PayRuns")
+    assert out == detail  # the single pay run, with its Payslips list intact
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/PayRuns/r1")
 
 
 def test_create_pay_run_posts_to_collection(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(_envelope(payRuns=[{"payRunID": "r1"}])))
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayRuns=[{"PayRunID": "r1"}])))
 
-    api.create_pay_run({"payrollCalendarID": "c1"})
+    api.create_pay_run({"PayrollCalendarID": "c1"})
 
     assert calls[0]["method"] == "POST"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/PayRuns")
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/PayRuns")
 
 
-def test_pay_runs_expose_no_get_or_update():
-    # The detail/element routes are not served, so the verbs are not modelled.
-    api = PayrollAU(_session())
-    assert not hasattr(api, "get_pay_run")
-    assert not hasattr(api, "update_pay_run")
+def test_update_pay_run_posts_to_element(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayRuns=[{"PayRunID": "r1"}])))
+
+    api.update_pay_run("r1", {"PayRunStatus": "POSTED"})
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/PayRuns/r1")
 
 
 # ----------------------------------------------------------------------
-# Pay run calendars / earnings rates / reimbursements — routing + verbs
+# Pay items — grouped object (not a flat list); create/update both POST PayItems
 # ----------------------------------------------------------------------
 
 
-def test_pay_run_calendar_get_routes_and_unwraps(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(
-        _envelope(pagination={"page": 1}, payRunCalendar={"payrollCalendarID": "c1", "name": "Fortnightly"})))
+def test_list_pay_items_returns_the_grouped_object(monkeypatch):
+    grouped = {"EarningsRates": [{"EarningsRateID": "x1"}], "DeductionTypes": [],
+               "LeaveTypes": [], "ReimbursementTypes": []}
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayItems=grouped)))
 
-    out = api.get_pay_run_calendar("c1")
+    out = api.list_pay_items()
 
-    assert out == {"payrollCalendarID": "c1", "name": "Fortnightly"}
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/PayRunCalendars/c1")
+    assert out == grouped  # the grouped object, NOT unwrapped to a list
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/PayItems")
 
 
-def test_earnings_rate_create_and_update_verbs(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(_envelope(earningsRates=[{"earningsRateID": "x1"}])))
+def test_pay_item_create_and_update_post_to_payitems(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayItems={})))
 
-    api.create_earnings_rate({"name": "Ordinary"})
-    api.update_earnings_rate("x1", {"name": "Ordinary Hours"})
+    api.create_pay_item({"EarningsRates": [{"Name": "Ordinary"}]})
+    api.update_pay_item({"EarningsRates": [{"EarningsRateID": "x1", "Name": "Ordinary"}]})
 
     assert [c["method"] for c in calls] == ["POST", "POST"]
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/EarningsRates")
-    assert calls[1]["url"].endswith("/payroll.xro/2.0/EarningsRates/x1")
-
-
-def test_reimbursement_get_routes_and_unwraps(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(
-        _envelope(reimbursement={"reimbursementID": "m1", "name": "Travel"})))
-
-    out = api.get_reimbursement("m1")
-
-    assert out == {"reimbursementID": "m1", "name": "Travel"}
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Reimbursements/m1")
+    assert all(c["url"].endswith("/payroll.xro/1.0/PayItems") for c in calls)  # no element path
 
 
 # ----------------------------------------------------------------------
@@ -233,20 +222,61 @@ def test_delete_timesheet_is_a_delete(monkeypatch):
     api.delete_timesheet("t1")
 
     assert calls[0]["method"] == "DELETE"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Timesheets/t1")
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Timesheets/t1")
 
 
 # ----------------------------------------------------------------------
-# Settings — read-only singleton, singular-key unwrap
+# Super funds / leave applications / payroll calendars — routing
 # ----------------------------------------------------------------------
 
 
-def test_get_settings_unwraps_singular_key(monkeypatch):
-    api, calls = _api(monkeypatch, _FakeResp(
-        _envelope(settings={"accounts": [{"accountID": "a1", "type": "WAGESPAYABLE"}]})))
+def test_super_fund_get_routes_to_superfunds(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(SuperFunds=[{"SuperFundID": "s1"}])))
+
+    out = api.get_super_fund("s1")
+
+    assert out == {"SuperFundID": "s1"}
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/SuperFunds/s1")
+
+
+def test_create_leave_application_posts(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(LeaveApplications=[{"LeaveApplicationID": "l1"}])))
+
+    api.create_leave_application({"EmployeeID": "e1", "LeaveTypeID": "lt1"})
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/LeaveApplications")
+
+
+def test_create_payroll_calendar_posts(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(PayrollCalendars=[{"PayrollCalendarID": "c1"}])))
+
+    api.create_payroll_calendar({"Name": "Weekly", "CalendarType": "WEEKLY"})
+
+    assert calls[0]["method"] == "POST"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/PayrollCalendars")
+
+
+# ----------------------------------------------------------------------
+# Payslip & settings — read-only, singular-object unwrap
+# ----------------------------------------------------------------------
+
+
+def test_get_payslip_unwraps_singular_object(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(Payslip={"PayslipID": "p1", "NetPay": 1234.5})))
+
+    out = api.get_payslip("p1")
+
+    assert out == {"PayslipID": "p1", "NetPay": 1234.5}
+    assert calls[0]["method"] == "GET"
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Payslip/p1")
+
+
+def test_get_settings_unwraps_singular_object(monkeypatch):
+    api, calls = _api(monkeypatch, _FakeResp(_env(Settings={"DaysInPayrollYear": 365})))
 
     out = api.get_settings()
 
-    assert out == {"accounts": [{"accountID": "a1", "type": "WAGESPAYABLE"}]}
+    assert out == {"DaysInPayrollYear": 365}
     assert calls[0]["method"] == "GET"
-    assert calls[0]["url"].endswith("/payroll.xro/2.0/Settings")
+    assert calls[0]["url"].endswith("/payroll.xro/1.0/Settings")
