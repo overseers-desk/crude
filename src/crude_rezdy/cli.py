@@ -18,6 +18,8 @@ from crude_common.config import (
     resolve_account as _resolve_account,
     s as _s,
 )
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 
 app = typer.Typer(help="crude-rezdy — Rezdy Supplier API (products, availability, bookings, and more).")
 product_app = typer.Typer(help="Rezdy products.")
@@ -114,85 +116,8 @@ def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
 
 
 # ----------------------------------------------------------------------
-# Shared command plumbing
+# Booking-display helpers (for the bespoke booking/cancellation tables)
 # ----------------------------------------------------------------------
-
-
-def _read_data(data: Optional[str], file: Optional[str], required: bool = True) -> dict:
-    """Resolve a write body: --data inline JSON, then -f file, then stdin.
-
-    With required False (the update verbs, where typed flags may carry the whole
-    change) an absent body yields an empty dict and stdin is left alone.
-    """
-    if data is not None:
-        raw = data
-    elif file is not None:
-        with open(file, "r") as f:
-            raw = f.read()
-    elif required and not sys.stdin.isatty():
-        raw = sys.stdin.read()
-    else:
-        if required:
-            typer.echo("Error: provide JSON via --data, -f/--file, or stdin.", err=True)
-            raise typer.Exit(1)
-        return {}
-    try:
-        parsed = json.loads(raw)
-    except ValueError as e:
-        typer.echo(f"Error: invalid JSON: {e}", err=True)
-        raise typer.Exit(1)
-    if not isinstance(parsed, dict):
-        typer.echo("Error: JSON body must be an object.", err=True)
-        raise typer.Exit(1)
-    return parsed
-
-
-def _do_write(action: Callable, what: str, *, confirm: Optional[str] = None,
-              yes: bool = False, output_json: bool = False) -> None:
-    """Write command body: confirm if asked, run the action, report the outcome."""
-    if confirm and not yes:
-        typer.confirm(confirm, abort=True)
-    try:
-        result = action()
-    except Exception as e:
-        typer.echo(f"Error: {what}: {e}", err=True)
-        raise typer.Exit(1)
-    if output_json:
-        typer.echo(json.dumps(result if result is not None else {"ok": True}, indent=2, default=str))
-        return
-    typer.echo(f"{what}: done.")
-    if isinstance(result, dict) and result:
-        typer.echo(json.dumps(result, default=str))
-
-
-def _emit_list(items: list, columns: list, what: str, output_json: bool,
-               header_style: str = "bold magenta") -> None:
-    """Render a list of records as a table, or raw JSON with --json.
-
-    `columns` is a list of (header, key) where key is a field name or a callable
-    taking the record.
-    """
-    if output_json:
-        typer.echo(json.dumps(items, indent=2, default=str))
-        return
-    table = Table(show_header=True, header_style=header_style)
-    for header, _ in columns:
-        table.add_column(header)
-    for it in items:
-        row = []
-        for _, key in columns:
-            val = key(it) if callable(key) else it.get(key)
-            row.append(_s(val))
-        table.add_row(*row)
-    console.print(table)
-    typer.echo(f"\n{len(items)} {what}(s) found.")
-
-
-def _emit_record(item: dict, output_json: bool) -> None:
-    if output_json:
-        typer.echo(json.dumps(item, indent=2, default=str))
-        return
-    _render_record(item)
 
 
 def _customer_name(booking: dict) -> str:
@@ -211,28 +136,6 @@ def _refund_count(booking: dict) -> int:
 def _first_item(booking: dict) -> dict:
     items = booking.get("items") or []
     return items[0] if items else {}
-
-
-def _render_record(item: dict) -> None:
-    """Print a record's scalar top-level fields as a Field/Value table.
-
-    Nested objects and lists are summarised rather than expanded; use --json
-    for the full structure.
-    """
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Field")
-    table.add_column("Value")
-    for key, value in item.items():
-        if isinstance(value, dict):
-            value_str = "(object)"
-        elif isinstance(value, list):
-            value_str = f"{len(value)} item(s)"
-        else:
-            value_str = _s(value)
-        if len(value_str) > 200:
-            value_str = value_str[:197] + "..."
-        table.add_row(key, value_str)
-    console.print(table)
 
 
 # ----------------------------------------------------------------------
@@ -254,7 +157,7 @@ def list_products(
     except Exception as e:
         typer.echo(f"Error fetching products: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Code", "productCode"),
         ("Name", "name"),
         ("Type", "productType"),
@@ -274,7 +177,7 @@ def get_product(
     except Exception as e:
         typer.echo(f"Error fetching product {product_code}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @product_app.command("create")
@@ -286,8 +189,8 @@ def create_product(
 ):
     """Create a product from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.create_product(body), "create product",
+    body = read_data(data, file)
+    do_write(lambda: client.create_product(body), "create product",
               confirm="Create this product?", yes=yes, output_json=output_json)
 
 
@@ -309,7 +212,7 @@ def update_product(
     """
     client = _client()
     flags = {"name": name, "terms": terms}
-    _merge_update(
+    merge_update(
         lambda: client.get_product(product_code),
         lambda merged: client.update_product(product_code, merged),
         data, file, flags, f"update product {product_code}", yes, output_json,
@@ -324,7 +227,7 @@ def delete_product(
 ):
     """Delete a product."""
     client = _client()
-    _do_write(lambda: client.delete_product(product_code), f"delete product {product_code}",
+    do_write(lambda: client.delete_product(product_code), f"delete product {product_code}",
               confirm=f"Delete product {product_code}?", yes=yes, output_json=output_json)
 
 
@@ -338,8 +241,8 @@ def add_product_image(
 ):
     """Add an image to a product."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.add_product_image(product_code, body),
+    body = read_data(data, file)
+    do_write(lambda: client.add_product_image(product_code, body),
               f"add image to {product_code}", yes=yes, output_json=output_json)
 
 
@@ -352,7 +255,7 @@ def remove_product_image(
 ):
     """Remove an image from a product."""
     client = _client()
-    _do_write(lambda: client.delete_product_image(product_code, image_id),
+    do_write(lambda: client.delete_product_image(product_code, image_id),
               f"remove image {image_id} from {product_code}",
               confirm=f"Remove image {image_id} from {product_code}?", yes=yes, output_json=output_json)
 
@@ -369,32 +272,13 @@ def product_pickups(
     except Exception as e:
         typer.echo(f"Error fetching pickups: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Name", "locationName"),
         ("Address", "address"),
         ("Pickup time", "pickupTime"),
     ], "pickup", output_json)
 
 
-def _merge_update(get_fn: Callable, update_fn: Callable, data: Optional[str],
-                  file: Optional[str], flags: dict, what: str, yes: bool,
-                  output_json: bool) -> None:
-    """Fetch a record, overlay flags and --data, write it back.
-
-    A flag left at None is not part of the change; an explicit empty string is
-    (so --terms "" clears the field).
-    """
-    current = get_fn()
-    if not current:
-        typer.echo(f"Error: {what}: record not found.", err=True)
-        raise typer.Exit(1)
-    overlay = _read_data(data, file, required=False)
-    overlay.update({k: v for k, v in flags.items() if v is not None})
-    if not overlay:
-        typer.echo("Error: nothing to update; pass a flag or --data.", err=True)
-        raise typer.Exit(1)
-    merged = {**current, **overlay}
-    _do_write(lambda: update_fn(merged), what, confirm=f"{what}?", yes=yes, output_json=output_json)
 
 
 # ----------------------------------------------------------------------
@@ -427,7 +311,7 @@ def list_availability(
         except Exception:
             label = None
         typer.echo(f"Product: {label} ({product})" if label else f"Product: {product}")
-    _emit_list(items, [
+    emit_list(items, [
         ("Session ID", "id"),
         ("Start", "startTimeLocal"),
         ("End", "endTimeLocal"),
@@ -444,8 +328,8 @@ def create_availability(
 ):
     """Create an availability session from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.create_availability(body), "create session",
+    body = read_data(data, file)
+    do_write(lambda: client.create_availability(body), "create session",
               confirm="Create this session?", yes=yes, output_json=output_json)
 
 
@@ -460,8 +344,8 @@ def update_availability(
 ):
     """Update an availability session (keyed by product and local start time)."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.update_availability(product, start_local, body),
+    body = read_data(data, file)
+    do_write(lambda: client.update_availability(product, start_local, body),
               f"update session {product} @ {start_local}",
               confirm=f"Update session {product} @ {start_local}?",
               yes=yes, output_json=output_json)
@@ -476,7 +360,7 @@ def delete_availability(
 ):
     """Delete an availability session (keyed by product and local start time)."""
     client = _client()
-    _do_write(lambda: client.delete_availability(product, start_local),
+    do_write(lambda: client.delete_availability(product, start_local),
               f"delete session {product} @ {start_local}",
               confirm=f"Delete session {product} @ {start_local}?", yes=yes, output_json=output_json)
 
@@ -490,8 +374,8 @@ def batch_availability(
 ):
     """Batch-update availability from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.batch_availability(body), "batch availability update",
+    body = read_data(data, file)
+    do_write(lambda: client.batch_availability(body), "batch availability update",
               confirm="Apply this batch availability update?", yes=yes, output_json=output_json)
 
 
@@ -663,7 +547,7 @@ def get_booking(
     except Exception as e:
         typer.echo(f"Error fetching booking {order_number}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @booking_app.command("quote")
@@ -674,7 +558,7 @@ def quote_booking(
 ):
     """Quote a booking's price without creating or charging it."""
     client = _client()
-    body = _read_data(data, file)
+    body = read_data(data, file)
     try:
         result = client.quote_booking(body)
     except Exception as e:
@@ -698,9 +582,9 @@ def create_booking(
     --data.
     """
     client = _client()
-    body = _read_data(data, file)
+    body = read_data(data, file)
     body["sendNotifications"] = notify
-    _do_write(lambda: client.create_booking(body), "create booking",
+    do_write(lambda: client.create_booking(body), "create booking",
               confirm="Create this booking? (a real order)", yes=yes, output_json=output_json)
 
 
@@ -714,8 +598,8 @@ def update_booking(
 ):
     """Update a booking (status, customer, or participants)."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.update_booking(order_number, body),
+    body = read_data(data, file)
+    do_write(lambda: client.update_booking(order_number, body),
               f"update booking {order_number}", confirm=f"Update booking {order_number}?",
               yes=yes, output_json=output_json)
 
@@ -728,7 +612,7 @@ def cancel_booking(
 ):
     """Cancel a booking."""
     client = _client()
-    _do_write(lambda: client.cancel_booking(order_number), f"cancel booking {order_number}",
+    do_write(lambda: client.cancel_booking(order_number), f"cancel booking {order_number}",
               confirm=f"Cancel booking {order_number}?", yes=yes, output_json=output_json)
 
 
@@ -751,7 +635,7 @@ def list_customers(
     except Exception as e:
         typer.echo(f"Error fetching customers: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", lambda c: " ".join(p for p in (c.get("firstName"), c.get("lastName")) if p)),
         ("Email", "email"),
@@ -771,7 +655,7 @@ def get_customer(
     except Exception as e:
         typer.echo(f"Error fetching customer {customer_id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @customer_app.command("create")
@@ -783,8 +667,8 @@ def create_customer(
 ):
     """Create a customer from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.create_customer(body), "create customer",
+    body = read_data(data, file)
+    do_write(lambda: client.create_customer(body), "create customer",
               confirm="Create this customer?", yes=yes, output_json=output_json)
 
 
@@ -796,7 +680,7 @@ def delete_customer(
 ):
     """Delete a customer."""
     client = _client()
-    _do_write(lambda: client.delete_customer(customer_id), f"delete customer {customer_id}",
+    do_write(lambda: client.delete_customer(customer_id), f"delete customer {customer_id}",
               confirm=f"Delete customer {customer_id}?", yes=yes, output_json=output_json)
 
 
@@ -817,7 +701,7 @@ def list_extras(
     except Exception as e:
         typer.echo(f"Error fetching extras: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
         ("Price", "price"),
@@ -837,7 +721,7 @@ def get_extra(
     except Exception as e:
         typer.echo(f"Error fetching extra {extra_id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @extra_app.command("create")
@@ -849,8 +733,8 @@ def create_extra(
 ):
     """Create an extra from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.create_extra(body), "create extra",
+    body = read_data(data, file)
+    do_write(lambda: client.create_extra(body), "create extra",
               confirm="Create this extra?", yes=yes, output_json=output_json)
 
 
@@ -865,7 +749,7 @@ def update_extra(
 ):
     """Update an extra (read-merge-write)."""
     client = _client()
-    _merge_update(
+    merge_update(
         lambda: client.get_extra(extra_id),
         lambda merged: client.update_extra(extra_id, merged),
         data, file, {"name": name}, f"update extra {extra_id}", yes, output_json,
@@ -880,7 +764,7 @@ def delete_extra(
 ):
     """Delete an extra."""
     client = _client()
-    _do_write(lambda: client.delete_extra(extra_id), f"delete extra {extra_id}",
+    do_write(lambda: client.delete_extra(extra_id), f"delete extra {extra_id}",
               confirm=f"Delete extra {extra_id}?", yes=yes, output_json=output_json)
 
 
@@ -901,7 +785,7 @@ def list_pickup_lists(
     except Exception as e:
         typer.echo(f"Error fetching pickup lists: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
         ("Locations", lambda p: len(p.get("pickupLocations") or [])),
@@ -920,7 +804,7 @@ def get_pickup_list(
     except Exception as e:
         typer.echo(f"Error fetching pickup list {pickup_list_id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @pickup_app.command("create")
@@ -932,8 +816,8 @@ def create_pickup_list(
 ):
     """Create a pickup list from a JSON body."""
     client = _client()
-    body = _read_data(data, file)
-    _do_write(lambda: client.create_pickup_list(body), "create pickup list",
+    body = read_data(data, file)
+    do_write(lambda: client.create_pickup_list(body), "create pickup list",
               confirm="Create this pickup list?", yes=yes, output_json=output_json)
 
 
@@ -948,7 +832,7 @@ def update_pickup_list(
 ):
     """Update a pickup list (read-merge-write)."""
     client = _client()
-    _merge_update(
+    merge_update(
         lambda: client.get_pickup_list(pickup_list_id),
         lambda merged: client.update_pickup_list(pickup_list_id, merged),
         data, file, {"name": name}, f"update pickup list {pickup_list_id}", yes, output_json,
@@ -963,7 +847,7 @@ def delete_pickup_list(
 ):
     """Delete a pickup list."""
     client = _client()
-    _do_write(lambda: client.delete_pickup_list(pickup_list_id),
+    do_write(lambda: client.delete_pickup_list(pickup_list_id),
               f"delete pickup list {pickup_list_id}",
               confirm=f"Delete pickup list {pickup_list_id}?", yes=yes, output_json=output_json)
 
@@ -986,7 +870,7 @@ def list_categories(
     except Exception as e:
         typer.echo(f"Error fetching categories: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
         ("Visible", "visible"),
@@ -1005,7 +889,7 @@ def get_category(
     except Exception as e:
         typer.echo(f"Error fetching category {category_id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @category_app.command("products")
@@ -1022,7 +906,7 @@ def category_products(
     except Exception as e:
         typer.echo(f"Error fetching category products: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Code", "productCode"),
         ("Name", "name"),
         ("Type", "productType"),
@@ -1038,7 +922,7 @@ def category_add_product(
 ):
     """Add a product to a category."""
     client = _client()
-    _do_write(lambda: client.add_product_to_category(category_id, product_code),
+    do_write(lambda: client.add_product_to_category(category_id, product_code),
               f"add {product_code} to category {category_id}", yes=yes, output_json=output_json)
 
 
@@ -1051,7 +935,7 @@ def category_remove_product(
 ):
     """Remove a product from a category."""
     client = _client()
-    _do_write(lambda: client.remove_product_from_category(category_id, product_code),
+    do_write(lambda: client.remove_product_from_category(category_id, product_code),
               f"remove {product_code} from category {category_id}",
               confirm=f"Remove {product_code} from category {category_id}?",
               yes=yes, output_json=output_json)
@@ -1075,7 +959,7 @@ def list_rates(
     except Exception as e:
         typer.echo(f"Error fetching rates: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Rate ID", "rateId"),
         ("Name", "name"),
         ("Products", lambda r: len(r.get("productRates") or [])),
@@ -1094,7 +978,7 @@ def get_rate(
     except Exception as e:
         typer.echo(f"Error fetching rate {rate_id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @rate_app.command("add-product")
@@ -1106,7 +990,7 @@ def rate_add_product(
 ):
     """Add a product to a rate."""
     client = _client()
-    _do_write(lambda: client.add_product_to_rate(rate_id, product_code),
+    do_write(lambda: client.add_product_to_rate(rate_id, product_code),
               f"add {product_code} to rate {rate_id}", yes=yes, output_json=output_json)
 
 
@@ -1119,7 +1003,7 @@ def rate_remove_product(
 ):
     """Remove a product from a rate."""
     client = _client()
-    _do_write(lambda: client.remove_product_from_rate(rate_id, product_code),
+    do_write(lambda: client.remove_product_from_rate(rate_id, product_code),
               f"remove {product_code} from rate {rate_id}",
               confirm=f"Remove {product_code} from rate {rate_id}?",
               yes=yes, output_json=output_json)
@@ -1143,7 +1027,7 @@ def list_resources(
     except Exception as e:
         typer.echo(f"Error fetching resources: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
         ("Type", "type"),
@@ -1163,7 +1047,7 @@ def resource_sessions(
     except Exception as e:
         typer.echo(f"Error fetching resource sessions: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Session ID", "id"),
         ("Start", "startTimeLocal"),
         ("End", "endTimeLocal"),
@@ -1187,7 +1071,7 @@ def resource_for_session(
     except Exception as e:
         typer.echo(f"Error fetching session resources: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
         ("Type", "type"),
@@ -1203,7 +1087,7 @@ def resource_add_session(
 ):
     """Assign a session to a resource."""
     client = _client()
-    _do_write(lambda: client.add_session_to_resource(resource_id, session_id),
+    do_write(lambda: client.add_session_to_resource(resource_id, session_id),
               f"add session {session_id} to resource {resource_id}",
               yes=yes, output_json=output_json)
 
@@ -1217,7 +1101,7 @@ def resource_remove_session(
 ):
     """Remove a session from a resource."""
     client = _client()
-    _do_write(lambda: client.remove_session_from_resource(resource_id, session_id),
+    do_write(lambda: client.remove_session_from_resource(resource_id, session_id),
               f"remove session {session_id} from resource {resource_id}",
               confirm=f"Remove session {session_id} from resource {resource_id}?",
               yes=yes, output_json=output_json)
@@ -1243,7 +1127,7 @@ def order_checkin_status(
     except Exception as e:
         typer.echo(f"Error fetching order check-in: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @manifest_app.command("order-set")
@@ -1258,7 +1142,7 @@ def order_checkin_set(
 ):
     """Set an order-session's check-in state."""
     client = _client()
-    _do_write(lambda: client.set_order_checkin(product, order, start, start_local, checkin),
+    do_write(lambda: client.set_order_checkin(product, order, start, start_local, checkin),
               "set order check-in", yes=yes, output_json=output_json)
 
 
@@ -1273,7 +1157,7 @@ def order_checkin_remove(
 ):
     """Remove an order-session's check-in record."""
     client = _client()
-    _do_write(lambda: client.remove_order_checkin(order, product, start, start_local),
+    do_write(lambda: client.remove_order_checkin(order, product, start, start_local),
               f"remove check-in for order {order}",
               confirm=f"Remove check-in for order {order}?", yes=yes, output_json=output_json)
 
@@ -1292,7 +1176,7 @@ def session_checkin_status(
     except Exception as e:
         typer.echo(f"Error fetching session check-in: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @manifest_app.command("session-set")
@@ -1306,7 +1190,7 @@ def session_checkin_set(
 ):
     """Set a whole session's check-in state."""
     client = _client()
-    _do_write(lambda: client.set_session_checkin(product, start, start_local, checkin),
+    do_write(lambda: client.set_session_checkin(product, start, start_local, checkin),
               "set session check-in", yes=yes, output_json=output_json)
 
 
@@ -1320,7 +1204,7 @@ def session_checkin_remove(
 ):
     """Remove a session's check-in record."""
     client = _client()
-    _do_write(lambda: client.remove_session_checkin(product, start, start_local),
+    do_write(lambda: client.remove_session_checkin(product, start, start_local),
               "remove session check-in",
               confirm="Remove this session's check-in?", yes=yes, output_json=output_json)
 
@@ -1344,7 +1228,7 @@ def list_vouchers(
     except Exception as e:
         typer.echo(f"Error fetching vouchers: {e}", err=True)
         raise typer.Exit(1)
-    _emit_list(items, [
+    emit_list(items, [
         ("Code", "code"),
         ("Status", "status"),
         ("Issued", "issueDate"),
@@ -1365,7 +1249,7 @@ def get_voucher(
     except Exception as e:
         typer.echo(f"Error fetching voucher {voucher_code}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @company_app.command("get")
@@ -1380,7 +1264,7 @@ def get_company(
     except Exception as e:
         typer.echo(f"Error fetching company {alias}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @company_app.command("find")
@@ -1395,7 +1279,7 @@ def find_company(
     except Exception as e:
         typer.echo(f"Error finding company '{name}': {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 if __name__ == "__main__":
