@@ -1551,14 +1551,15 @@ def terms_create(
     event_id: str = typer.Argument(..., help="Event document id."),
     data: Optional[str] = typer.Option(
         None, "--data",
-        help='The terms doc as JSON, e.g. {"name": "Wedding booking agreement 2026", '
-             '"required": true, "type": 1}. `eventId` is added if absent.'),
+        help='The terms doc as JSON. Fields (termsCreate, docs/sonas.md §6): '
+             'name (str), text (str, the policy body), required (bool), '
+             'type/category/channel (int enums). `eventId` is added if absent.'),
     file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Add a terms-and-conditions record to an event (termsCreate); this is how
-    a new or updated policy is put to a couple. The doc shape is not yet decoded
-    (unverified; see docs/sonas.md §6/§11)."""
+    a new or updated policy is put to a couple. Payload decoded statically but
+    not yet live-trialed (see docs/sonas.md §6/§11)."""
     doc = _read_data(data, file)
     doc.setdefault("eventId", event_id)
     _do_call("termsCreate", {"doc": doc},
@@ -1570,19 +1571,27 @@ def terms_answer(
     terms_id: str = typer.Argument(..., help="Terms record id (from `terms list`)."),
     answer: str = typer.Option(
         ..., "--answer",
-        help='The answer value (JSON if parseable, else a string), e.g. true, 1, "Accepted".'),
+        help="Accepted|Rejected (or 1|2): the answer recorded on the couple's behalf."),
     yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Answer a single terms record (termsAnswer); alters contract state. The
-    answer value's type is not yet decoded (unverified; see docs/sonas.md §6/§11)."""
-    try:
-        value = json.loads(answer)
-    except ValueError:
-        value = answer
+    server accepts only Accepted (1) or Rejected (2) (decoded statically, not
+    yet live-trialed; see docs/sonas.md §6/§11)."""
+    by_name = {"accepted": 1, "rejected": 2}
+    value = by_name.get(answer.strip().lower())
+    if value is None:
+        try:
+            value = int(answer)
+        except ValueError:
+            value = None
+    if value not in (1, 2):
+        typer.echo("Error: --answer must be Accepted/Rejected (or 1/2).", err=True)
+        raise typer.Exit(2)
     _do_call("termsAnswer", {"termsId": terms_id, "answer": value},
              f"answer terms {terms_id}",
-             confirm=f"Answer terms {terms_id} with {value!r}?", yes=yes,
+             confirm=f"Answer terms {terms_id} with {value} "
+                     f"({'Accepted' if value == 1 else 'Rejected'})?", yes=yes,
              output_json=output_json)
 
 

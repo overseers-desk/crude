@@ -341,13 +341,16 @@ transaction-create docs share a base: `amount` (≥ 0, required), `dueDate`
   `paymentPlanCreate`; `paymentPlanUpdate({docId, modifier})`;
   `paymentPlanDelete({docId})`.
 
-Terms (write): `termsCreate({doc})` **[bundle]** (the doc shape is not yet
-decoded; exposed as `terms create`, untrialed, §11), `termsDelete({termsId})`
-**[bundle]** (exposed as `terms delete`, untrialed, §11),
-`termsAcceptPending({eventId})` **[chunk]** (accepts every pending terms record
-on the event: contract state, not called, §11), `termsAnswer({termsId, answer})`
-**[bundle]** (the answer value's type is not yet decoded; exposed as
-`terms answer`, untrialed, §11), `termsGeneratePDF({termsId})` **[chunk]**.
+Terms (write): `termsCreate({doc})` **[chunk]** (doc picks `name`, `text`,
+`required`, `type`, `category`, `channel` + `eventId`; `text` is the policy body,
+a String field projected out of the read pub below; exposed as `terms create`,
+decoded but not live-trialed, §11), `termsDelete({termsId})` **[chunk]** (exposed
+as `terms delete`, §11), `termsAcceptPending({eventId})` **[chunk]** (accepts
+every pending terms record on the event: contract state, not called, §11),
+`termsAnswer({termsId, answer})` and `termsAnswerMultiple({termsId, answer})`
+**[chunk]** (the server's `validate` requires `answer` to be the status enum
+Accepted (1) or Rejected (2); exposed as `terms answer`, §11), `termsView({termsId})`
+and `termsGeneratePDF({termsId})` **[chunk]**.
 
 Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessage({messageId, message})`,
 `eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`
@@ -500,16 +503,23 @@ shapes (this is how `eventCreateEnquiry`'s doc was decoded, §6.1). Prefer this
 over live iteration for any schema-validated method: those return opaque 500s,
 not Match errors. For plain `check()` methods, the live DDP error does name
 the failing Match. Watching the real call in the logged-in browser's DevTools
-(Network → WS frames) remains the route for observing side effects. To
-enumerate method *names* statically, the loader-layer bundle suffices; its
-hash changes each release, so read it fresh:
+(Network → WS frames) remains the route for observing side effects.
 
-    curl -s https://app.sonas.events/ | grep -oaE '/[a-f0-9]+\.js\?meteor_js_resource=true'
-    curl -s -o /tmp/sonas-bundle.js "https://app.sonas.events/<hash>.js?meteor_js_resource=true"
-    grep -oaE 'name:"[a-zA-Z][A-Za-z0-9]+",validate' /tmp/sonas-bundle.js \
-      | sed -E 's/.*name:"//; s/",validate//' | sort -u   # method names
-
-A method's `validate()` body in the bundle shows its destructured argument keys.
+Method names live in the dynamic chunk, not the loader: the loader served at the
+page (`<hash>.js?meteor_js_resource=true`, ~1.3 MB) carries the SimpleSchema
+machinery but no method strings, so grepping it for method names returns nothing.
+Get the chunk from a logged-in app instead: drive headless Chromium against the
+shared profile (CDP `--remote-allow-origins=*`), navigate to a route that mounts
+the feature (e.g. `/event/<id>` loads the ~15 MB terms/finance chunk), enumerate
+loaded scripts via `Debugger.scriptParsed` + `Debugger.getScriptSource`, and grep
+the large one. The relay methods read `name:"<method>",validate(e){...}` (the
+validate body picks the doc keys, e.g. `termsCreate` picks
+`name,category,channel,required,type,text,eventId`) and re-export under
+`n.export({<method>:()=>...})`. From a logged-in client the live in-memory list is
+fastest: `Object.keys(Meteor.connection._methodHandlers)`, and a handler's
+`.toString()` is the generic relay stub (validation is server-side; the schema is
+in the chunk, not the stub). `<Name>Schema` field definitions resolve the
+composed `doc` shapes (this is how `eventCreateEnquiry`'s doc was decoded, §6.1).
 
 ---
 
@@ -574,7 +584,10 @@ Message document (from `eventMessages`): `status`, `transport`, `author`,
 `attachments` (file ids), `log`, `externalId`, `categories`, `tags`.
 
 Terms record (from `eventTermsAndConditions`): `name`, `required`, `status`,
-`category`, `type`, `channel`, `answeredAt`/`answeredBy`/`answeredByName`.
+`category`, `type`, `channel`, `answeredAt`/`answeredBy`/`answeredByName`. The
+record also carries `text` (the policy body, String), which the read pub
+projects out; it is set through `termsCreate`/`termsAnswerMultiple` (§6.1) and is
+the field a policy edit changes.
 
 File document (from `eventDocs` and `eventMessages`): `name`/`displayName`,
 `type` (the container kind, e.g. `messages`, `documents`), `contentType`,
@@ -673,13 +686,17 @@ retires them together.
   real mail, contract state). To verify: observe the real UI actions' WS
   frames.
 - `terms create|answer|delete` (`termsCreate`/`termsAnswer`/`termsDelete`) ship
-  **[bundle]**, exposed with `--data`/`--answer` passthrough but untrialed: the
-  `termsCreate` doc shape and the `termsAnswer` answer-value type are not yet
-  decoded, and all three alter contract state. To verify: observe the real UI
-  actions' WS frames (creating, answering, resharing a policy), then trial per
-  the policy above. Separately, where a policy's editable *text* lives (an edit
-  method, a template, or inline on the record) is unresolved; no tenant-level
-  terms-template publication has surfaced in the bundle so far.
+  **[chunk]**, exposed with `--data`/`--answer` passthrough, payloads decoded
+  statically from the §6.4 chunk but not yet live-trialed (all three alter
+  contract state). `termsCreate`'s doc picks `name, text, required, type,
+  category, channel, eventId`; `termsAnswer`/`termsAnswerMultiple` take
+  `{termsId, answer}` with `answer` ∈ {Accepted 1, Rejected 2}. The policy's
+  editable text is the `text` String field on the record itself (projected out
+  of the read pub, §8), not a separate template: a new or corrected policy is a
+  `termsCreate` with the new `text`, or a `$set` on `text` through the collection2
+  `/terms-and-conditions/update` method. To finish verifying: trial `termsCreate`
+  on a CRUDE TEST harness event per the policy above, or capture a real UI
+  create/answer's frames.
 - `service-booking confirm` (`eventConfirmServiceBooking`) ships uncalled: the
   likeliest verb to notify a supplier and raise the deposit charge, and the
   effect is server-side and unobservable on this supplier-less tenant (§6.1).
