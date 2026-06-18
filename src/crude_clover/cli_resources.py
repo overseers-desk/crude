@@ -20,7 +20,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, read_data
 from crude_common.config import s
 from crude_clover.client import CloverError
 from crude_clover.resources import REGISTRY
@@ -87,7 +88,7 @@ def _resource(spec) -> typer.Typer:
             except CloverError as e:
                 typer.echo(f"Error: {e}", err=True)
                 raise typer.Exit(1)
-            _emit_record(rec, output_json)
+            emit_record(rec, output_json)
         return sub
 
     @sub.command("list", help=f"List {name}.")
@@ -105,7 +106,7 @@ def _resource(spec) -> typer.Typer:
         except CloverError as e:
             typer.echo(f"Error fetching {name}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, cols, name, output_json)
+        emit_list(items, cols, name, output_json)
 
     @sub.command("get", help=f"Show one {name} by id.")
     def _get(
@@ -118,7 +119,7 @@ def _resource(spec) -> typer.Typer:
         except CloverError as e:
             typer.echo(f"Error fetching {name} {rid}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(rec, output_json)
+        emit_record(rec, output_json)
 
     if spec.writable:
         @sub.command("create", help=f"Create a {name} from a JSON body. MUTATES THE LIVE POS.")
@@ -128,8 +129,8 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
-            body = _read_data(data, file)
-            _do_write(lambda: _client().resources.create(seg, body),
+            body = read_data(data, file)
+            do_write(lambda: _client().resources.create(seg, body),
                       f"create {name}", confirm=f"Create this {name}? (writes to the live POS)",
                       yes=yes, output_json=output_json)
 
@@ -141,8 +142,8 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
-            body = _read_data(data, file)
-            _do_write(lambda: _client().resources.update(seg, rid, body),
+            body = read_data(data, file)
+            do_write(lambda: _client().resources.update(seg, rid, body),
                       f"update {name} {rid}", confirm=f"Update {name} {rid}? (writes to the live POS)",
                       yes=yes, output_json=output_json)
 
@@ -152,7 +153,7 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
-            _do_write(lambda: _client().resources.delete(seg, rid),
+            do_write(lambda: _client().resources.delete(seg, rid),
                       f"delete {name} {rid}", confirm=f"Delete {name} {rid}? (cannot be undone)",
                       yes=yes, output_json=output_json)
 
@@ -198,7 +199,7 @@ def _g_get(
     except CloverError as e:
         typer.echo(f"Error fetching {segment} {rid}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(rec, output_json)
+    emit_record(rec, output_json)
 
 
 @resource_app.command("info")
@@ -227,8 +228,8 @@ def _g_create(
     output_json: bool = _JSON,
 ):
     """Create any record. MUTATES THE LIVE POS."""
-    body = _read_data(data, file)
-    _do_write(lambda: _client().resources.create(segment, body),
+    body = read_data(data, file)
+    do_write(lambda: _client().resources.create(segment, body),
               f"create {segment}", confirm=f"Create this {segment}? (writes to the live POS)",
               yes=yes, output_json=output_json)
 
@@ -243,8 +244,8 @@ def _g_update(
     output_json: bool = _JSON,
 ):
     """Update any record (partial). MUTATES THE LIVE POS."""
-    body = _read_data(data, file)
-    _do_write(lambda: _client().resources.update(segment, rid, body),
+    body = read_data(data, file)
+    do_write(lambda: _client().resources.update(segment, rid, body),
               f"update {segment} {rid}", confirm=f"Update {segment} {rid}? (writes to the live POS)",
               yes=yes, output_json=output_json)
 
@@ -257,7 +258,7 @@ def _g_delete(
     output_json: bool = _JSON,
 ):
     """Delete any record. Irreversible."""
-    _do_write(lambda: _client().resources.delete(segment, rid),
+    do_write(lambda: _client().resources.delete(segment, rid),
               f"delete {segment} {rid}", confirm=f"Delete {segment} {rid}? (cannot be undone)",
               yes=yes, output_json=output_json)
 

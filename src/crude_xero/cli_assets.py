@@ -19,7 +19,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, read_data
 
 # The statuses the Assets API accepts on the (required) list filter.
 ASSET_STATUSES = ("DRAFT", "REGISTERED", "DISPOSED")
@@ -71,7 +72,7 @@ def _resource(
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
-            _emit_record(item, output_json)
+            emit_record(item, output_json)
 
     if create_fn:
 
@@ -82,8 +83,8 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            body = _read_data(data, file)
-            _do_write(
+            body = read_data(data, file)
+            do_write(
                 lambda: getattr(_assets(), create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
@@ -127,7 +128,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching assets: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(
+        emit_list(
             items,
             [("ID", "assetId"), ("Number", "assetNumber"), ("Name", "assetName"),
              ("Status", "assetStatus"), ("Purchased", "purchaseDate"), ("Price", "purchasePrice")],
@@ -145,7 +146,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching asset types: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(
+        emit_list(
             items,
             [("ID", "assetTypeId"), ("Name", "assetTypeName"), ("FixedAcct", "fixedAssetAccountId")],
             "asset type", output_json,
@@ -163,4 +164,4 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching asset settings: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)

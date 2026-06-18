@@ -1,7 +1,7 @@
 """Core treasury resource sub-apps for crude-airwallex: account, balance, transaction.
 
 `register(app)` attaches the account, balance, and transaction sub-apps; all are
-read-only. Reads render with the shared `_emit_list`/`_emit_record`; timestamp
+read-only. Reads render with the shared `emit_list`/`emit_record`; timestamp
 columns and record views localize via `crude_airwallex.render`. Note the casing
 split (see docs/airwallex.md): `financial_transactions` returns camelCase fields
 (createdAt, transactionType, settledAt), while balances and account are snake_case.
@@ -13,7 +13,7 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _emit_list, _emit_record
+from crude_common.output import emit_list, emit_record
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
@@ -38,7 +38,7 @@ account_app = typer.Typer(help="The connected Airwallex account.")
 def account_get(output_json: bool = _JSON):
     """Show the connected account's details."""
     rec = _client().core.get_account()
-    _emit_record(localize(rec, ("created_at", "updated_at")), output_json)
+    emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 
 # ----------------------------------------------------------------------
@@ -52,7 +52,7 @@ balance_app = typer.Typer(help="Airwallex balances.")
 def balance_current(output_json: bool = _JSON):
     """Current balance per held currency."""
     items = _client().core.list_current_balances()
-    _emit_list(
+    emit_list(
         items,
         [
             ("Currency", "currency"),
@@ -81,7 +81,7 @@ def balance_history(
         to=to_utc_iso(to, end=True) if to else None,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("Currency", "currency"),
@@ -122,7 +122,7 @@ def transaction_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -146,7 +146,7 @@ def transaction_get(
 ):
     """Show one financial transaction by id."""
     rec = _client().core.get_financial_transaction(txn_id)
-    _emit_record(localize(rec, ("createdAt", "settledAt", "estimatedSettledAt")), output_json)
+    emit_record(localize(rec, ("createdAt", "settledAt", "estimatedSettledAt")), output_json)
 
 
 def register(app: typer.Typer) -> None:

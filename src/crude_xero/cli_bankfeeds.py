@@ -2,7 +2,7 @@
 
 `register(app)` attaches two sub-`Typer`s: `feed-connection` (list/get/create/
 delete) and `statement` (list/get/create). Reads render through the shared
-`_emit_list`/`_emit_record`; writes go through `_do_write` with confirm-before-
+`emit_list`/`emit_record`; writes go through `do_write` with confirm-before-
 write. Two BankFeeds shapes show through to the CLI: the create and delete bodies
 are batch envelopes (``{"items": [{...}]}``), passed through as the user supplies
 them, and a feed connection is deleted by POSTing a delete request (the `delete`
@@ -17,7 +17,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, read_data
 
 
 def _client(*args, **kwargs):
@@ -71,7 +72,7 @@ def _register_feed_connection(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching feed connections: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _FEED_CONNECTION_COLS, "feed connection", output_json)
+        emit_list(items, _FEED_CONNECTION_COLS, "feed connection", output_json)
 
     @feed.command("get", help="Show a single feed connection.")
     def _get(
@@ -83,7 +84,7 @@ def _register_feed_connection(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching feed connection {feed_connection_id}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @feed.command("create", help='Create feed connection(s) from an items-wrapped JSON body ({"items":[{...}]}).')
     def _create(
@@ -92,8 +93,8 @@ def _register_feed_connection(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _bankfeeds().create_feed_connections(body),
             "create feed connection(s)", confirm="Create these feed connection(s)?",
             yes=yes, output_json=output_json,
@@ -109,8 +110,8 @@ def _register_feed_connection(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _bankfeeds().delete_feed_connections(body),
             "delete feed connection(s)", confirm="Delete these feed connection(s)?",
             yes=yes, output_json=output_json,
@@ -132,7 +133,7 @@ def _register_statement(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching statements: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _STATEMENT_COLS, "statement", output_json)
+        emit_list(items, _STATEMENT_COLS, "statement", output_json)
 
     @statement.command("get", help="Show a single statement.")
     def _get(
@@ -144,7 +145,7 @@ def _register_statement(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching statement {statement_id}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @statement.command("create", help='Create statement(s) from an items-wrapped JSON body ({"items":[{...}]}).')
     def _create(
@@ -153,8 +154,8 @@ def _register_statement(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _bankfeeds().create_statements(body),
             "create statement(s)", confirm="Create these statement(s)?",
             yes=yes, output_json=output_json,

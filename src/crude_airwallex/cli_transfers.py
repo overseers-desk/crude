@@ -13,7 +13,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, read_data
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
@@ -47,7 +48,7 @@ def transfer_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -70,7 +71,7 @@ def transfer_get(
 ):
     """Show one transfer by id."""
     rec = _client().transfers.get_transfer(transfer_id)
-    _emit_record(localize(rec, ("created_at", "updated_at")), output_json)
+    emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 
 @transfer_app.command("create")
@@ -81,8 +82,8 @@ def transfer_create(
     output_json: bool = _JSON,
 ):
     """Create a transfer from a JSON body. MOVES REAL MONEY."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().transfers.create_transfer(body),
         "create transfer",
         confirm="Create this transfer? (moves real money)",

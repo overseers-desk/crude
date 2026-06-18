@@ -10,8 +10,8 @@ a local `_resource` factory — like the Assets CLI's, trimmed and bound to the
 with POST. The irregular shapes are added explicitly: `pay-item` is a grouped
 object (so its `list` renders as a record and its create/update POST the body
 straight to `PayItems` with no element), and `payslip`/`payroll-settings` are
-read-only. Reads render with the shared `_emit_list`/`_emit_record`; writes go
-through `_do_write`/`_merge_update`, with confirm-before-write.
+read-only. Reads render with the shared `emit_list`/`emit_record`; writes go
+through `do_write`/`merge_update`, with confirm-before-write.
 """
 
 from __future__ import annotations
@@ -20,7 +20,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.client import PAGE_SIZE
 
 
@@ -117,7 +118,7 @@ def _resource(
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
             _list_hint(items, fetch_all, limit)
-            _emit_list(items, columns, name, output_json)
+            emit_list(items, columns, name, output_json)
 
     if get_fn:
 
@@ -131,7 +132,7 @@ def _resource(
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
-            _emit_record(item, output_json)
+            emit_record(item, output_json)
 
     if create_fn:
 
@@ -142,8 +143,8 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            body = _read_data(data, file)
-            _do_write(
+            body = read_data(data, file)
+            do_write(
                 lambda: getattr(_payroll(), create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
@@ -162,7 +163,7 @@ def _resource(
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
             papi = _payroll()
-            _merge_update(
+            merge_update(
                 lambda: getattr(papi, get_fn)(guid),
                 lambda merged: getattr(papi, update_fn)(guid, merged),
                 data,
@@ -181,7 +182,7 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            _do_write(
+            do_write(
                 lambda: getattr(_payroll(), delete_fn)(guid),
                 f"delete {name} {guid}",
                 confirm=f"Delete {name} {guid}?",
@@ -263,7 +264,7 @@ def _register_pay_item(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching pay items: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @pay_item.command("create", help="Create a pay item from a JSON body (the category array, e.g. EarningsRates).")
     def _create(
@@ -272,8 +273,8 @@ def _register_pay_item(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _payroll().create_pay_item(body),
             "create pay item", confirm="Create this pay item?",
             yes=yes, output_json=output_json,
@@ -286,8 +287,8 @@ def _register_pay_item(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _payroll().update_pay_item(body),
             "update pay item", confirm="Update this pay item?",
             yes=yes, output_json=output_json,
@@ -309,7 +310,7 @@ def _register_payslip(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching payslip {guid}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
 
 def _register_settings(app: typer.Typer) -> None:
@@ -326,4 +327,4 @@ def _register_settings(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching payroll settings: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)

@@ -1,8 +1,8 @@
 """Payouts beneficiary sub-app for crude-airwallex: list/get/create/update/delete.
 
 `register(app)` attaches the `beneficiary` sub-app over ``/api/v1/beneficiaries``.
-Reads render with `_emit_list`/`_emit_record`; the writes go through `_do_write`/
-`_merge_update`, confirm-before-write (a beneficiary change edits the production
+Reads render with `emit_list`/`emit_record`; the writes go through `do_write`/
+`merge_update`, confirm-before-write (a beneficiary change edits the production
 account's saved recipients). Field names are snake_case (verified live); timestamp
 columns localize via `crude_airwallex.render`.
 """
@@ -13,7 +13,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
@@ -56,7 +57,7 @@ def beneficiary_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "beneficiary_id"),
@@ -78,7 +79,7 @@ def beneficiary_get(
 ):
     """Show one beneficiary by id."""
     rec = _client().beneficiaries.get_beneficiary(beneficiary_id)
-    _emit_record(localize(rec, ("created_at", "updated_at")), output_json)
+    emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 
 @beneficiary_app.command("create")
@@ -89,8 +90,8 @@ def beneficiary_create(
     output_json: bool = _JSON,
 ):
     """Create a beneficiary from a JSON body."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().beneficiaries.create_beneficiary(body),
         "create beneficiary",
         confirm="Create this beneficiary?",
@@ -109,7 +110,7 @@ def beneficiary_update(
 ):
     """Update a beneficiary (read-merge-write)."""
     client = _client().beneficiaries
-    _merge_update(
+    merge_update(
         lambda: client.get_beneficiary(beneficiary_id),
         lambda merged: client.update_beneficiary(beneficiary_id, merged),
         data,
@@ -128,7 +129,7 @@ def beneficiary_delete(
     output_json: bool = _JSON,
 ):
     """Delete a beneficiary by id."""
-    _do_write(
+    do_write(
         lambda: _client().beneficiaries.delete_beneficiary(beneficiary_id),
         f"delete beneficiary {beneficiary_id}",
         confirm=f"Delete beneficiary {beneficiary_id}?",

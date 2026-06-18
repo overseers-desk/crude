@@ -5,8 +5,8 @@ from the command-grammar table. The uniform CRUD verbs (list/get/create/update/
 delete, soft-delete/archive, pdf) are built by `_resource`, keeping one home for
 the shared pattern; the irregular verbs (allocate, email, online-url, members,
 options, the named reports, the GUID-less tax-rate update) are added explicitly to
-the returned sub-app. Reads render with the shared `_emit_list`/`_emit_record`;
-writes go through `_do_write`/`_merge_update`, with confirm-before-write.
+the returned sub-app. Reads render with the shared `emit_list`/`emit_record`;
+writes go through `do_write`/`merge_update`, with confirm-before-write.
 """
 
 from __future__ import annotations
@@ -16,7 +16,8 @@ from typing import List, Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.accounting import REPORT_NAMES
 from crude_xero.client import PAGE_SIZE
 
@@ -66,7 +67,7 @@ def _add_remove(sub: typer.Typer, cmd: str, method: str, name: str, label: str) 
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: getattr(_client().accounting, method)(guid),
             f"{cmd} {name} {guid}",
             confirm=f"{cmd.capitalize()} {name} {guid}?",
@@ -102,8 +103,8 @@ def _add_allocate(sub: typer.Typer, method: str, name: str, label: str) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: getattr(_client().accounting, method)(guid, body),
             f"allocate {name} {guid}",
             confirm=f"Allocate {name} {guid}?",
@@ -154,7 +155,7 @@ def _resource(
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
             _list_hint(items, fetch_all, limit)
-            _emit_list(items, columns, name, output_json)
+            emit_list(items, columns, name, output_json)
 
     elif list_fn:
 
@@ -171,7 +172,7 @@ def _resource(
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
             _list_hint(items, fetch_all, limit)
-            _emit_list(items, columns, name, output_json)
+            emit_list(items, columns, name, output_json)
 
     if get_fn:
 
@@ -185,7 +186,7 @@ def _resource(
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
-            _emit_record(item, output_json)
+            emit_record(item, output_json)
 
     if create_fn:
 
@@ -196,8 +197,8 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            body = _read_data(data, file)
-            _do_write(
+            body = read_data(data, file)
+            do_write(
                 lambda: getattr(_client().accounting, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
@@ -216,7 +217,7 @@ def _resource(
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
             client = _client().accounting
-            _merge_update(
+            merge_update(
                 lambda: getattr(client, get_fn)(guid),
                 lambda merged: getattr(client, update_fn)(guid, merged),
                 data,
@@ -320,8 +321,8 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _client().accounting.add_contact_group_members(group_id, body),
             f"add members to group {group_id}", yes=yes, output_json=output_json,
         )
@@ -333,7 +334,7 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _client().accounting.remove_contact_group_member(group_id, contact_id),
             f"remove {contact_id} from group {group_id}",
             confirm=f"Remove {contact_id} from group {group_id}?",
@@ -378,7 +379,7 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _client().accounting.email_invoice(guid),
             f"email invoice {guid}",
             confirm=f"Email invoice {guid} to the contact? (real mail)",
@@ -395,7 +396,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching invoice online URL: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     _add_pdf(invoice, "get_invoice_pdf", "invoice", "invoice")
 
@@ -427,7 +428,7 @@ def register(app: typer.Typer) -> None:
             typer.echo(f"Error fetching journals: {e}", err=True)
             raise typer.Exit(1)
         _list_hint(items, fetch_all, limit)
-        _emit_list(
+        emit_list(
             items,
             [("ID", "JournalID"), ("Number", "JournalNumber"),
              ("Date", "JournalDate"), ("Reference", "Reference")],
@@ -463,7 +464,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching organisation: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     overpayment = _resource(
         app, "overpayment", "overpayment",
@@ -545,8 +546,8 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _client().accounting.update_tax_rate(body),
             "update tax rate", confirm="Update this tax rate?",
             yes=yes, output_json=output_json,
@@ -571,8 +572,8 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _client().accounting.add_tracking_option(category_id, body),
             f"add option to category {category_id}", yes=yes, output_json=output_json,
         )
@@ -586,8 +587,8 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _client().accounting.update_tracking_option(category_id, option_id, body),
             f"update option {option_id}", confirm=f"Update option {option_id}?",
             yes=yes, output_json=output_json,
@@ -600,7 +601,7 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _client().accounting.delete_tracking_option(category_id, option_id),
             f"delete option {option_id}", confirm=f"Delete option {option_id}?",
             yes=yes, output_json=output_json,
@@ -628,7 +629,7 @@ def _register_reports(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching reports: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(
+        emit_list(
             items,
             [("ID", "ReportID"), ("Name", "ReportName"), ("Type", "ReportType")],
             "report", output_json,
@@ -669,4 +670,4 @@ def _add_report(report: typer.Typer, cmd_name: str, xero_name: str) -> None:
         except Exception as e:
             typer.echo(f"Error fetching {cmd_name} report: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(result, output_json)
+        emit_record(result, output_json)

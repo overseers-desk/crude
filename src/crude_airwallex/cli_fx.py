@@ -14,7 +14,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, read_data
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
@@ -44,7 +45,7 @@ def fx_rate_current(
 ):
     """Show the current indicative rate for a buy/sell currency pair."""
     rec = _client().fx.get_current_rate(buy_currency=buy, sell_currency=sell, sell_amount=amount)
-    _emit_record(localize(rec, ("created_at",)), output_json)
+    emit_record(localize(rec, ("created_at",)), output_json)
 
 
 # ----------------------------------------------------------------------
@@ -69,7 +70,7 @@ def conversion_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "conversion_id"),
@@ -93,7 +94,7 @@ def conversion_get(
 ):
     """Show one conversion by id."""
     rec = _client().fx.get_conversion(conversion_id)
-    _emit_record(localize(rec, ("created_at", "updated_at", "settlement_cutoff_at")), output_json)
+    emit_record(localize(rec, ("created_at", "updated_at", "settlement_cutoff_at")), output_json)
 
 
 @conversion_app.command("create")
@@ -104,8 +105,8 @@ def conversion_create(
     output_json: bool = _JSON,
 ):
     """Book a conversion from a JSON body. MOVES REAL MONEY."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().fx.create_conversion(body),
         "create conversion",
         confirm="Book this conversion? (moves real money)",

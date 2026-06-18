@@ -23,7 +23,7 @@ from crude_common.claude_command import (
     refresh,
     version_callback,
 )
-from crude_common.cliutil import console
+from crude_common.output import console
 from crude_common.config import (
     account,
     find_config,

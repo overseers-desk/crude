@@ -5,7 +5,7 @@
 (one command per statement: balance-sheet/profit-loss/cash-flow/trial-balance),
 and `activity` (one command per accounting activity:
 account-usage/lock-history/report-history/user-activities). The whole product is
-read-only, so every verb is a fetch rendered by the shared `_emit_record`, with
+read-only, so every verb is a fetch rendered by the shared `emit_record`, with
 `--json` for the full structure.
 
 The named-statement and named-activity commands mirror the Accounting CLI's
@@ -22,7 +22,7 @@ from typing import List, Optional
 
 import typer
 
-from crude_common.cliutil import _emit_record
+from crude_common.output import emit_record
 
 # Friendly command name -> FinanceAPI method, for the two named-endpoint groups.
 FINANCIAL_STATEMENTS = {
@@ -110,7 +110,7 @@ def _register_cash_validation(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching cash validation: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(result, output_json)
+        emit_record(result, output_json)
 
 
 def _register_bank_statement(app: typer.Typer) -> None:
@@ -136,7 +136,7 @@ def _register_bank_statement(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching bank-statement accounting: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(result, output_json)
+        emit_record(result, output_json)
 
 
 def _register_financial_statements(app: typer.Typer) -> None:
@@ -177,4 +177,4 @@ def _add_param_command(sub: typer.Typer, cmd_name: str, method: str, label: str)
         except Exception as e:
             typer.echo(f"Error fetching {label}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(result, output_json)
+        emit_record(result, output_json)

@@ -5,8 +5,8 @@ sub-Typers, mirroring the Accounting CLI: a small `_resource` builder carries th
 uniform CRUD verbs (list/get/create/update/delete), and the irregular verbs are
 added explicitly — file `upload` (multipart) and `content` (raw-byte download),
 the association list-by-file/list-by-object/add/remove, and the read-only inbox.
-Reads render with the shared `_emit_list`/`_emit_record`; writes go through
-`_do_write`/`_merge_update`, with confirm-before-write; bytes via `_emit_bytes`.
+Reads render with the shared `emit_list`/`emit_record`; writes go through
+`do_write`/`merge_update`, with confirm-before-write; bytes via `_emit_bytes`.
 
 The builder binds to `_client().files`, so it is reproduced here rather than
 imported: cli_accounting's `_resource` is hardwired to `_client().accounting`.
@@ -21,7 +21,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.cli_accounting import _emit_bytes, _list_hint
 
 # Shared columns for the two association list views (by file, by object).
@@ -83,7 +84,7 @@ def _resource(
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
             _list_hint(items, fetch_all, limit)
-            _emit_list(items, columns, name, output_json)
+            emit_list(items, columns, name, output_json)
 
     if get_fn:
 
@@ -97,7 +98,7 @@ def _resource(
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
-            _emit_record(item, output_json)
+            emit_record(item, output_json)
 
     if create_fn:
 
@@ -108,8 +109,8 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            body = _read_data(data, file)
-            _do_write(
+            body = read_data(data, file)
+            do_write(
                 lambda: getattr(_client().files, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
@@ -128,7 +129,7 @@ def _resource(
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
             client = _client().files
-            _merge_update(
+            merge_update(
                 lambda: getattr(client, get_fn)(guid),
                 lambda merged: getattr(client, update_fn)(guid, merged),
                 data,
@@ -147,7 +148,7 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
-            _do_write(
+            do_write(
                 lambda: getattr(_client().files, delete_fn)(guid),
                 f"delete {name} {guid}",
                 confirm=f"Delete {name} {guid}?",
@@ -186,7 +187,7 @@ def register(app: typer.Typer) -> None:
         content = Path(file_path).read_bytes()
         stored = name or os.path.basename(file_path)
         ct = mime or mimetypes.guess_type(file_path)[0] or "application/octet-stream"
-        _do_write(
+        do_write(
             lambda: _client().files.upload_file(stored, content, ct, folder_id=folder),
             f"upload {stored}", yes=yes, output_json=output_json,
         )
@@ -230,7 +231,7 @@ def _register_associations(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching associations: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _ASSOC_COLUMNS, "association", output_json)
+        emit_list(items, _ASSOC_COLUMNS, "association", output_json)
 
     @association.command("object", help="List the files associated with an object.")
     def _assoc_object(
@@ -242,7 +243,7 @@ def _register_associations(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching associations: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _ASSOC_COLUMNS, "association", output_json)
+        emit_list(items, _ASSOC_COLUMNS, "association", output_json)
 
     @association.command("add", help="Associate a file with an object (JSON: ObjectId, ObjectType, ObjectGroup).")
     def _assoc_add(
@@ -252,8 +253,8 @@ def _register_associations(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _client().files.create_association(file_id, body),
             f"associate file {file_id}", yes=yes, output_json=output_json,
         )
@@ -265,7 +266,7 @@ def _register_associations(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _client().files.delete_association(file_id, object_id),
             f"remove association {object_id} from file {file_id}",
             confirm=f"Remove association {object_id} from file {file_id}?",
@@ -287,4 +288,4 @@ def _register_inbox(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching inbox: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)

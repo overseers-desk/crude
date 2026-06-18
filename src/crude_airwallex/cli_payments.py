@@ -5,7 +5,7 @@ typer sub-app attached to a parent `pa_app`, and `register(app)` mounts that par
 as ``pa``. Resources: payment-intent (with confirm/capture/cancel money verbs),
 refund, customer, payment-consent (read-only), payment-link.
 
-Reads render with `_emit_list`/`_emit_record`; record views localize their timestamp
+Reads render with `emit_list`/`emit_record`; record views localize their timestamp
 fields via `crude_airwallex.render`. The money/creation verbs (payment-intent
 create/confirm/capture/cancel, refund create, payment-link create) MOVE REAL MONEY or
 publish a public page, so each is confirm-gated with an explicit warning, mirroring
@@ -19,7 +19,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
@@ -65,7 +66,7 @@ def intent_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -87,7 +88,7 @@ def intent_get(
 ):
     """Show one payment intent by id."""
     rec = _client().payments.get_payment_intent(intent_id)
-    _emit_record(localize(rec, _TS), output_json)
+    emit_record(localize(rec, _TS), output_json)
 
 
 @intent_app.command("create")
@@ -98,8 +99,8 @@ def intent_create(
     output_json: bool = _JSON,
 ):
     """Create a payment intent from a JSON body. REQUESTS REAL MONEY from a shopper."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().payments.create_payment_intent(body),
         "create payment intent",
         confirm="Create this payment intent? (requests real money from a shopper)",
@@ -117,8 +118,8 @@ def intent_confirm(
     output_json: bool = _JSON,
 ):
     """Confirm a payment intent. AUTHORIZES A REAL PAYMENT against the shopper."""
-    body = _read_data(data, file, required=False)
-    _do_write(
+    body = read_data(data, file, required=False)
+    do_write(
         lambda: _client().payments.confirm_payment_intent(intent_id, body),
         f"confirm payment intent {intent_id}",
         confirm=f"Confirm payment intent {intent_id}? (authorizes a real payment)",
@@ -136,8 +137,8 @@ def intent_capture(
     output_json: bool = _JSON,
 ):
     """Capture an authorized payment intent. MOVES REAL MONEY (settles the charge)."""
-    body = _read_data(data, file, required=False)
-    _do_write(
+    body = read_data(data, file, required=False)
+    do_write(
         lambda: _client().payments.capture_payment_intent(intent_id, body),
         f"capture payment intent {intent_id}",
         confirm=f"Capture payment intent {intent_id}? (moves real money)",
@@ -155,8 +156,8 @@ def intent_cancel(
     output_json: bool = _JSON,
 ):
     """Cancel a payment intent (voids its authorization)."""
-    body = _read_data(data, file, required=False)
-    _do_write(
+    body = read_data(data, file, required=False)
+    do_write(
         lambda: _client().payments.cancel_payment_intent(intent_id, body),
         f"cancel payment intent {intent_id}",
         confirm=f"Cancel payment intent {intent_id}? (voids the authorization)",
@@ -189,7 +190,7 @@ def refund_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -212,7 +213,7 @@ def refund_get(
 ):
     """Show one refund by id."""
     rec = _client().payments.get_refund(refund_id)
-    _emit_record(localize(rec, _TS), output_json)
+    emit_record(localize(rec, _TS), output_json)
 
 
 @refund_app.command("create")
@@ -223,8 +224,8 @@ def refund_create(
     output_json: bool = _JSON,
 ):
     """Issue a refund from a JSON body. MOVES REAL MONEY back to the shopper."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().payments.create_refund(body),
         "create refund",
         confirm="Issue this refund? (moves real money back to the shopper)",
@@ -255,7 +256,7 @@ def customer_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -277,7 +278,7 @@ def customer_get(
 ):
     """Show one customer by id."""
     rec = _client().payments.get_customer(customer_id)
-    _emit_record(localize(rec, _TS), output_json)
+    emit_record(localize(rec, _TS), output_json)
 
 
 @customer_app.command("create")
@@ -288,8 +289,8 @@ def customer_create(
     output_json: bool = _JSON,
 ):
     """Create a customer from a JSON body."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().payments.create_customer(body),
         "create customer",
         confirm="Create this customer?",
@@ -308,7 +309,7 @@ def customer_update(
 ):
     """Update a customer (read-merge-write)."""
     client = _client().payments
-    _merge_update(
+    merge_update(
         lambda: client.get_customer(customer_id),
         lambda merged: client.update_customer(customer_id, merged),
         data,
@@ -327,7 +328,7 @@ def customer_delete(
     output_json: bool = _JSON,
 ):
     """Delete a customer by id."""
-    _do_write(
+    do_write(
         lambda: _client().payments.delete_customer(customer_id),
         f"delete customer {customer_id}",
         confirm=f"Delete customer {customer_id}?",
@@ -360,7 +361,7 @@ def consent_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -382,7 +383,7 @@ def consent_get(
 ):
     """Show one payment consent by id."""
     rec = _client().payments.get_payment_consent(consent_id)
-    _emit_record(localize(rec, _TS), output_json)
+    emit_record(localize(rec, _TS), output_json)
 
 
 # ----------------------------------------------------------------------
@@ -415,7 +416,7 @@ def link_list(
         all_pages=all_,
         limit=limit,
     )
-    _emit_list(
+    emit_list(
         items,
         [
             ("ID", "id"),
@@ -438,7 +439,7 @@ def link_get(
 ):
     """Show one payment link by id."""
     rec = _client().payments.get_payment_link(link_id)
-    _emit_record(localize(rec, _LINK_TS), output_json)
+    emit_record(localize(rec, _LINK_TS), output_json)
 
 
 @link_app.command("create")
@@ -449,8 +450,8 @@ def link_create(
     output_json: bool = _JSON,
 ):
     """Create a payment link from a JSON body. PUBLISHES A PUBLIC PAYMENT PAGE."""
-    body = _read_data(data, file)
-    _do_write(
+    body = read_data(data, file)
+    do_write(
         lambda: _client().payments.create_payment_link(body),
         "create payment link",
         confirm="Create this payment link? (publishes a public page that collects real money)",

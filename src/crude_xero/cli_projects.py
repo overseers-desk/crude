@@ -3,8 +3,8 @@
 `register(app)` attaches four sub-`Typer`s: `project`, `task`, `time-entry`, and
 the read-only `project-user`. Tasks and time entries are nested under a project,
 so their verbs take `--project <id>` (the parent) plus the child id as an argument
-where one is needed; reads render with the shared `_emit_list`/`_emit_record` and
-writes go through `_do_write`/`_merge_update` with confirm-before-write. Two shapes
+where one is needed; reads render with the shared `emit_list`/`emit_record` and
+writes go through `do_write`/`merge_update` with confirm-before-write. Two shapes
 differ from Accounting: `project update` is a PATCH status change (`--status` or a
 JSON `--data` body), and `cli_accounting._resource` — which is bound to
 `.accounting` — does not fit these nested, parent-scoped resources, so the verbs
@@ -17,7 +17,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list, _emit_record, _merge_update, _read_data
+from crude_common.output import emit_list, emit_record
+from crude_common.writeio import do_write, merge_update, read_data
 
 
 def _client(*args, **kwargs):
@@ -79,7 +80,7 @@ def _register_project(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching projects: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _PROJECT_COLS, "project", output_json)
+        emit_list(items, _PROJECT_COLS, "project", output_json)
 
     @project.command("get", help="Show a single project.")
     def _get(
@@ -91,7 +92,7 @@ def _register_project(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching project {project_id}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @project.command("create", help="Create a project from a JSON body (contactId, name, ...).")
     def _create(
@@ -100,8 +101,8 @@ def _register_project(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _projects().create_project(body),
             "create project", confirm="Create this project?",
             yes=yes, output_json=output_json,
@@ -116,13 +117,13 @@ def _register_project(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file, required=False)
+        body = read_data(data, file, required=False)
         if status is not None:
             body["status"] = status
         if not body:
             typer.echo("Error: nothing to update; pass --status or --data.", err=True)
             raise typer.Exit(1)
-        _do_write(
+        do_write(
             lambda: _projects().update_project(project_id, body),
             f"update project {project_id}", confirm=f"Update project {project_id}?",
             yes=yes, output_json=output_json,
@@ -145,7 +146,7 @@ def _register_task(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching tasks: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _TASK_COLS, "task", output_json)
+        emit_list(items, _TASK_COLS, "task", output_json)
 
     @task.command("get", help="Show a single task.")
     def _get(
@@ -158,7 +159,7 @@ def _register_task(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching task {task_id}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @task.command("create", help="Create a task on a project from a JSON body.")
     def _create(
@@ -168,8 +169,8 @@ def _register_task(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _projects().create_task(project_id, body),
             f"create task on project {project_id}", confirm="Create this task?",
             yes=yes, output_json=output_json,
@@ -185,7 +186,7 @@ def _register_task(app: typer.Typer) -> None:
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
         papi = _projects()
-        _merge_update(
+        merge_update(
             lambda: papi.get_task(project_id, task_id),
             lambda merged: papi.update_task(project_id, task_id, merged),
             data, file, {}, f"update task {task_id}", yes, output_json,
@@ -198,7 +199,7 @@ def _register_task(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _projects().delete_task(project_id, task_id),
             f"delete task {task_id}", confirm=f"Delete task {task_id}?",
             yes=yes, output_json=output_json,
@@ -221,7 +222,7 @@ def _register_time(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching time entries: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _TIME_COLS, "time entry", output_json)
+        emit_list(items, _TIME_COLS, "time entry", output_json)
 
     @time_entry.command("get", help="Show a single time entry.")
     def _get(
@@ -234,7 +235,7 @@ def _register_time(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching time entry {time_id}: {e}", err=True)
             raise typer.Exit(1)
-        _emit_record(item, output_json)
+        emit_record(item, output_json)
 
     @time_entry.command("create", help="Create a time entry on a project from a JSON body.")
     def _create(
@@ -244,8 +245,8 @@ def _register_time(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        body = _read_data(data, file)
-        _do_write(
+        body = read_data(data, file)
+        do_write(
             lambda: _projects().create_time(project_id, body),
             f"create time entry on project {project_id}", confirm="Create this time entry?",
             yes=yes, output_json=output_json,
@@ -261,7 +262,7 @@ def _register_time(app: typer.Typer) -> None:
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
         papi = _projects()
-        _merge_update(
+        merge_update(
             lambda: papi.get_time(project_id, time_id),
             lambda merged: papi.update_time(project_id, time_id, merged),
             data, file, {}, f"update time entry {time_id}", yes, output_json,
@@ -274,7 +275,7 @@ def _register_time(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
-        _do_write(
+        do_write(
             lambda: _projects().delete_time(project_id, time_id),
             f"delete time entry {time_id}", confirm=f"Delete time entry {time_id}?",
             yes=yes, output_json=output_json,
@@ -294,4 +295,4 @@ def _register_project_user(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching project users: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(items, _PROJECT_USER_COLS, "project user", output_json)
+        emit_list(items, _PROJECT_USER_COLS, "project user", output_json)

@@ -16,7 +16,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.cliutil import _do_write, _emit_list
+from crude_common.output import emit_list
+from crude_common.writeio import do_write
 from crude_xero.accounting import ATTACHMENT_ENDPOINTS, HISTORY_ENDPOINTS
 from crude_xero.cli_accounting import _client, _emit_bytes
 
@@ -49,7 +50,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching attachments: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(
+        emit_list(
             items,
             [("ID", "AttachmentID"), ("File", "FileName"),
              ("Mime", "MimeType"), ("Size", "ContentLength")],
@@ -84,7 +85,7 @@ def register(app: typer.Typer) -> None:
         content = Path(file).read_bytes()
         filename = os.path.basename(file)
         ct = mime or mimetypes.guess_type(file)[0] or "application/octet-stream"
-        _do_write(
+        do_write(
             lambda: _client().accounting.add_attachment(on, id_, filename, content, ct),
             f"add attachment {filename} to {on} {id_}", yes=yes, output_json=output_json,
         )
@@ -101,7 +102,7 @@ def register(app: typer.Typer) -> None:
         except Exception as e:
             typer.echo(f"Error fetching history: {e}", err=True)
             raise typer.Exit(1)
-        _emit_list(
+        emit_list(
             items,
             [("Date", "DateUTC"), ("User", "User"), ("Details", "Details")],
             "history record", output_json,
@@ -116,7 +117,7 @@ def register(app: typer.Typer) -> None:
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
         _check_endpoint(on, HISTORY_ENDPOINTS)
-        _do_write(
+        do_write(
             lambda: _client().accounting.add_history(on, id_, note),
             f"add note to {on} {id_}", yes=yes, output_json=output_json,
         )
