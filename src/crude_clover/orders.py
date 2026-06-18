@@ -55,6 +55,22 @@ class OrdersAPI:
         body = self.session.get(f"/v3/merchants/{mid}/orders", params=params)
         return body.get("elements", [])
 
+    def get(self, order_id, *, expand=EXPAND):
+        """One order by id, expanded."""
+        mid = self.session.merchant_id
+        params = [("expand", expand)] if expand else None
+        return self.session.get(f"/v3/merchants/{mid}/orders/{order_id}", params=params)
+
+    def iter_modified_since(self, since_ms):
+        """Yield orders with modifiedTime >= since_ms, expanded. For incremental
+        syncs: pulls only what changed, not a whole date range."""
+        mid = self.session.merchant_id
+        yield from self.session.iter_elements(
+            f"/v3/merchants/{mid}/orders",
+            expand=EXPAND,
+            filters=[f"modifiedTime>={since_ms}"],
+        )
+
     def iter_orders(self, start_ms, end_ms):
         """Yield every order created in [start_ms, end_ms], expanded.
 
