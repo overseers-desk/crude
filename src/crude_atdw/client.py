@@ -5,9 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import requests
-
 from crude_common.config import account
+from crude_common.httpapi import HttpSession
 from crude_common.statestore import atomic_write, state_path
 
 API_BASE = "https://atlas.atdw-online.com.au/api"
@@ -24,9 +23,9 @@ def token_path() -> Path:
     return state_path("atdw_token", account())
 
 
-class ATDWClient:
+class ATDWClient(HttpSession):
     def __init__(self, token: str, credentials: dict = None):
-        self.session = requests.Session()
+        super().__init__(API_BASE)
         self.session.headers.update({"Authorization": f"Bearer {token}"})
         self._credentials = credentials or {}
 
@@ -53,27 +52,9 @@ class ATDWClient:
         except Exception:
             return False
 
-    def _request(self, method: str, path: str, **kwargs):
-        """Execute a request, auto-refreshing on 401."""
-        url = f"{API_BASE}{path}"
-        r = self.session.request(method, url, **kwargs)
-        if r.status_code == 401 and self._try_refresh():
-            # Retry once with the new token
-            r = self.session.request(method, url, **kwargs)
-        r.raise_for_status()
-        return r
-
-    def _get(self, path: str, params: dict = None):
-        return self._request("GET", path, params=params).json()
-
-    def _patch(self, path: str, body: dict) -> dict:
-        return self._request("PATCH", path, json=body).json()
-
-    def _post(self, path: str, body: dict = None):
-        return self._request("POST", path, json=body or {}).json()
-
-    def _delete(self, path: str) -> dict:
-        return self._request("DELETE", path).json()
+    def _on_401(self, r) -> bool:
+        """Re-authenticate from stored credentials and retry once, if possible."""
+        return self._try_refresh()
 
     # ------------------------------------------------------------------
     # Listings
@@ -116,7 +97,7 @@ class ATDWClient:
             "skip": skip,
             "order": "slug ASC",
         }
-        result = self._post("/listings/filter", {"filter": filter_obj})
+        result = self._post("/listings/filter", json={"filter": filter_obj})
         # The endpoint returns a list directly
         if isinstance(result, list):
             return result
@@ -151,11 +132,11 @@ class ATDWClient:
         and physicalAddress; a created listing starts as a draft and is not
         distributed until submit().
         """
-        return self._post("/listings", body)
+        return self._post("/listings", json=body)
 
     def patch_listing(self, listing_id: str, fields: dict) -> dict:
         """PATCH a listing with only the changed fields."""
-        return self._patch(f"/listings/{listing_id}", fields)
+        return self._patch(f"/listings/{listing_id}", json=fields)
 
     # ------------------------------------------------------------------
     # Sub-resource methods (programmatic use, not exposed as CLI commands)
@@ -163,7 +144,7 @@ class ATDWClient:
 
     def submit(self, listing_id: str) -> dict:
         """POST /api/listings/:id/submit — submit a listing for review."""
-        return self._post(f"/listings/{listing_id}/submit")
+        return self._post(f"/listings/{listing_id}/submit", json={})
 
     def list_media(self, listing_id: str) -> list:
         """GET /api/listings/:id/media — list media (images) for a listing."""
@@ -179,7 +160,7 @@ class ATDWClient:
 
     def add_tag(self, listing_id: str, tag_id: str) -> dict:
         """POST /api/listings/:id/tags/:tagId — add a tag to a listing."""
-        return self._post(f"/listings/{listing_id}/tags/{tag_id}")
+        return self._post(f"/listings/{listing_id}/tags/{tag_id}", json={})
 
     def remove_tag(self, listing_id: str, tag_id: str) -> dict:
         """DELETE /api/listings/:id/tags/:tagId — remove a tag from a listing."""

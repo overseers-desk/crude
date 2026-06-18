@@ -17,7 +17,7 @@ from __future__ import annotations
 import sys
 import time
 
-import requests
+from crude_common.httpapi import HttpSession
 
 # AP production base. EU/US/sandbox bases reject AP tokens with HTTP 401; only
 # the dashboard region that issued the token matters, not the caller's location.
@@ -39,12 +39,15 @@ class CloverError(RuntimeError):
         self.message = message
 
 
-class CloverSession:
+class CloverSession(HttpSession):
+    # Clover's 429 budget is tighter than the shared default (cap 30s, default 2s).
+    _MAX_RETRY_AFTER = 30
+    _RETRY_AFTER_DEFAULT = 2
+
     def __init__(self, token, *, base=BASE):
+        super().__init__(base, timeout=60)
         self.token = token
-        self.base = base
         self._merchant_id = None
-        self.session = requests.Session()
         self.session.headers.update(
             {"Authorization": f"Bearer {token}", "Accept": "application/json"}
         )
@@ -57,30 +60,25 @@ class CloverSession:
         return self._merchant_id
 
     def get(self, path, *, params=None) -> dict:
-        return self._request("GET", path, params=params)
+        return self._get(path, params=params)
 
     def post(self, path, *, json=None) -> dict:
         """POST a body. Clover creates via POST to the collection and updates via
         POST to the element, so this serves both create and update."""
-        return self._request("POST", path, json=json)
+        return self._post(path, json=json)
 
     def delete(self, path) -> dict:
-        return self._request("DELETE", path)
+        return self._delete(path)
 
-    def _request(self, method, path, *, params=None, json=None) -> dict:
-        r = self.session.request(method, self.base + path, params=params, json=json, timeout=60)
-        if r.status_code == 429:  # rate limited; honour Retry-After once, bounded
-            time.sleep(min(int(r.headers.get("Retry-After") or 2), 30))
-            r = self.session.request(method, self.base + path, params=params, json=json, timeout=60)
+    def _raise(self, r) -> None:
         if r.status_code in (401, 403):
             raise CloverError(
                 f"Clover denied the request ({r.status_code}). The token lacks the scope "
-                f"for {method} {path}. Enable it in the AP dashboard (Setup -> API Tokens).",
+                f"for {r.request.method} {r.request.path_url}. Enable it in the AP dashboard "
+                f"(Setup -> API Tokens).",
                 status=r.status_code,
             )
-        if not r.ok:
-            raise CloverError(f"HTTP {r.status_code}: {r.text[:200]}", status=r.status_code)
-        return r.json() if r.content else {}
+        raise CloverError(f"HTTP {r.status_code}: {r.text[:200]}", status=r.status_code)
 
     def probe(self, method, path, *, params=None, json=None) -> int:
         """The HTTP status of a request, without raising. For the scope probe:
@@ -88,7 +86,7 @@ class CloverSession:
         created, distinguishing a missing scope (401/403) from a bad body (400).
         Retries once on a 429 so rate-limiting is not mistaken for a scope block."""
         for attempt in (0, 1):
-            r = self.session.request(method, self.base + path, params=params, json=json, timeout=30)
+            r = self.session.request(method, self.base_url + path, params=params, json=json, timeout=30)
             if r.status_code == 429 and attempt == 0:
                 time.sleep(min(int(r.headers.get("Retry-After") or 2), 30))
                 continue

@@ -14,13 +14,10 @@ from __future__ import annotations
 
 import time
 
-import requests
+from crude_common.httpapi import HttpSession
 
 # Default page_num/page_size page; the list commands hint when a full page returns.
 PAGE_SIZE = 100
-
-# Bound the 429 back-off so a single call cannot hang the CLI indefinitely.
-_MAX_RETRY_AFTER = 60
 
 
 class AirwallexError(RuntimeError):
@@ -52,15 +49,14 @@ def _items(data):
     return []
 
 
-class AirwallexSession:
+class AirwallexSession(HttpSession):
     def __init__(self, account, client_id, api_key, *, base, on_behalf_of=None, token=None):
+        super().__init__(base)
         self.account = account
         self.client_id = client_id
         self.api_key = api_key
-        self.base = base
         self.on_behalf_of = on_behalf_of
         self.token = token  # durable dict {"token", "expires_at"} or None
-        self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
 
     # ------------------------------------------------------------------
@@ -73,7 +69,7 @@ class AirwallexSession:
 
     def _login(self) -> None:
         from crude_airwallex import auth
-        grant = auth.login(self.client_id, self.api_key, base=self.base)
+        grant = auth.login(self.client_id, self.api_key, base=self.base_url)
         self.token = auth._durable_token(grant)
         auth.save_token(self.account, self.token)
 
@@ -85,6 +81,11 @@ class AirwallexSession:
     # Transport
     # ------------------------------------------------------------------
 
+    def _auth_headers(self, extra):
+        """Mint the per-call Bearer (the token rotates) plus the optional
+        connected-account header; merge any caller headers over it."""
+        return self._headers(extra)
+
     def _headers(self, extra=None) -> dict:
         headers = {"Authorization": f"Bearer {(self.token or {}).get('token')}"}
         if self.on_behalf_of:
@@ -92,15 +93,6 @@ class AirwallexSession:
         if extra:
             headers.update(extra)
         return headers
-
-    @staticmethod
-    def _retry_after(r) -> int:
-        """Seconds to wait for a 429, from Retry-After, bounded by _MAX_RETRY_AFTER."""
-        try:
-            wait = int(r.headers.get("Retry-After", ""))
-        except (TypeError, ValueError):
-            wait = 5
-        return max(0, min(wait, _MAX_RETRY_AFTER))
 
     @staticmethod
     def _error_body(r):
@@ -123,39 +115,10 @@ class AirwallexSession:
             raise AirwallexAuthError(message, status=r.status_code, code=code)
         raise AirwallexError(message, status=r.status_code, code=code)
 
-    def _request(self, method, path, *, params=None, json=None, headers=None, _retry=True):
-        """Issue one request, re-logging-in on a 401 and backing off a 429 once."""
-        self._ensure_token()
-        r = self.session.request(method, self.base + path, params=params, json=json,
-                                 headers=self._headers(headers))
-        if r.status_code == 401 and _retry:
-            self._login()
-            return self._request(method, path, params=params, json=json,
-                                 headers=headers, _retry=False)
-        if r.status_code == 429 and _retry:
-            time.sleep(self._retry_after(r))
-            return self._request(method, path, params=params, json=json,
-                                 headers=headers, _retry=False)
-        if not r.ok:
-            self._raise(r)
-        if not r.content:
-            return {}
-        try:
-            return r.json()
-        except ValueError:
-            return r.content
-
-    def _get(self, path, *, params=None, headers=None):
-        return self._request("GET", path, params=params, headers=headers)
-
-    def _post(self, path, *, json=None, params=None, headers=None):
-        return self._request("POST", path, json=json, params=params, headers=headers)
-
-    def _put(self, path, *, json=None, params=None, headers=None):
-        return self._request("PUT", path, json=json, params=params, headers=headers)
-
-    def _delete(self, path, *, params=None, headers=None):
-        return self._request("DELETE", path, params=params, headers=headers)
+    def _on_401(self, r) -> bool:
+        """Re-login (no refresh token; login is idempotent) and retry once."""
+        self._login()
+        return True
 
     # ------------------------------------------------------------------
     # Pagination

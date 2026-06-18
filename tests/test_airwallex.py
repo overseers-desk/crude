@@ -11,7 +11,6 @@ import time
 
 import pytest
 
-import crude_airwallex.client as awc
 from crude_airwallex import auth
 from crude_airwallex.client import AirwallexError, AirwallexSession, _items
 
@@ -170,7 +169,7 @@ def test_429_backs_off_then_retries(monkeypatch):
         return responses[calls["n"] - 1]
 
     monkeypatch.setattr(xs.session, "request", fake)
-    monkeypatch.setattr(awc.time, "sleep", lambda s: None)
+    monkeypatch.setattr("crude_common.httpapi.time.sleep", lambda s: None)
     assert xs._get("/x") == {"ok": True}
     assert calls["n"] == 2
 

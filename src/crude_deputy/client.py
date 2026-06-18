@@ -9,15 +9,14 @@ login or refresh.
 
 from __future__ import annotations
 
-import requests
+from crude_common.httpapi import HttpSession
 
 PAGE_MAX = 500  # Deputy's default and hard cap of records per page.
 
 
-class DeputyClient:
+class DeputyClient(HttpSession):
     def __init__(self, api_token: str, install: str, geo: str):
-        self.base_url = f"https://{install}.{geo}.deputy.com/api/v1"
-        self.session = requests.Session()
+        super().__init__(f"https://{install}.{geo}.deputy.com/api/v1")
         self.session.headers.update(
             {
                 "Authorization": f"Bearer {api_token}",
@@ -32,39 +31,20 @@ class DeputyClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    def _request(self, method: str, path: str, params: dict = None, body: dict = None):
-        """Issue a request and surface Deputy errors from status and body.
-
-        Deputy reports failures with a non-2xx status and, usually, a JSON body
-        of the form {"error": {"code": ..., "message": ...}}.
-        """
-        r = self.session.request(
-            method, f"{self.base_url}{path}", params=params, json=body
-        )
-        if not r.ok:
-            msg = ""
-            try:
-                data = r.json()
-                err = data.get("error") if isinstance(data, dict) else None
-                if isinstance(err, dict):
-                    msg = err.get("message", "")
-                elif isinstance(data, dict):
-                    msg = data.get("message", "")
-            except ValueError:
-                pass
-            raise RuntimeError(f"Deputy API error: {msg or f'HTTP {r.status_code}'}")
-        if not r.content:
-            return {}
-        return r.json()
-
-    def _get(self, path: str, params: dict = None):
-        return self._request("GET", path, params=params)
-
-    def _post(self, path: str, body: dict = None):
-        return self._request("POST", path, body=body or {})
-
-    def _delete(self, path: str):
-        return self._request("DELETE", path)
+    def _raise(self, r) -> None:
+        """Surface Deputy's error shape: a non-2xx status with, usually, a JSON
+        body of the form {"error": {"code": ..., "message": ...}}."""
+        msg = ""
+        try:
+            data = r.json()
+            err = data.get("error") if isinstance(data, dict) else None
+            if isinstance(err, dict):
+                msg = err.get("message", "")
+            elif isinstance(data, dict):
+                msg = data.get("message", "")
+        except ValueError:
+            pass
+        raise RuntimeError(f"Deputy API error: {msg or f'HTTP {r.status_code}'}")
 
     # ------------------------------------------------------------------
     # Non-resource
@@ -100,16 +80,16 @@ class DeputyClient:
             body["sort"] = sort
         if join:
             body["join"] = join
-        return self._post(f"/resource/{obj}/QUERY", body)
+        return self._post(f"/resource/{obj}/QUERY", json=body or {})
 
     def info_resource(self, obj: str) -> dict:
         return self._get(f"/resource/{obj}/INFO")
 
     def create_resource(self, obj: str, data: dict) -> dict:
-        return self._post(f"/resource/{obj}", data)
+        return self._post(f"/resource/{obj}", json=data or {})
 
     def update_resource(self, obj: str, id: str, data: dict) -> dict:
-        return self._post(f"/resource/{obj}/{id}", data)
+        return self._post(f"/resource/{obj}/{id}", json=data or {})
 
     def delete_resource(self, obj: str, id: str) -> dict:
         return self._delete(f"/resource/{obj}/{id}")
