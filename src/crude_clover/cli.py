@@ -34,11 +34,19 @@ def _client() -> CloverClient:
     return CloverClient(CloverSession(token))
 
 
-from crude_clover import cli_catalog, cli_flatten, cli_orders  # noqa: E402
+from crude_clover import (  # noqa: E402
+    cli_catalog,
+    cli_flatten,
+    cli_orders,
+    cli_resources,
+    cli_status,
+)
 
 cli_orders.register(app)
 cli_catalog.register(app)
 cli_flatten.register(app)
+cli_resources.register(app)
+cli_status.register(app)
 
 
 if __name__ == "__main__":
