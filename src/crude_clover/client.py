@@ -15,6 +15,7 @@ durable, so this module has no auth.py companion.
 from __future__ import annotations
 
 import sys
+import time
 
 import requests
 
@@ -56,16 +57,43 @@ class CloverSession:
         return self._merchant_id
 
     def get(self, path, *, params=None) -> dict:
-        r = self.session.get(self.base + path, params=params, timeout=60)
-        if r.status_code == 401:
+        return self._request("GET", path, params=params)
+
+    def post(self, path, *, json=None) -> dict:
+        """POST a body. Clover creates via POST to the collection and updates via
+        POST to the element, so this serves both create and update."""
+        return self._request("POST", path, json=json)
+
+    def delete(self, path) -> dict:
+        return self._request("DELETE", path)
+
+    def _request(self, method, path, *, params=None, json=None) -> dict:
+        r = self.session.request(method, self.base + path, params=params, json=json, timeout=60)
+        if r.status_code == 429:  # rate limited; honour Retry-After once, bounded
+            time.sleep(min(int(r.headers.get("Retry-After") or 2), 30))
+            r = self.session.request(method, self.base + path, params=params, json=json, timeout=60)
+        if r.status_code in (401, 403):
             raise CloverError(
-                "Clover rejected the token (401). Check [clover] api_token is an AP "
-                "production token with Read on Merchant, Inventory, Orders, Payments.",
-                status=401,
+                f"Clover denied the request ({r.status_code}). The token lacks the scope "
+                f"for {method} {path}. Enable it in the AP dashboard (Setup -> API Tokens).",
+                status=r.status_code,
             )
         if not r.ok:
             raise CloverError(f"HTTP {r.status_code}: {r.text[:200]}", status=r.status_code)
-        return r.json()
+        return r.json() if r.content else {}
+
+    def probe(self, method, path, *, params=None, json=None) -> int:
+        """The HTTP status of a request, without raising. For the scope probe:
+        a write probe sends a body Clover rejects on content (4xx) so nothing is
+        created, distinguishing a missing scope (401/403) from a bad body (400).
+        Retries once on a 429 so rate-limiting is not mistaken for a scope block."""
+        for attempt in (0, 1):
+            r = self.session.request(method, self.base + path, params=params, json=json, timeout=30)
+            if r.status_code == 429 and attempt == 0:
+                time.sleep(min(int(r.headers.get("Retry-After") or 2), 30))
+                continue
+            return r.status_code
+        return r.status_code
 
     def iter_elements(self, path, *, expand=None, filters=None):
         """Yield every ``elements`` row of a list endpoint, paging by offset.
@@ -95,12 +123,14 @@ class CloverSession:
 
 
 class CloverClient:
-    """Facade composing the orders and catalog method groups over one session."""
+    """Facade composing the orders, catalog, and generic resource groups."""
 
     def __init__(self, session: CloverSession):
         from crude_clover.orders import OrdersAPI
         from crude_clover.catalog import CatalogAPI
+        from crude_clover.resources import ResourceAPI
 
         self.session = session
         self.orders = OrdersAPI(session)
         self.catalog = CatalogAPI(session)
+        self.resources = ResourceAPI(session)
