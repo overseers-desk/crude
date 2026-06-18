@@ -86,7 +86,7 @@ def test_merge_update_preserves_other_fields():
         captured["merged"] = merged
         return {"productCode": "P1"}
 
-    cli._merge_update(lambda: current, update_fn, None, None,
+    cli.merge_update(lambda: current, update_fn, None, None,
                       {"terms": "NEW"}, "update product P1", yes=True, output_json=True)
 
     assert captured["merged"]["terms"] == "NEW"
@@ -97,7 +97,7 @@ def test_merge_update_preserves_other_fields():
 
 def test_merge_update_clears_with_empty_string():
     captured = {}
-    cli._merge_update(lambda: {"productCode": "P1", "terms": "x"},
+    cli.merge_update(lambda: {"productCode": "P1", "terms": "x"},
                       lambda m: captured.update(merged=m), None, None,
                       {"terms": ""}, "update product P1", yes=True, output_json=True)
     assert captured["merged"]["terms"] == ""
@@ -105,7 +105,7 @@ def test_merge_update_clears_with_empty_string():
 
 def test_merge_update_requires_a_change():
     with pytest.raises(typer.Exit):
-        cli._merge_update(lambda: {"productCode": "P1"}, lambda m: None, None, None,
+        cli.merge_update(lambda: {"productCode": "P1"}, lambda m: None, None, None,
                           {"name": None}, "update", yes=True, output_json=True)
 
 
