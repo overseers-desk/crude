@@ -142,6 +142,8 @@ def _cell(value, max_len: int = 80) -> str:
 
 
 def _render_record(item: dict) -> None:
+    # Local, not crude_common.output.render_record: sonas values are Meteor EJSON,
+    # so cells go through _cell to render {"$date": ...} as a date.
     table = Table(show_header=True, header_style="bold cyan")
     table.add_column("Field")
     table.add_column("Value")

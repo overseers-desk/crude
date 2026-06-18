@@ -23,6 +23,7 @@ from crude_common.config import (
     resolve_account as _resolve_account,
     s as _s,
 )
+from crude_common.output import emit_record
 
 app = typer.Typer(help="crude-deputy — Deputy rostering, timesheets, leave, employees.")
 employee_app = typer.Typer(help="Deputy employees.")
@@ -66,28 +67,6 @@ def _make_client(config: dict):
 # ----------------------------------------------------------------------
 
 
-def _render_record(item: dict) -> None:
-    """Print a record's scalar top-level fields as a Field/Value table.
-
-    Nested objects and lists are summarised rather than expanded; use --json
-    for the full structure.
-    """
-    table = Table(show_header=True, header_style="bold cyan")
-    table.add_column("Field")
-    table.add_column("Value")
-    for key, value in item.items():
-        if isinstance(value, dict):
-            value_str = "(object)"
-        elif isinstance(value, list):
-            value_str = f"{len(value)} item(s)"
-        else:
-            value_str = _s(value)
-        if len(value_str) > 200:
-            value_str = value_str[:197] + "..."
-        table.add_row(key, value_str)
-    console.print(table)
-
-
 def _render_rows(rows: list, columns: Optional[List[str]] = None) -> None:
     """Print a list of records as a table.
 
@@ -129,13 +108,6 @@ def _emit(items, output_json: bool, columns: Optional[List[str]] = None) -> None
         return
     _render_rows(items, columns=columns)
     typer.echo(f"\n{len(items)} row(s) found.")
-
-
-def _emit_record(item, output_json: bool) -> None:
-    if output_json:
-        typer.echo(json.dumps(item, indent=2))
-        return
-    _render_record(item)
 
 
 # ----------------------------------------------------------------------
@@ -228,7 +200,7 @@ def me(output_json: bool = typer.Option(False, "--json", help="Print raw JSON.")
     except Exception as e:
         typer.echo(f"Error fetching current user: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 # ----------------------------------------------------------------------
@@ -256,7 +228,7 @@ def _curated_get(obj, id, output_json, what):
     except Exception as e:
         typer.echo(f"Error fetching {what} {id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @employee_app.command("list")
@@ -438,7 +410,7 @@ def resource_get(
     except Exception as e:
         typer.echo(f"Error fetching {obj} {id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @resource_app.command("query")
@@ -497,7 +469,7 @@ def resource_info(
     except Exception as e:
         typer.echo(f"Error fetching schema for {obj}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @resource_app.command("create")
@@ -515,7 +487,7 @@ def resource_create(
     except Exception as e:
         typer.echo(f"Error creating {obj}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @resource_app.command("update")
@@ -534,7 +506,7 @@ def resource_update(
     except Exception as e:
         typer.echo(f"Error updating {obj} {id}: {e}", err=True)
         raise typer.Exit(1)
-    _emit_record(item, output_json)
+    emit_record(item, output_json)
 
 
 @resource_app.command("delete")
