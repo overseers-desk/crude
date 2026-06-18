@@ -16,6 +16,7 @@ from crude_common.config import (
     resolve_account as _resolve_account,
     s as _s,
 )
+from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
 
 app = typer.Typer(help="crude-skal — Skål Australia member portal.")
@@ -181,30 +182,14 @@ def list_(
         typer.echo(f"Error fetching members: {e}", err=True)
         raise typer.Exit(1)
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("ID", style="dim")
-    table.add_column("Name")
-    table.add_column("Email")
-    table.add_column("City")
-    table.add_column("Club")
-    table.add_column("State")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("name")),
-            _s(item.get("work_email")),
-            _s(item.get("work_city")),
-            _fmt_m2o(item.get("entity_id")),
-            _s(item.get("state")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} member(s) found.")
+    emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Email", "work_email"),
+        ("City", "work_city"),
+        ("Club", lambda it: _fmt_m2o(it.get("entity_id"))),
+        ("State", "state"),
+    ], "member", output_json)
 
 
 @member_app.command("get")
@@ -288,24 +273,11 @@ def list_clubs(
         typer.echo(f"Error fetching clubs: {e}", err=True)
         raise typer.Exit(1)
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold blue")
-    table.add_column("ID", style="dim")
-    table.add_column("Name")
-    table.add_column("Members", justify="right")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("name")),
-            _s(item.get("member_count")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} club(s) found.")
+    emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Members", "member_count"),
+    ], "club", output_json, header_style="bold blue")
 
 
 @event_app.command("list")
@@ -324,28 +296,13 @@ def list_events(
         typer.echo(f"Error fetching events: {e}", err=True)
         raise typer.Exit(1)
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold yellow")
-    table.add_column("ID", style="dim")
-    table.add_column("Name")
-    table.add_column("Date Begin")
-    table.add_column("Location")
-    table.add_column("State")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("name")),
-            _s(item.get("date_begin")),
-            _s(item.get("location")),
-            _s(item.get("state")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} event(s) found.")
+    emit_list(items, [
+        ("ID", "id"),
+        ("Name", "name"),
+        ("Date Begin", "date_begin"),
+        ("Location", "location"),
+        ("State", "state"),
+    ], "event", output_json, header_style="bold yellow")
 
 
 @benefit_app.command("list")
@@ -369,30 +326,14 @@ def list_benefits(
         typer.echo(f"Error fetching benefits: {e}", err=True)
         raise typer.Exit(1)
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold green")
-    table.add_column("ID", style="dim")
-    table.add_column("Title")
-    table.add_column("Activity")
-    table.add_column("Club")
-    table.add_column("Country")
-    table.add_column("Website")
-
-    for item in items:
-        table.add_row(
-            _s(item.get("id")),
-            _s(item.get("name")),
-            _fmt_m2o(item.get("activity_id")),
-            _fmt_m2o(item.get("entity_id")),
-            _fmt_m2o(item.get("country_id")),
-            _s(item.get("website")),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} benefit(s) found.")
+    emit_list(items, [
+        ("ID", "id"),
+        ("Title", "name"),
+        ("Activity", lambda it: _fmt_m2o(it.get("activity_id"))),
+        ("Club", lambda it: _fmt_m2o(it.get("entity_id"))),
+        ("Country", lambda it: _fmt_m2o(it.get("country_id"))),
+        ("Website", "website"),
+    ], "benefit", output_json, header_style="bold green")
 
 
 @benefit_app.command("get")

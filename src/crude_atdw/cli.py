@@ -16,6 +16,7 @@ from crude_common.config import (
     read_config as _read_config,
     resolve_account as _resolve_account,
 )
+from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
 
 app = typer.Typer(help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.")
@@ -139,26 +140,12 @@ def list_(
         typer.echo(f"Error fetching listings: {e}", err=True)
         raise typer.Exit(1)
 
-    if output_json:
-        typer.echo(json.dumps(items, indent=2))
-        return
-
-    table = Table(show_header=True, header_style="bold magenta")
-    table.add_column("ID", style="dim")
-    table.add_column("Type")
-    table.add_column("Slug")
-    table.add_column("Status")
-
-    for item in items:
-        table.add_row(
-            item.get("id", ""),
-            item.get("listingType", ""),
-            item.get("slug", ""),
-            item.get("status", ""),
-        )
-
-    console.print(table)
-    typer.echo(f"\n{len(items)} listing(s) found.")
+    emit_list(items, [
+        ("ID", "id"),
+        ("Type", "listingType"),
+        ("Slug", "slug"),
+        ("Status", "status"),
+    ], "listing", output_json)
 
 
 @listing_app.command("get")
