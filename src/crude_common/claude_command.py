@@ -189,6 +189,9 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas terms list <eventId> [--json]
     crude-sonas terms accept <eventId> [--yes]                         # unverified; accepts all pending terms (contract state)
     crude-sonas terms pdf <termsId>                                    # unverified
+    crude-sonas terms create <eventId> --data '<doc-json>'             # unverified; puts a new/updated policy to the couple
+    crude-sonas terms answer <termsId> --answer <value> [--yes]        # unverified; alters contract state
+    crude-sonas terms delete <termsId> [--yes]                         # unverified; alters contract state
     crude-sonas activity list <eventId> [--limit N] [--json]
     crude-sonas activity verify <activityId>
     crude-sonas activity verify-all <eventId>

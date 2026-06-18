@@ -1546,6 +1546,60 @@ def terms_pdf(
              f"generate PDF for terms {terms_id}", output_json=output_json)
 
 
+@terms_app.command("create")
+def terms_create(
+    event_id: str = typer.Argument(..., help="Event document id."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='The terms doc as JSON, e.g. {"name": "Wedding booking agreement 2026", '
+             '"required": true, "type": 1}. `eventId` is added if absent.'),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the doc JSON from a file."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Add a terms-and-conditions record to an event (termsCreate); this is how
+    a new or updated policy is put to a couple. The doc shape is not yet decoded
+    (unverified; see docs/sonas.md §6/§11)."""
+    doc = _read_data(data, file)
+    doc.setdefault("eventId", event_id)
+    _do_call("termsCreate", {"doc": doc},
+             f"create terms on event {event_id}", output_json=output_json)
+
+
+@terms_app.command("answer")
+def terms_answer(
+    terms_id: str = typer.Argument(..., help="Terms record id (from `terms list`)."),
+    answer: str = typer.Option(
+        ..., "--answer",
+        help='The answer value (JSON if parseable, else a string), e.g. true, 1, "Accepted".'),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Answer a single terms record (termsAnswer); alters contract state. The
+    answer value's type is not yet decoded (unverified; see docs/sonas.md §6/§11)."""
+    try:
+        value = json.loads(answer)
+    except ValueError:
+        value = answer
+    _do_call("termsAnswer", {"termsId": terms_id, "answer": value},
+             f"answer terms {terms_id}",
+             confirm=f"Answer terms {terms_id} with {value!r}?", yes=yes,
+             output_json=output_json)
+
+
+@terms_app.command("delete")
+def terms_delete(
+    terms_id: str = typer.Argument(..., help="Terms record id (from `terms list`)."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Delete a terms record (termsDelete); alters contract state
+    (unverified; see docs/sonas.md §6/§11)."""
+    _do_call("termsDelete", {"termsId": terms_id},
+             f"delete terms {terms_id}",
+             confirm=f"Delete terms record {terms_id}?", yes=yes,
+             output_json=output_json)
+
+
 @activity_app.command("list")
 def activity_list(
     event_id: str = typer.Argument(..., help="Event document id."),

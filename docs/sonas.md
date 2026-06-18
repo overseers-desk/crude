@@ -341,10 +341,13 @@ transaction-create docs share a base: `amount` (≥ 0, required), `dueDate`
   `paymentPlanCreate`; `paymentPlanUpdate({docId, modifier})`;
   `paymentPlanDelete({docId})`.
 
-Terms (write): `termsCreate({doc})`, `termsDelete({termsId})`,
+Terms (write): `termsCreate({doc})` **[bundle]** (the doc shape is not yet
+decoded; exposed as `terms create`, untrialed, §11), `termsDelete({termsId})`
+**[bundle]** (exposed as `terms delete`, untrialed, §11),
 `termsAcceptPending({eventId})` **[chunk]** (accepts every pending terms record
-on the event: contract state, not called, §11), `termsAnswer({termsId, answer})`,
-`termsGeneratePDF({termsId})` **[chunk]**.
+on the event: contract state, not called, §11), `termsAnswer({termsId, answer})`
+**[bundle]** (the answer value's type is not yet decoded; exposed as
+`terms answer`, untrialed, §11), `termsGeneratePDF({termsId})` **[chunk]**.
 
 Messaging (write): `eventCreateDraftMessage({eventId})`, `eventUpdateDraftMessage({messageId, message})`,
 `eventSaveMessage({messageId, message})`, `eventSendEmailTemplate({templateId, eventId, userId})`
@@ -669,6 +672,14 @@ retires them together.
   payload shapes decoded statically, never invoked (finance/Xero coupling,
   real mail, contract state). To verify: observe the real UI actions' WS
   frames.
+- `terms create|answer|delete` (`termsCreate`/`termsAnswer`/`termsDelete`) ship
+  **[bundle]**, exposed with `--data`/`--answer` passthrough but untrialed: the
+  `termsCreate` doc shape and the `termsAnswer` answer-value type are not yet
+  decoded, and all three alter contract state. To verify: observe the real UI
+  actions' WS frames (creating, answering, resharing a policy), then trial per
+  the policy above. Separately, where a policy's editable *text* lives (an edit
+  method, a template, or inline on the record) is unresolved; no tenant-level
+  terms-template publication has surfaced in the bundle so far.
 - `service-booking confirm` (`eventConfirmServiceBooking`) ships uncalled: the
   likeliest verb to notify a supplier and raise the deposit charge, and the
   effect is server-side and unobservable on this supplier-less tenant (§6.1).
