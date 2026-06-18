@@ -110,10 +110,11 @@ def _guests(doc: dict) -> str:
 
 def _render_events(events: list) -> None:
     table = Table(show_header=True, header_style="bold magenta")
-    for col in ("Ref", "Date", "Status", "Type", "Couple", "Guests", "Name"):
-        table.add_column(col, style="dim" if col == "Ref" else None)
+    for col in ("Id", "Ref", "Date", "Status", "Type", "Couple", "Guests", "Name"):
+        table.add_column(col, style="dim" if col in ("Id", "Ref") else None)
     for ev in events:
         table.add_row(
+            s(ev.get("_id")),
             s(ev.get("reference")),
             date_str(ev.get("date")),
             EVENT_STATUS.get(ev.get("status"), s(ev.get("status"))),
@@ -274,10 +275,33 @@ def _read_data(data: Optional[str], file: Optional[str]) -> dict:
     return parsed
 
 
+def _require_event(client, event_id: str) -> None:
+    """Error out if no event has this id, instead of reporting an empty read.
+
+    Sonas publications accept any id, send `ready`, and publish nothing for an
+    id that matches nothing, so an unmatched id otherwise reads as "0 records"
+    on the per-event lists. The eventBasicInfo events doc is the existence test
+    `document_list` already relies on. Call this before the read, never inside a
+    `try` that catches Exception, since `typer.Exit` is an Exception subclass."""
+    try:
+        basic = client.read_pub("eventBasicInfo", [event_id])
+    except Exception as e:
+        typer.echo(f"Error checking event {event_id}: {e}", err=True)
+        raise typer.Exit(1)
+    if not any(d.get("_collection") == "events" for d in basic):
+        typer.echo(f"Error: event {event_id} not found", err=True)
+        raise typer.Exit(1)
+
+
 def _pub_list(pub: str, params: list, columns: Optional[List[Tuple[str, str]]],
-              output_json: bool, what: str, collection: Optional[str] = None) -> None:
-    """List command body: subscribe to a publication and emit its documents."""
+              output_json: bool, what: str, collection: Optional[str] = None,
+              event_id: Optional[str] = None) -> None:
+    """List command body: subscribe to a publication and emit its documents.
+
+    Pass ``event_id`` for an event-scoped pub to validate the event first."""
     client = _client()
+    if event_id is not None:
+        _require_event(client, event_id)
     try:
         items = client.read_pub(pub, params, collection=collection)
     except Exception as e:
@@ -634,6 +658,7 @@ def guest_list(
     couple here.
     """
     client = _client()
+    _require_event(client, event_id)
     try:
         guests = client.read_pub("guests", [event_id], collection="guests")
     except Exception as e:
@@ -790,6 +815,7 @@ def timeline_list(
     """List an event's timeline entries (the `timelines` doc carried by the
     eventBasicInfo publication)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         entries = _event_timeline(client, event_id).get("entries") or []
     except Exception as e:
@@ -919,7 +945,7 @@ def note_list(
     _pub_list("eventNotes", [event_id], columns=[
         ("Id", "_id"), ("Created", "createdAt"), ("Section", "sectionId"),
         ("Author", "author"), ("Text", "text"),
-    ], output_json=output_json, what="note", collection="notes")
+    ], output_json=output_json, what="note", collection="notes", event_id=event_id)
 
 
 @note_app.command("add")
@@ -989,6 +1015,7 @@ def transaction_list(
     """List an event's transactions (eventTransactions publication, collection
     `transactions`): charges, payments, refunds, discounts."""
     client = _client()
+    _require_event(client, event_id)
     try:
         items = client.read_pub("eventTransactions", [event_id], collection="transactions")
     except Exception as e:
@@ -1128,6 +1155,7 @@ def invoice_list(
     """List an event's financial records (eventFinancialRecords publication,
     collection `financial-records`): proformas, invoices, credit notes."""
     client = _client()
+    _require_event(client, event_id)
     try:
         records = _financial_records(client, event_id)
     except Exception as e:
@@ -1154,6 +1182,7 @@ def invoice_get(
     """Show one financial record, with its line entries (filtered from the
     eventFinancialRecords publication)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         records = _financial_records(client, event_id)
     except Exception as e:
@@ -1204,6 +1233,7 @@ def service_booking_list(
     """List an event's service bookings (eventServiceBookings publication; it
     also carries the referenced `services` docs, used here for the names)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         docs = client.read_pub("eventServiceBookings", [event_id])
     except Exception as e:
@@ -1388,6 +1418,7 @@ def message_list(
     `messages`; the pub also carries the attachment `files` docs, listed by
     `document list`)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         messages = client.read_pub("eventMessages", [event_id], collection="messages")
     except Exception as e:
@@ -1432,6 +1463,7 @@ def document_list(
     `files`; its second parameter is the event doc's `documents` id array,
     fetched here via eventBasicInfo, as the app does)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         basic = client.read_pub("eventBasicInfo", [event_id])
         event = next((d for d in basic if d["_collection"] == "events"), {})
@@ -1470,6 +1502,7 @@ def terms_list(
     """List an event's terms-and-conditions records (eventTermsAndConditions
     publication, collection `terms-and-conditions`)."""
     client = _client()
+    _require_event(client, event_id)
     try:
         terms = client.read_pub("eventTermsAndConditions", [event_id],
                                 collection="terms-and-conditions")
@@ -1523,6 +1556,7 @@ def activity_list(
     `activities`). Entries carry a readable `text`; `verified` shows the
     verification date, empty for unverified."""
     client = _client()
+    _require_event(client, event_id)
     try:
         acts = client.read_pub("eventActivities", [event_id, limit],
                                collection="activities")
