@@ -17,11 +17,11 @@ from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
-    account as _account,
-    find_config as _find_config,
-    read_config as _read_config,
-    resolve_account as _resolve_account,
-    s as _s,
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    s,
 )
 from crude_common.output import emit_record
 
@@ -48,7 +48,7 @@ _OPERATORS = {"eq", "ne", "gt", "ge", "lt", "le", "lk", "nk", "in", "nn", "is", 
 
 def _make_client(config: dict):
     from crude_deputy.client import DeputyClient
-    deputy = _resolve_account(config, "deputy", _account())
+    deputy = resolve_account(config, "deputy", account())
     token = deputy.get("deputy_api_token")
     install = deputy.get("deputy_install")
     geo = deputy.get("deputy_geo")
@@ -92,7 +92,7 @@ def _render_rows(rows: list, columns: Optional[List[str]] = None) -> None:
         for col in columns:
             value = row.get(col)
             cell = "(object)" if isinstance(value, dict) else (
-                f"{len(value)} item(s)" if isinstance(value, list) else _s(value)
+                f"{len(value)} item(s)" if isinstance(value, list) else s(value)
             )
             if len(cell) > 60:
                 cell = cell[:57] + "..."
@@ -194,7 +194,7 @@ def _read_data(data: Optional[str], file: Optional[str]) -> dict:
 @app.command("me")
 def me(output_json: bool = typer.Option(False, "--json", help="Print raw JSON.")):
     """Show the current token owner."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.me()
     except Exception as e:
@@ -209,7 +209,7 @@ def me(output_json: bool = typer.Option(False, "--json", help="Print raw JSON.")
 
 
 def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, what):
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         if fetch_all:
             items = client.paginate_query(obj, search=search, sort=sort)
@@ -222,7 +222,7 @@ def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, wha
 
 
 def _curated_get(obj, id, output_json, what):
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.get_resource(obj, id)
     except Exception as e:
@@ -385,7 +385,7 @@ def resource_list(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """List records of any resource object."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         if fetch_all:
             items = client.paginate_list(obj)
@@ -404,7 +404,7 @@ def resource_get(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Show a single record of any resource object."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.get_resource(obj, id)
     except Exception as e:
@@ -430,7 +430,7 @@ def resource_query(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Search any resource object with Deputy's QUERY operators."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     if json_query is not None:
         try:
             body = json.loads(json_query)
@@ -463,7 +463,7 @@ def resource_info(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Show a resource object's schema (fields, types, joins)."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.info_resource(obj)
     except Exception as e:
@@ -481,7 +481,7 @@ def resource_create(
 ):
     """Create a record. Body via --data, -f/--file, or stdin."""
     body = _read_data(data, file)
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.create_resource(obj, body)
     except Exception as e:
@@ -500,7 +500,7 @@ def resource_update(
 ):
     """Update a record. Body via --data, -f/--file, or stdin."""
     body = _read_data(data, file)
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.update_resource(obj, id, body)
     except Exception as e:
@@ -519,7 +519,7 @@ def resource_delete(
     """Delete a record. Irreversible; prompts unless --yes is given."""
     if not yes:
         typer.confirm(f"Delete {obj} {id}? This cannot be undone.", abort=True)
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         item = client.delete_resource(obj, id)
     except Exception as e:

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import requests
 
-from crude_common.config import account as _account
+from crude_common.config import account
 from crude_common.statestore import atomic_write, state_path
 
 API_BASE = "https://atlas.atdw-online.com.au/api"
@@ -21,7 +21,7 @@ def token_path() -> Path:
     default account keeps the bare ``atdw_token`` name; a named account gets a
     suffix so two accounts never read each other's token.
     """
-    return state_path("atdw_token", _account())
+    return state_path("atdw_token", account())
 
 
 class ATDWClient:

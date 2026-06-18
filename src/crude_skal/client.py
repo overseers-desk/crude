@@ -6,7 +6,7 @@ from pathlib import Path
 
 import requests
 
-from crude_common.config import account as _account
+from crude_common.config import account
 from crude_common.statestore import atomic_write, state_path
 
 API_BASE = "https://australia.skal.org"
@@ -20,7 +20,7 @@ def session_path() -> Path:
     default account keeps the bare ``skal_session`` name; a named account gets a
     suffix so two accounts never share a session.
     """
-    return state_path("skal_session", _account())
+    return state_path("skal_session", account())
 
 
 class SkalClient:

@@ -16,11 +16,11 @@ from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
-    account as _account,
-    find_config as _find_config,
-    read_config as _read_config,
-    resolve_account as _resolve_account,
-    s as _s,
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    s,
 )
 from crude_sonas.client import (
     EPOCH_1900_MS,
@@ -68,7 +68,7 @@ register_claude_command(app)
 
 def _make_client(config: dict):
     from crude_sonas.client import SonasClient, DEFAULT_FINGERPRINT
-    sonas = _resolve_account(config, "sonas", _account())
+    sonas = resolve_account(config, "sonas", account())
     user = sonas.get("username")
     digest = sonas.get("password_hash")
     if not (user and digest):
@@ -84,7 +84,7 @@ def _make_client(config: dict):
 
 def _client():
     """Construct the client from the discovered config (the per-command path)."""
-    return _make_client(_read_config(_find_config()))
+    return _make_client(read_config(find_config()))
 
 
 # ----------------------------------------------------------------------
@@ -114,13 +114,13 @@ def _render_events(events: list) -> None:
         table.add_column(col, style="dim" if col == "Ref" else None)
     for ev in events:
         table.add_row(
-            _s(ev.get("reference")),
+            s(ev.get("reference")),
             date_str(ev.get("date")),
-            EVENT_STATUS.get(ev.get("status"), _s(ev.get("status"))),
-            EVENT_TYPE.get(ev.get("type"), _s(ev.get("type"))),
+            EVENT_STATUS.get(ev.get("status"), s(ev.get("status"))),
+            EVENT_TYPE.get(ev.get("type"), s(ev.get("type"))),
             _couple(ev),
             _guests(ev),
-            _s(ev.get("name")),
+            s(ev.get("name")),
         )
     console.print(table)
 
@@ -135,7 +135,7 @@ def _cell(value, max_len: int = 80) -> str:
     elif isinstance(value, list):
         cell = f"{len(value)} item(s)"
     else:
-        cell = _s(value)
+        cell = s(value)
     if len(cell) > max_len:
         cell = cell[: max_len - 3] + "..."
     return cell
@@ -241,7 +241,7 @@ def _dt_str(value) -> str:
     if isinstance(value, dict) and "$date" in value:
         from datetime import datetime
         return datetime.fromtimestamp(value["$date"] / 1000).strftime("%Y-%m-%d %H:%M")
-    return _s(value)
+    return s(value)
 
 
 # ----------------------------------------------------------------------
@@ -373,7 +373,7 @@ def event_list(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """List events (weddings and other bookings)."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         events = client.list_events(from_, to)
     except Exception as e:
@@ -397,7 +397,7 @@ def event_get(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
 ):
     """Show a single event."""
-    client = _make_client(_read_config(_find_config()))
+    client = _make_client(read_config(find_config()))
     try:
         event = client.get_event(event_id)
     except Exception as e:
@@ -644,7 +644,7 @@ def guest_list(
     if not output_json:
         for g in guests:
             g["attendingStatus"] = GUEST_ATTENDING.get(
-                g.get("attendingStatus"), _s(g.get("attendingStatus")))
+                g.get("attendingStatus"), s(g.get("attendingStatus")))
     _emit(guests, output_json, columns=[
         ("Id", "_id"), ("First", "firstname"), ("Last", "lastname"),
         ("Type", "type"), ("Category", "category"),
@@ -799,7 +799,7 @@ def timeline_list(
         client.close()
     if not output_json:
         for entry in entries:
-            entry["type"] = TIMELINE_TYPE.get(entry.get("type"), _s(entry.get("type")))
+            entry["type"] = TIMELINE_TYPE.get(entry.get("type"), s(entry.get("type")))
             time_v = entry.get("time")
             if isinstance(time_v, dict) and "$date" in time_v:
                 from datetime import datetime, timezone
@@ -978,7 +978,7 @@ def _name_enums(items: list, fields: dict) -> None:
     for item in items:
         for key, names in fields.items():
             if key in item:
-                item[key] = names.get(item[key], _s(item[key]))
+                item[key] = names.get(item[key], s(item[key]))
 
 
 @transaction_app.command("list")
@@ -1192,7 +1192,7 @@ def _options_summary(booking: dict) -> str:
     parts = []
     for opt in booking.get("selectedOptions") or []:
         qty = opt.get("quantity")
-        parts.append(f"{opt.get('name')} x{qty}" if qty not in (None, 1) else _s(opt.get("name")))
+        parts.append(f"{opt.get('name')} x{qty}" if qty not in (None, 1) else s(opt.get("name")))
     return ", ".join(parts)
 
 
@@ -1217,9 +1217,9 @@ def service_booking_list(
         _emit(bookings, True, what="booking")
         return
     for b in bookings:
-        b["service"] = services.get(b.get("serviceId"), _s(b.get("serviceId")))
+        b["service"] = services.get(b.get("serviceId"), s(b.get("serviceId")))
         b["options"] = _options_summary(b)
-        b["status"] = SERVICE_BOOKING_STATUS.get(b.get("status"), _s(b.get("status")))
+        b["status"] = SERVICE_BOOKING_STATUS.get(b.get("status"), s(b.get("status")))
     _emit(bookings, False, columns=[
         ("Id", "_id"), ("Service", "service"), ("Status", "status"),
         ("Options", "options"), ("From", "from"), ("To", "to"),
@@ -1594,7 +1594,7 @@ def availability_list(
     if not output_json:
         for item in items:
             item["availableFor"] = ", ".join(
-                CALENDAR_EVENT_TYPE.get(t, _s(t)) for t in item.get("availableFor") or [])
+                CALENDAR_EVENT_TYPE.get(t, s(t)) for t in item.get("availableFor") or [])
             item["slots"] = len(item.get("availability") or [])
             item["exceptions"] = len(item.get("exceptions") or [])
             item["from"] = _dt_str(item.get("from"))
@@ -1670,7 +1670,7 @@ def appointment_list(
                if isinstance(a.get("start"), dict) else 0)
     if not output_json:
         for item in items:
-            item["type"] = CALENDAR_EVENT_TYPE.get(item.get("type"), _s(item.get("type")))
+            item["type"] = CALENDAR_EVENT_TYPE.get(item.get("type"), s(item.get("type")))
             item["start"] = _dt_str(item.get("start"))
             item["end"] = _dt_str(item.get("end"))
     _emit(items, output_json, columns=[

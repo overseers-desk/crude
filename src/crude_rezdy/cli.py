@@ -12,11 +12,11 @@ from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
-    account as _account,
-    find_config as _find_config,
-    read_config as _read_config,
-    resolve_account as _resolve_account,
-    s as _s,
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    s,
 )
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
@@ -62,7 +62,7 @@ def _parse_timezone(rezdy: dict) -> ZoneInfo:
     """
     name = rezdy.get("timezone")
     if not name:
-        which = f"[rezdy.{_account()}]" if _account() else "[rezdy]"
+        which = f"[rezdy.{account()}]" if account() else "[rezdy]"
         typer.echo(
             f"Error: {which} must set a timezone (IANA name, e.g. "
             f"\"Australia/Brisbane\"); rezdy reads typed dates as the account's "
@@ -79,7 +79,7 @@ def _parse_timezone(rezdy: dict) -> ZoneInfo:
 
 def _make_client(config: dict):
     from crude_rezdy.client import RezdyClient
-    rezdy = _resolve_account(config, "rezdy", _account())
+    rezdy = resolve_account(config, "rezdy", account())
     api_key = rezdy.get("api_key")
     if not api_key:
         typer.echo("Error: config.toml must contain [rezdy] api_key.", err=True)
@@ -91,12 +91,12 @@ def _make_client(config: dict):
 
 def _client():
     """The configured rezdy client for the selected account."""
-    return _make_client(_read_config(_find_config()))
+    return _make_client(read_config(find_config()))
 
 
 def _account_timezone(config: dict) -> ZoneInfo:
     """The selected rezdy account's timezone, for the client-side instant filters."""
-    return _parse_timezone(_resolve_account(config, "rezdy", _account()))
+    return _parse_timezone(resolve_account(config, "rezdy", account()))
 
 
 def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
@@ -123,7 +123,7 @@ def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
 def _customer_name(booking: dict) -> str:
     customer = booking.get("customer") or {}
     name = " ".join(p for p in (customer.get("firstName"), customer.get("lastName")) if p)
-    return name or _s(customer.get("email"))
+    return name or s(customer.get("email"))
 
 
 def _refund_count(booking: dict) -> int:
@@ -407,7 +407,7 @@ def list_bookings(
     Use --updated-from / --updated-to to filter by when the booking was last
     modified (e.g. when it was cancelled).
     """
-    config = _read_config(_find_config())
+    config = read_config(find_config())
     client = _make_client(config)
 
     kwargs = dict(
@@ -453,15 +453,15 @@ def list_bookings(
 
     for item in items:
         first = _first_item(item)
-        paid_total = f"{_s(item.get('totalPaid'))}/{_s(item.get('totalAmount'))} {_s(item.get('totalCurrency'))}".strip()
+        paid_total = f"{s(item.get('totalPaid'))}/{s(item.get('totalAmount'))} {s(item.get('totalCurrency'))}".strip()
         table.add_row(
-            _s(item.get("orderNumber")),
-            _s(item.get("status")),
+            s(item.get("orderNumber")),
+            s(item.get("status")),
             _customer_name(item),
-            _s(first.get("productName", ""))[:35],
-            _s(first.get("startTimeLocal", ""))[:16],
+            s(first.get("productName", ""))[:35],
+            s(first.get("startTimeLocal", ""))[:16],
             paid_total,
-            _s(item.get("dateUpdated", ""))[:10],
+            s(item.get("dateUpdated", ""))[:10],
         )
 
     console.print(table)
@@ -481,7 +481,7 @@ def list_cancellations(
     --from and --to filter against the cancellation date (dateUpdated), not the
     session date. Use --all to ensure no results are missed.
     """
-    config = _read_config(_find_config())
+    config = read_config(find_config())
     client = _make_client(config)
 
     try:
@@ -518,14 +518,14 @@ def list_cancellations(
 
     for item in items:
         first = _first_item(item)
-        paid_total = f"{_s(item.get('totalPaid'))}/{_s(item.get('totalAmount'))} {_s(item.get('totalCurrency'))}".strip()
+        paid_total = f"{s(item.get('totalPaid'))}/{s(item.get('totalAmount'))} {s(item.get('totalCurrency'))}".strip()
         notes = (item.get("internalNotes") or "").strip()
         table.add_row(
-            _s(item.get("orderNumber")),
+            s(item.get("orderNumber")),
             _customer_name(item),
-            _s(first.get("productName", ""))[:35],
-            _s(first.get("startTimeLocal", ""))[:16],
-            _s(item.get("dateUpdated", ""))[:10],
+            s(first.get("productName", ""))[:35],
+            s(first.get("startTimeLocal", ""))[:16],
+            s(item.get("dateUpdated", ""))[:10],
             paid_total,
             str(_refund_count(item)),
             notes[:60],

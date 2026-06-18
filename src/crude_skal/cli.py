@@ -10,11 +10,11 @@ from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
-    account as _account,
-    find_config as _find_config,
-    read_config as _read_config,
-    resolve_account as _resolve_account,
-    s as _s,
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    s,
 )
 from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
@@ -49,7 +49,7 @@ def _get_session(config: dict) -> str:
         if session_id:
             return session_id
 
-    skal = _resolve_account(config, "skal", _account())
+    skal = resolve_account(config, "skal", account())
     session_id = skal.get("session_id", "")
     if session_id:
         atomic_write(cache, session_id)
@@ -78,7 +78,7 @@ def _get_session(config: dict) -> str:
 def _make_client(config: dict):
     from crude_skal.client import SkalClient
     session_id = _get_session(config)
-    skal = _resolve_account(config, "skal", _account())
+    skal = resolve_account(config, "skal", account())
     credentials = {
         "username": skal.get("username"),
         "password": skal.get("password"),
@@ -106,10 +106,10 @@ def login():
     """Authenticate using credentials from config.toml and cache the session."""
     from crude_skal.auth import skal_login
 
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
 
-    skal = _resolve_account(config, "skal", _account())
+    skal = resolve_account(config, "skal", account())
     username = skal.get("username")
     password = skal.get("password")
     if not username or not password:
@@ -130,7 +130,7 @@ def login():
     # Write back to config.toml so the session persists across installs, into the
     # selected account's subtable when one is named, else the bare [skal] section.
     section = config.setdefault("skal", {})
-    target = section.setdefault(_account(), {}) if _account() else section
+    target = section.setdefault(account(), {}) if account() else section
     target["session_id"] = session_id
     _write_config(config_path, config)
 
@@ -154,8 +154,8 @@ def list_(
     With no filters this returns the current member roster (excluding departed).
     Any filter flag narrows the search.
     """
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     has_filter = any(v is not None for v in (name, city, club, email, member_state))
@@ -198,8 +198,8 @@ def get(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """Show details of a single member."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:
@@ -263,8 +263,8 @@ def list_clubs(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List all Australian Skål clubs."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:
@@ -286,8 +286,8 @@ def list_events(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List Skål events (most recent first)."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:
@@ -316,8 +316,8 @@ def list_benefits(
     These are the worldwide benefits in the skal.benefit register; Australian
     clubs publish their own member offers on a website page, not here.
     """
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:
@@ -342,8 +342,8 @@ def get_benefit(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """Show details of a single member benefit."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:

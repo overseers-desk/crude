@@ -11,10 +11,10 @@ from rich.table import Table
 
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
-    account as _account,
-    find_config as _find_config,
-    read_config as _read_config,
-    resolve_account as _resolve_account,
+    account,
+    find_config,
+    read_config,
+    resolve_account,
 )
 from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
@@ -35,7 +35,7 @@ def _get_token(config: dict) -> str:
         token = cache.read_text().strip()
         if token:
             return token
-    atdw = _resolve_account(config, "atdw", _account())
+    atdw = resolve_account(config, "atdw", account())
     username = atdw.get("username")
     password = atdw.get("password")
     if username and password:
@@ -58,7 +58,7 @@ def _get_token(config: dict) -> str:
 def _make_client(config: dict):
     from crude_atdw.client import ATDWClient
     token = _get_token(config)
-    atdw = _resolve_account(config, "atdw", _account())
+    atdw = resolve_account(config, "atdw", account())
     credentials = {
         "username": atdw.get("username"),
         "password": atdw.get("password"),
@@ -71,10 +71,10 @@ def login():
     """Authenticate using credentials from config.toml and cache the JWT token."""
     from crude_atdw.auth import atdw_login
 
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
 
-    auth = _resolve_account(config, "atdw", _account())
+    auth = resolve_account(config, "atdw", account())
     username = auth.get("username")
     password = auth.get("password")
     if not username or not password:
@@ -112,8 +112,8 @@ def list_(
     With no filters this returns your organisation's own listings. Any filter
     flag, or --scope all, switches to the all-visible search endpoint.
     """
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     has_filter = any(v is not None for v in (listing_type, city, state, status, name))
@@ -154,8 +154,8 @@ def get(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """Show details of a single listing, including media count, tags, and services count."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     try:
@@ -249,8 +249,8 @@ def create(
     omitted. A new listing starts as a draft and is not distributed until it is
     submitted (`listing submit`).
     """
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
 
     # Resolve the body: --data inline JSON, then -f file, then piped stdin.
     if data is not None:
@@ -319,8 +319,8 @@ def update(
     value: str = typer.Argument(..., help="New value for the field"),
 ):
     """Update a single field on a listing (PATCH)."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     # If value looks like JSON (array or object), parse it so the API
@@ -347,8 +347,8 @@ def submit(
     listing_id: str = typer.Argument(..., help="Listing ID to submit for review"),
 ):
     """Submit a draft listing for ATDW review (DRAFTINPROG -> ACTIVE)."""
-    config_path = _find_config()
-    config = _read_config(config_path)
+    config_path = find_config()
+    config = read_config(config_path)
     client = _make_client(config)
 
     # Fetch current status so we can give a meaningful message

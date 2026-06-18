@@ -25,7 +25,7 @@ import json as _json
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from crude_common.config import account as _account
+from crude_common.config import account
 from crude_common.statestore import atomic_write, state_path
 
 HOST, PORT, WS_PATH = "app.sonas.events", 443, "/websocket"
@@ -262,7 +262,7 @@ def token_path() -> Path:
     which from an unseen device or network re-triggers the one-time
     device-verification email (docs/sonas.md §3).
     """
-    return state_path("sonas_token", _account())
+    return state_path("sonas_token", account())
 
 
 # Enums for human-readable output (see docs/sonas.md for the full tables).
