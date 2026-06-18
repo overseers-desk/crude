@@ -1,3 +1,15 @@
+crude (1.3.0) unstable; urgency=medium
+
+  * Add crude-clover: command-line client for the AP Clover POS REST API.
+    Orders (line items, modifications, payments, refunds expanded), catalog
+    dump, and flatten to the legacy Square item-level CSV layout so one
+    analysis spans a Square-to-Clover switch. Full resource surface (inventory,
+    customers, employees, merchant config, payments/refunds/credits) as
+    list/get with confirm-gated create/update/delete on writable resources, a
+    generic `resource <segment>` passthrough, and status/scopes commands.
+
+ -- Weiwu Zhang <a@colourful.land>  Fri, 19 Jun 2026 01:19:06 +1000
+
 crude (1.2.1) unstable; urgency=medium
 
   * Add crude-airwallex: command-line client for Airwallex. Covers Payouts

@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.2.1
+Version:        1.3.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -86,6 +86,15 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Fri Jun 19 2026 Weiwu Zhang <a@colourful.land> - 1.3.0-1
+- Add crude-clover: command-line client for the AP Clover POS REST API. Orders
+  (line items, modifications, payments, refunds expanded), catalog dump, and
+  flatten to the legacy Square item-level CSV layout so one analysis spans a
+  Square-to-Clover switch. Full resource surface (inventory, customers,
+  employees, merchant config, payments/refunds/credits) as list/get with
+  confirm-gated create/update/delete on writable resources, a generic resource
+  passthrough, and status/scopes commands.
+
 * Wed Jun 18 2026 Weiwu Zhang <a@colourful.land> - 1.2.1-1
 - Add crude-airwallex: command-line client for Airwallex. Covers Payouts
   (beneficiaries, transfers, FX conversions), Payments Acceptance (payment
