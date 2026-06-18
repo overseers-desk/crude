@@ -26,6 +26,11 @@ does not affect the artifacts.
 
 3. **Tag and push:** `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
+   Everything below depends only on this tag, not on the working tree. The two
+   package builds (steps 4 and 5) and the Homebrew sha256 (step 7) are
+   independent of one another and can run in parallel; step 6 needs both built
+   packages, and step 8 verifies the finished release.
+
 4. **Build the `.deb`** from the tagged source so the package matches the
    release exactly:
 
