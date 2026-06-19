@@ -209,7 +209,11 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas tasting cancel <bookingId> [--yes]                    # unverified
     crude-sonas <catalog> list [--limit N] [--search <term>] [--json]
     crude-sonas <catalog> get <id> [--json]
-    crude-sonas template edit <templateId> [--body-file PATH] [--subject <s>] [--name <s>] [--data '<modifier>'] [--yes]   # type-8 templates are the venue T&C/policy bodies new couples sign
+    crude-sonas template edit <templateId> [--body-file PATH] [--subject <s>] [--name <s>] [--data '<modifier>'] [--yes]
+    # e.g. update the T&C/policy a couple signs (a type-8 template):
+    #   crude-sonas template list                          # find the type-8 "...Policy" row in the Type column
+    #   crude-sonas template edit <id> --body-file policy.html   # replace the policy body
+    #   crude-sonas template edit <id> --subject "Venue Policy 2027"   # or a single field via $set
     crude-sonas report list [--json]
     crude-sonas report get <reportId> [--json]
 

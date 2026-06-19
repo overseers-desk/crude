@@ -2034,8 +2034,16 @@ def template_edit(
 ):
     """Edit a template (templateUpdate). The modifier's keys are template schema
     fields (`body`, `subject`, `name`, `style`, `footerTemplateId`; docs/sonas.md
-    §6). type-8 templates are the venue's T&C/policy bodies, so editing one is how
-    the version new couples sign is updated."""
+    §6).
+
+    Example — update the T&C/policy a couple signs (it is a type-8 template):
+
+        crude-sonas template list                 # find the type-8 "...Policy" row
+        crude-sonas template get <id>              # read its current body
+        crude-sonas template edit <id> --body-file policy.html
+
+    `type` is a fixed Sonas enum (type 8 = T&C/policy, the same for every venue),
+    shown in the `template list` Type column."""
     if data is not None or file is not None:
         modifier = _read_data(data, file)
     else:
