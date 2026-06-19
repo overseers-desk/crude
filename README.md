@@ -38,6 +38,7 @@ Homebrew (macOS or Linux):
 
 ```
 brew tap SmartLayer/crude https://github.com/SmartLayer/crude
+brew trust --formula SmartLayer/crude/crude
 brew install crude
 ```
 
