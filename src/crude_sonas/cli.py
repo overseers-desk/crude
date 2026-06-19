@@ -1989,7 +1989,9 @@ CATALOG = [
      "tabular_genericPub", "price-lists",
      [("Id", "_id"), ("Name", "name"), ("Type", "type"),
       ("Description", "descriptionText")]),
-    ("template", "Email and document templates.", "TemplatesList",
+    ("template", "Venue templates of every kind: emails, documents, and the "
+     "T&C/policy bodies a couple signs (the policy is a template, not a per-event "
+     "record).", "TemplatesList",
      "tabular_genericPub", "templates",
      [("Id", "_id"), ("Name", "name"), ("Type", "type"),
       ("Subject", "subject"), ("Venue", "venueId")]),

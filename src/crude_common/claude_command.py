@@ -225,7 +225,7 @@ The finance, mail, and terms writes ship uncalled (they touch finance/Xero, send
 
 Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
 
-`<catalog>` is one of the catalog resources: supplier, service, drinks-package, package, template, category, venue, user. All are read-only except `template`, which also has `edit` (templateUpdate; a Mongo modifier over body/subject/name/style). --search matches a case-insensitive substring anywhere in the document.
+`<catalog>` is one of the catalog resources: supplier, service, drinks-package, package, template, category, venue, user. `template list` returns templates of every kind, including the T&C/policy bodies a couple signs (the policy is a venue template, not a per-event record; type 8 on the current Sonas build, the same value for every venue since Sonas is one multi-tenant app). All catalog resources are read-only except `template`, which also has `edit` (templateUpdate; a Mongo modifier over body/subject/name/style). --search matches a case-insensitive substring anywhere in the document.
 
 ## crude-xero (xero.com)
 

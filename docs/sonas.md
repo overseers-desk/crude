@@ -488,8 +488,11 @@ validated against the templates schema in modifier mode; settable keys are
 `name`, `subject` (String ≤255), `body` (String), `style`, `footerTemplateId`,
 `attachments`, `categories`. Trialed by a reversible `$set.subject` on a real
 template (read-before → edit → read-after → revert → read-again; body untouched).
-The template `type` is an integer enum: **type 8 is the venue T&C/policy
-template**, whose `body` is the master policy text. Each event's per-event terms
+The template `type` is an integer enum defined in the Sonas codebase, so its
+values are identical for every tenant (Sonas is one multi-tenant app; only a
+Sonas release would renumber them, never a per-venue setting). On the current
+build **type 8 is the venue T&C/policy template**, whose `body` is the master
+policy text. Each event's per-event terms
 record (`eventTermsAndConditions`, §6.1) is an instance of a type-8 template, so
 editing that template's `body` is how the version new couples sign is updated;
 the per-event `terms` verbs touch only one couple's already-sent copy. One
