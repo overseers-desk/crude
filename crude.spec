@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.3.0
+Version:        1.3.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -86,6 +86,12 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Thu Jun 19 2026 Weiwu Zhang <a@colourful.land> - 1.3.1-1
+- crude-sonas: add template edit (T&C/policy write path), surface terms
+  create/answer/delete verbs, fix event-id false-negative in per-event reads.
+- crude-common: extract HttpSession shared transport; split cliutil into output
+  and writeio modules; surface resource-group verbs in group-level help.
+
 * Fri Jun 19 2026 Weiwu Zhang <a@colourful.land> - 1.3.0-1
 - Add crude-clover: command-line client for the AP Clover POS REST API. Orders
   (line items, modifications, payments, refunds expanded), catalog dump, and

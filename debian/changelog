@@ -1,3 +1,14 @@
+crude (1.3.1) unstable; urgency=medium
+
+  * crude-sonas: add `template edit` (T&C/policy write path); surface `terms
+    create`, `terms answer`, and `terms delete` verbs; fix event-id
+    false-negative in per-event reads.
+  * crude-common: extract HttpSession shared transport; split cliutil into
+    output and writeio modules; surface resource-group verbs in group-level
+    help.
+
+ -- Weiwu Zhang <a@colourful.land>  Thu, 19 Jun 2026 00:00:00 +1000
+
 crude (1.3.0) unstable; urgency=medium
 
   * Add crude-clover: command-line client for the AP Clover POS REST API.
