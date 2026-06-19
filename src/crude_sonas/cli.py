@@ -2007,9 +2007,51 @@ CATALOG = [
       ("Email", "emails.0.address")]),
 ]
 
+_catalog_apps = {}
 for _name, _help, _table, _pub, _coll, _cols in CATALOG:
-    app.add_typer(_make_catalog_app(_name.replace("-", " "), _help, _table, _pub,
-                                    _coll, _cols), name=_name)
+    _capp = _make_catalog_app(_name.replace("-", " "), _help, _table, _pub,
+                              _coll, _cols)
+    _catalog_apps[_name] = _capp
+    app.add_typer(_capp, name=_name)
+
+
+@_catalog_apps["template"].command("edit")
+def template_edit(
+    template_id: str = typer.Argument(..., help="Template id (from `template list/get`)."),
+    body_file: Optional[str] = typer.Option(
+        None, "--body-file", help="Set the HTML body from a file (composed into $set.body)."),
+    subject: Optional[str] = typer.Option(None, "--subject", help="Set the subject (<=255)."),
+    name: Optional[str] = typer.Option(None, "--name", help="Set the template name."),
+    data: Optional[str] = typer.Option(
+        None, "--data",
+        help='A raw Mongo modifier, e.g. {"$set": {"body": "<p>..</p>"}}. Overrides the '
+             "--body-file/--subject/--name shortcuts."),
+    file: Optional[str] = typer.Option(None, "--file", "-f", help="Read the modifier JSON from a file."),
+    yes: bool = typer.Option(False, "--yes", help="Skip the confirmation prompt."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Edit a template (templateUpdate). The modifier's keys are template schema
+    fields (`body`, `subject`, `name`, `style`, `footerTemplateId`; docs/sonas.md
+    §6). type-8 templates are the venue's T&C/policy bodies, so editing one is how
+    the version new couples sign is updated."""
+    if data is not None or file is not None:
+        modifier = _read_data(data, file)
+    else:
+        setter = {}
+        if body_file is not None:
+            with open(body_file) as f:
+                setter["body"] = f.read()
+        if subject is not None:
+            setter["subject"] = subject
+        if name is not None:
+            setter["name"] = name
+        if not setter:
+            typer.echo("Error: provide --body-file/--subject/--name, or --data/-f.", err=True)
+            raise typer.Exit(2)
+        modifier = {"$set": setter}
+    _do_call("templateUpdate", {"templateId": template_id, "modifier": modifier},
+             f"edit template {template_id}",
+             confirm=f"Edit template {template_id}?", yes=yes, output_json=output_json)
 
 report_app = typer.Typer(help="Saved report definitions (sales funnel, revenue, marketing).")
 app.add_typer(report_app, name="report")

@@ -209,6 +209,7 @@ Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_ha
     crude-sonas tasting cancel <bookingId> [--yes]                    # unverified
     crude-sonas <catalog> list [--limit N] [--search <term>] [--json]
     crude-sonas <catalog> get <id> [--json]
+    crude-sonas template edit <templateId> [--body-file PATH] [--subject <s>] [--name <s>] [--data '<modifier>'] [--yes]   # type-8 templates are the venue T&C/policy bodies new couples sign
     crude-sonas report list [--json]
     crude-sonas report get <reportId> [--json]
 
@@ -224,7 +225,7 @@ The finance, mail, and terms writes ship uncalled (they touch finance/Xero, send
 
 Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay, ItemDelivery, Tasting, Maintenance, PhotoShoot, Accommodation, Ceremony, InternalMeeting, CustomAppointment1-3, RegularEvent. An InternalMeeting with no --event link is a plain staff-calendar entry; the customer appointment types send reminder mail. Commands marked unverified have their payloads decoded but were never trial-called; see docs/sonas.md §6 before relying on them.
 
-`<catalog>` is one of the read-only catalog resources: supplier, service, drinks-package, package, template, category, venue, user. --search matches a case-insensitive substring anywhere in the document.
+`<catalog>` is one of the catalog resources: supplier, service, drinks-package, package, template, category, venue, user. All are read-only except `template`, which also has `edit` (templateUpdate; a Mongo modifier over body/subject/name/style). --search matches a case-insensitive substring anywhere in the document.
 
 ## crude-xero (xero.com)
 

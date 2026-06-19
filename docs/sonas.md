@@ -482,6 +482,21 @@ selector `{_id: ...}`; pass the collection name explicitly, since the
 new-docs-only auto-detect misses documents already in the store (the
 logged-in user's own `users` doc).
 
+`template` is the one catalog resource with a write verb. `template edit`
+(`templateUpdate({templateId, modifier})` **[live]**) applies a Mongo modifier
+validated against the templates schema in modifier mode; settable keys are
+`name`, `subject` (String ≤255), `body` (String), `style`, `footerTemplateId`,
+`attachments`, `categories`. Trialed by a reversible `$set.subject` on a real
+template (read-before → edit → read-after → revert → read-again; body untouched).
+The template `type` is an integer enum: **type 8 is the venue T&C/policy
+template**, whose `body` is the master policy text. Each event's per-event terms
+record (`eventTermsAndConditions`, §6.1) is an instance of a type-8 template, so
+editing that template's `body` is how the version new couples sign is updated;
+the per-event `terms` verbs touch only one couple's already-sent copy. One
+server guard: an `EventWelcome`-type template's `body` must keep the
+`{{loginInstructions}}` token, so a `$set` dropping it is refused (irrelevant to
+type-8 policies).
+
 Tables with no crude-sonas verbs: `FormsList`, `UserRoleList`, `TransactionList`
 (`transactionsWithEventDate`), `FinancialRecordsList` (`financialRecordsWithEventDate`),
 `Inbox` (`messagesWithExtra`), `ReviewList`, `WorkflowsList`, `AuditLogList`
