@@ -1,3 +1,12 @@
+crude (1.4) unstable; urgency=medium
+
+  * Add crude-facebook: Facebook Pages client via the Meta Graph API. Covers
+    posts (list, get, create, edit, hide/unhide, delete), page insights, and
+    comments. Auth via a System User token stored in the durable state store.
+    The binary replaces crude-meta; Instagram support is deferred.
+
+ -- Weiwu Zhang <a@colourful.land>  Tue, 24 Jun 2026 00:00:00 +1000
+
 crude (1.3.1) unstable; urgency=medium
 
   * crude-sonas: add `template edit` (T&C/policy write path); surface `terms
