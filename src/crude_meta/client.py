@@ -145,8 +145,14 @@ class MetaSession(HttpSession):
         msg = err.get("message") or f"HTTP {r.status_code}: {r.text[:200]}"
         if code == 190:
             raise MetaError(
-                f"Token rejected (code 190): {msg} The access_token in [meta] is "
-                f"expired or invalid; mint a fresh one (see docs/meta.md).",
+                f"Token rejected (code 190): {msg} The token in [meta] is invalid, "
+                f"expired, or the wrong type for this call (see docs/meta.md).",
+                status=r.status_code, code=code)
+        if code == 210:
+            raise MetaError(
+                f"Page access token required (code 210): {msg} This call needs a "
+                f"Page token; /me/accounts must list the Page, or use a System User "
+                f"token with the Page assigned (see docs/meta.md).",
                 status=r.status_code, code=code)
         if code in (10, 200, 3, 299):
             raise MetaError(
