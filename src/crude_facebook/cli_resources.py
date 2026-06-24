@@ -1,11 +1,11 @@
-"""Facebook Page sub-app for crude-meta: posts, comments, page.
+"""Facebook Page resources for crude-facebook: posts, comments, page.
 
-Explicit command groups, like the Instagram sub-app, for the same reason: the
-resources are few and heterogeneous. Post editing is message-only and works only
-on posts this app created (a Graph constraint), noted in the command help. The
-Page events edge is omitted entirely: it is restricted to Facebook Marketing
-Partners and event creation via the API is unsupported, so there is nothing a
-self-serve client can do there.
+Explicit command groups, mounted directly on the root app (the grammar is
+``crude-facebook <resource> <verb>``). Post editing is message-only and works only
+on posts this app created (a Graph constraint), noted in the command help. The Page
+events edge is omitted entirely: it is restricted to Facebook Marketing Partners
+and event creation via the API is unsupported, so there is nothing a self-serve
+client can do there.
 """
 
 from __future__ import annotations
@@ -16,11 +16,11 @@ import typer
 
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write
-from crude_meta.client import (
+from crude_facebook.client import (
     FB_COMMENT_FIELDS,
     FB_PAGE_FIELDS,
     FB_POST_FIELDS,
-    MetaError,
+    FacebookError,
     insight_rows,
 )
 
@@ -40,18 +40,14 @@ _INSIGHT_COLS = [("Metric", "metric"), ("Value", "value"), ("Title", "title")]
 
 
 def _session():
-    from crude_meta.cli import _session as impl
+    from crude_facebook.cli import _session as impl
 
     return impl()
 
 
-app = typer.Typer(help="Facebook Page: posts, insights, comments, page profile.")
 post = typer.Typer(help="Facebook Page posts: list, get, insights, create, edit, delete.")
 comment = typer.Typer(help="Facebook Page comment moderation.")
 page = typer.Typer(help="Facebook Page profile and insights.")
-app.add_typer(post, name="post")
-app.add_typer(comment, name="comment")
-app.add_typer(page, name="page")
 
 
 # --------------------------------------------------------------------------
@@ -70,7 +66,7 @@ def post_list(
     try:
         items = list(sess.iter_edge(
             f"/{sess.page_id}/{edge}", params={"fields": FB_POST_FIELDS}, max_items=limit))
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching posts: {e}", err=True)
         raise typer.Exit(1)
     emit_list(items, _POST_COLS, "post", output_json)
@@ -84,7 +80,7 @@ def post_get(
     sess = _session()
     try:
         rec = sess.get(f"/{post_id}", params={"fields": FB_POST_FIELDS})
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching post {post_id}: {e}", err=True)
         raise typer.Exit(1)
     emit_record(rec, output_json)
@@ -101,7 +97,7 @@ def post_insights(
     sess = _session()
     try:
         data = sess.get(f"/{post_id}/insights", params={"metric": metric}).get("data", [])
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching insights for {post_id}: {e}", err=True)
         raise typer.Exit(1)
     emit_list(insight_rows(data), _INSIGHT_COLS, "metric", output_json)
@@ -190,7 +186,7 @@ def comment_list(
     try:
         items = list(sess.iter_edge(
             f"/{post_id}/comments", params={"fields": FB_COMMENT_FIELDS}))
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching comments for {post_id}: {e}", err=True)
         raise typer.Exit(1)
     emit_list(items, _COMMENT_COLS, "comment", output_json)
@@ -256,7 +252,7 @@ def page_get(output_json: bool = _JSON):
     sess = _session()
     try:
         rec = sess.get(f"/{sess.page_id}", params={"fields": FB_PAGE_FIELDS})
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching page: {e}", err=True)
         raise typer.Exit(1)
     emit_record(rec, output_json)
@@ -275,7 +271,7 @@ def page_insights(
             f"/{sess.page_id}/insights",
             params={"metric": metric, "period": period},
         ).get("data", [])
-    except MetaError as e:
+    except FacebookError as e:
         typer.echo(f"Error fetching page insights: {e}", err=True)
         raise typer.Exit(1)
     emit_list(insight_rows(data), _INSIGHT_COLS, "metric", output_json)

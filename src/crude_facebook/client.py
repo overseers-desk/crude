@@ -1,17 +1,17 @@
-"""Meta Graph API transport: one token, lazy Page/Instagram discovery.
+"""Facebook Graph API transport: one token, lazy Page discovery.
 
-A MetaSession carries the configured bearer token and resolves the Page (and its
-linked Instagram Business account) lazily from ``/me/accounts`` on first use, the
-direct analogue of how CloverSession resolves its merchant from
-``/v3/merchants/current``. Page and Instagram writes need a Page access token, so
-the session prefers the per-Page token that ``/me/accounts`` returns and falls
-back to the configured token (with explicit ``page_id``/``ig_user_id`` config
-keys) when that edge is empty — the case the 2026-06-24 spike hit.
+A FacebookSession carries the configured bearer token and resolves the Page lazily
+from ``/me/accounts`` on first use, the direct analogue of how CloverSession
+resolves its merchant from ``/v3/merchants/current``. Page writes need a Page
+access token, so the session prefers the per-Page token that ``/me/accounts``
+returns and falls back to the configured token (with an explicit ``page_id`` config
+key) when that edge is empty — the case a Business-Manager-managed Page hits, where
+the durable answer is a System User token assigned to the Page.
 
 The Graph API carries auth as the ``access_token`` query parameter and, when the
 app enforces it, an ``appsecret_proof`` signature; both ride on every call rather
-than on a session header, because the token varies (user token for discovery,
-Page token for everything else).
+than on a session header, because the token varies (user token for discovery, Page
+token for everything else).
 """
 
 from __future__ import annotations
@@ -24,50 +24,19 @@ from crude_common.httpapi import HttpSession
 GRAPH = "https://graph.facebook.com"
 API_VERSION = "v25.0"
 
-# Field sets requested by the read commands. media get/list always carry both
-# `id` and `shortcode` so a consumer can bridge a Graph media id to its 19-digit
-# media_pk (base64url-decode of the shortcode).
-MEDIA_FIELDS = (
-    "id,shortcode,caption,media_type,media_product_type,permalink,timestamp,"
-    "like_count,comments_count,thumbnail_url,media_url"
-)
-IG_ACCOUNT_FIELDS = (
-    "id,username,name,biography,website,followers_count,follows_count,"
-    "media_count,profile_picture_url"
-)
-IG_COMMENT_FIELDS = "id,text,username,timestamp,like_count,hidden"
-
+# Field sets requested by the read commands.
 FB_POST_FIELDS = "id,message,created_time,permalink_url,is_published,full_picture"
 FB_PAGE_FIELDS = (
     "id,name,about,category,link,website,phone,emails,followers_count,fan_count"
 )
 FB_COMMENT_FIELDS = "id,message,from,created_time,like_count,comment_count,is_hidden"
 
-# Per-post insight metrics by Instagram media_product_type. Built against the
-# current names: `impressions` was removed for all API versions on 2025-04-21 in
-# favour of `views`, and `plays`/`video_views` folded into `views`. Override per
-# call with --metric when Meta shifts these again.
-MEDIA_METRICS = {
-    "REELS": [
-        "reach", "views", "likes", "comments", "saved", "shares",
-        "total_interactions", "ig_reels_avg_watch_time",
-        "ig_reels_video_view_total_time",
-    ],
-    "STORY": ["reach", "views", "replies", "shares", "total_interactions", "navigation"],
-    "FEED": ["reach", "views", "likes", "comments", "saved", "shares", "total_interactions"],
-}
-
-
-def media_metrics(product_type) -> list:
-    """The insight metric list for a media's product type, defaulting to FEED."""
-    return MEDIA_METRICS.get((product_type or "FEED").upper(), MEDIA_METRICS["FEED"])
-
 
 def insight_value(item: dict):
     """Pull the scalar from one insight result, across the two response shapes.
 
-    The current `metric_type=total_value` insights return ``total_value.value``;
-    the older time-series shape returns the last entry of ``values``.
+    The `metric_type=total_value` insights return ``total_value.value``; the
+    time-series shape returns the last entry of ``values``.
     """
     total = item.get("total_value")
     if isinstance(total, dict):
@@ -91,8 +60,8 @@ def appsecret_proof(token: str, app_secret: str) -> str:
     return hmac.new(app_secret.encode(), token.encode(), hashlib.sha256).hexdigest()
 
 
-class MetaError(RuntimeError):
-    """A Meta Graph API error, carrying the HTTP status and Graph error code."""
+class FacebookError(RuntimeError):
+    """A Facebook Graph API error, carrying the HTTP status and Graph error code."""
 
     def __init__(self, message, *, status=None, code=None):
         super().__init__(message)
@@ -101,15 +70,13 @@ class MetaError(RuntimeError):
         self.message = message
 
 
-class MetaSession(HttpSession):
-    def __init__(self, token, *, app_secret=None, page_id=None, ig_user_id=None,
-                 version=API_VERSION):
+class FacebookSession(HttpSession):
+    def __init__(self, token, *, app_secret=None, page_id=None, version=API_VERSION):
         super().__init__(f"{GRAPH}/{version}", timeout=60)
         self.user_token = token
         self.app_secret = app_secret
         self._cfg_page_id = page_id
-        self._cfg_ig_user_id = ig_user_id
-        self._page = None  # discovered {id, name, access_token, instagram_business_account}
+        self._page = None  # discovered {id, name, access_token}
         self.session.headers.update({"Accept": "application/json"})
 
     # ------------------------------------------------------------------
@@ -144,29 +111,29 @@ class MetaSession(HttpSession):
         code = err.get("code")
         msg = err.get("message") or f"HTTP {r.status_code}: {r.text[:200]}"
         if code == 190:
-            raise MetaError(
-                f"Token rejected (code 190): {msg} The token in [meta] is invalid, "
-                f"expired, or the wrong type for this call (see docs/meta.md).",
+            raise FacebookError(
+                f"Token rejected (code 190): {msg} The token in [facebook] is invalid, "
+                f"expired, or the wrong type for this call (see docs/facebook.md).",
                 status=r.status_code, code=code)
         if code == 210:
-            raise MetaError(
+            raise FacebookError(
                 f"Page access token required (code 210): {msg} This call needs a "
                 f"Page token; /me/accounts must list the Page, or use a System User "
-                f"token with the Page assigned (see docs/meta.md).",
+                f"token with the Page assigned (see docs/facebook.md).",
                 status=r.status_code, code=code)
         if code in (10, 200, 3, 299):
-            raise MetaError(
+            raise FacebookError(
                 f"Permission denied (code {code}): {msg} The token is missing the "
                 f"scope or the Page role for this call.",
                 status=r.status_code, code=code)
         if code in (4, 17, 32, 613):
-            raise MetaError(
+            raise FacebookError(
                 f"Rate limited (code {code}): {msg} Back off and retry later.",
                 status=r.status_code, code=code)
-        raise MetaError(f"{msg} (code {code})", status=r.status_code, code=code)
+        raise FacebookError(f"{msg} (code {code})", status=r.status_code, code=code)
 
     # ------------------------------------------------------------------
-    # Lazy discovery: Page token + ids, mirroring CloverSession.merchant_id
+    # Lazy discovery: Page token + id, mirroring CloverSession.merchant_id
     # ------------------------------------------------------------------
 
     @property
@@ -174,15 +141,14 @@ class MetaSession(HttpSession):
         """The managed Page, resolved once via /me/accounts (user token).
 
         With a configured page_id, the matching Page is chosen; otherwise the
-        first. When /me/accounts is empty (a token without the Pages list, the
-        spike's case) the configured page_id and the configured token are used
-        directly, so reads still work and writes succeed if the token is itself a
-        Page or System User token.
+        first. When /me/accounts is empty (a Business-managed Page) the configured
+        page_id and the configured token are used directly, so calls succeed when
+        the token is itself a Page or System User token.
         """
         if self._page is None:
             accounts = self._call(
                 "GET", "/me/accounts", self.user_token,
-                params={"fields": "id,name,access_token,instagram_business_account"},
+                params={"fields": "id,name,access_token"},
             )
             data = accounts.get("data", [])
             if self._cfg_page_id:
@@ -194,9 +160,6 @@ class MetaSession(HttpSession):
                     "id": self._cfg_page_id,
                     "name": None,
                     "access_token": self.user_token,
-                    "instagram_business_account": (
-                        {"id": self._cfg_ig_user_id} if self._cfg_ig_user_id else None
-                    ),
                 }
         return self._page
 
@@ -204,30 +167,15 @@ class MetaSession(HttpSession):
     def page_id(self) -> str:
         pid = self._cfg_page_id or self.page.get("id")
         if not pid:
-            raise MetaError(
-                "No Page resolved. /me/accounts returned none; set page_id in [meta].")
+            raise FacebookError(
+                "No Page resolved: /me/accounts returned none (common for a "
+                "Business-managed Page). Set page_id in [facebook], with a System "
+                "User token that has the Page assigned (see docs/facebook.md).")
         return pid
 
     @property
     def page_token(self) -> str:
         return self.page.get("access_token") or self.user_token
-
-    @property
-    def ig_user_id(self) -> str:
-        if self._cfg_ig_user_id:
-            return self._cfg_ig_user_id
-        iba = self.page.get("instagram_business_account")
-        if iba and iba.get("id"):
-            return iba["id"]
-        resp = self._call(
-            "GET", f"/{self.page_id}", self.page_token,
-            params={"fields": "instagram_business_account"})
-        iba = resp.get("instagram_business_account")
-        if not iba or not iba.get("id"):
-            raise MetaError(
-                "No Instagram Business account is linked to this Page. Link it, or "
-                "set ig_user_id in [meta].")
-        return iba["id"]
 
     # ------------------------------------------------------------------
     # Cursor pagination over a Graph edge

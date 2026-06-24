@@ -1,20 +1,19 @@
-"""crude_meta transport unit tests (no network).
+"""crude_facebook transport unit tests (no network).
 
 Pins the auth-param injection, the appsecret_proof, the Graph error-code mapping,
-cursor pagination, the config-id fallback (so reads work when /me/accounts is
-empty), and the per-type insight metric selection.
+cursor pagination, the config page-id fallback (so calls work when /me/accounts is
+empty), and the insight-value shapes.
 """
 
 from types import SimpleNamespace
 
 import pytest
 
-from crude_meta.client import (
-    MetaError,
-    MetaSession,
+from crude_facebook.client import (
+    FacebookError,
+    FacebookSession,
     appsecret_proof,
     insight_value,
-    media_metrics,
 )
 
 
@@ -25,7 +24,7 @@ def _resp(status, error):
 
 
 def test_params_carries_token_and_proof():
-    s = MetaSession("tok", app_secret="secret")
+    s = FacebookSession("tok", app_secret="secret")
     p = s._params("tok", {"fields": "id"})
     assert p["access_token"] == "tok"
     assert p["appsecret_proof"] == appsecret_proof("tok", "secret")
@@ -33,7 +32,7 @@ def test_params_carries_token_and_proof():
 
 
 def test_params_omits_proof_without_secret():
-    s = MetaSession("tok")
+    s = FacebookSession("tok")
     assert "appsecret_proof" not in s._params("tok", None)
 
 
@@ -51,21 +50,20 @@ def test_appsecret_proof_is_hmac_sha256():
      (4, "Rate limited"), (100, "code 100")],
 )
 def test_raise_maps_graph_error_codes(code, needle):
-    s = MetaSession("tok")
-    with pytest.raises(MetaError) as e:
+    s = FacebookSession("tok")
+    with pytest.raises(FacebookError) as e:
         s._raise(_resp(400, {"message": "boom", "code": code}))
     assert needle in str(e.value)
     assert e.value.code == code
 
 
-def test_ids_from_config_need_no_network():
-    s = MetaSession("tok", page_id="P1", ig_user_id="IG1")
+def test_page_id_from_config_needs_no_network():
+    s = FacebookSession("tok", page_id="P1")
     assert s.page_id == "P1"
-    assert s.ig_user_id == "IG1"
 
 
 def test_iter_edge_follows_the_after_cursor():
-    s = MetaSession("tok", page_id="P", ig_user_id="IG")
+    s = FacebookSession("tok", page_id="P")
     pages = [
         {"data": [{"id": 1}, {"id": 2}],
          "paging": {"next": "u", "cursors": {"after": "c1"}}},
@@ -84,19 +82,12 @@ def test_iter_edge_follows_the_after_cursor():
 
 
 def test_iter_edge_honours_max_items():
-    s = MetaSession("tok")
+    s = FacebookSession("tok")
     s._call = lambda *a, **k: {
         "data": [{"id": 1}, {"id": 2}, {"id": 3}],
         "paging": {"next": "u", "cursors": {"after": "c"}},
     }
     assert len(list(s.iter_edge("/x", token="tok", max_items=2))) == 2
-
-
-def test_media_metrics_by_product_type():
-    assert "ig_reels_avg_watch_time" in media_metrics("REELS")
-    assert "navigation" in media_metrics("STORY")
-    assert media_metrics(None) == media_metrics("FEED")
-    assert media_metrics("UNKNOWN") == media_metrics("FEED")
 
 
 def test_insight_value_handles_both_shapes():
