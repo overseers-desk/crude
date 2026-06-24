@@ -144,7 +144,9 @@ def post_create(
 
 @post.command(
     "edit",
-    help="Edit a post's message. Only the message is editable, and only posts this app created.")
+    help="Edit a post's message; the message is the only field this changes (a post's "
+         "photo or link cannot be swapped). With a System User token that has full Page "
+         "control, it edits any of the Page's posts, not only ones this app created.")
 def post_edit(
     post_id: str = typer.Argument(..., help="Post id."),
     message: str = typer.Option(..., "--message", "-m", help="New post text."),
@@ -159,7 +161,7 @@ def post_edit(
         yes=yes, output_json=output_json)
 
 
-@post.command("delete", help="Delete a post by id. Irreversible; only posts this app created.")
+@post.command("delete", help="Delete a post by id. Irreversible.")
 def post_delete(
     post_id: str = typer.Argument(..., help="Post id to delete."),
     yes: bool = _YES,
@@ -205,9 +207,12 @@ def comment_reply(
         f"comment on {object_id}", yes=yes, output_json=output_json)
 
 
-@comment.command("hide", help="Hide a comment.")
+@comment.command(
+    "hide",
+    help="Hide a visitor's comment. A Page cannot hide its own comments (Graph "
+         "rejects it); this applies to comments left by others.")
 def comment_hide(
-    comment_id: str = typer.Argument(..., help="Comment id."),
+    comment_id: str = typer.Argument(..., help="Comment id (a visitor's comment)."),
     yes: bool = _YES,
     output_json: bool = _JSON,
 ):
@@ -217,7 +222,7 @@ def comment_hide(
         f"hide comment {comment_id}", yes=yes, output_json=output_json)
 
 
-@comment.command("unhide", help="Unhide a comment.")
+@comment.command("unhide", help="Unhide a previously hidden visitor comment.")
 def comment_unhide(
     comment_id: str = typer.Argument(..., help="Comment id."),
     yes: bool = _YES,
