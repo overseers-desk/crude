@@ -6,7 +6,7 @@ crude is a lightweight command-line tool for CRUD access (create, read, update, 
 crude-<site> <resource> <verb> [id] [flags]
 ```
 
-Seven sites ship today, each as its own console binary:
+The clients ship as their own console binaries:
 
 - `crude-atdw`: Australian Tourism Data Warehouse (ATDW) tourism listings (REST, OAuth bearer token).
 - `crude-skal`: Skål Australia member portal (Odoo JSON-RPC, session cookie).
@@ -15,6 +15,8 @@ Seven sites ship today, each as its own console binary:
 - `crude-sonas`: Sonas wedding-venue software (Meteor DDP backend, session token).
 - `crude-xero`: Xero accounting over the official OAuth2 APIs (REST, OAuth2 with automatic token refresh).
 - `crude-airwallex`: Airwallex global payments and transactions, balances, payouts, and payment acceptance (REST, API-key bearer token).
+- `crude-clover`: AP Clover POS orders, catalog, and Square-shape CSV export (REST, static bearer token).
+- `crude-facebook`: Facebook Page posts, insights, and comments over the Graph API (REST, Page or System User token).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -49,11 +51,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the seven site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, `crude_clover`, `crude_facebook`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering all seven sites) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering every site) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 
