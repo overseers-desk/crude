@@ -424,3 +424,193 @@ def test_airwallex_lists_pa_payment_intents(crude_config):
     assert isinstance(items, list)
     if items:
         assert items[0].get("id")
+
+
+# ---------------------------------------------------------------------------
+# crude-meta (graph.facebook.com)
+#
+# Meta's command logic (field sets, per-type insight metrics, list->id chaining)
+# lives in the cli modules, so these drive the real CLI commands through a
+# CliRunner rather than calling client methods, to exercise each branch as the
+# user runs it. A test skips when [meta] access_token is absent; it fails when the
+# token is present but a read does not come back, which is the signal worth having.
+# Writes mutate the live venue, so they are gated behind env flags and are
+# reversible (they only ever touch content they create, then remove it).
+# ---------------------------------------------------------------------------
+
+import json as _json  # noqa: E402
+import os as _os  # noqa: E402
+
+from typer.testing import CliRunner as _CliRunner  # noqa: E402
+
+_meta_runner = _CliRunner()
+
+_META_WRITES = _os.environ.get("CRUDE_META_LIVE_WRITES") == "1"
+_META_PUBLISH = _os.environ.get("CRUDE_META_LIVE_PUBLISH") == "1"
+_META_TEST_IMAGE = _os.environ.get("CRUDE_META_TEST_IMAGE_URL")
+
+
+def _meta_or_skip(crude_config):
+    if not crude_config.get("meta", {}).get("access_token"):
+        pytest.skip("no [meta] access_token in config")
+
+
+def _meta_json(args):
+    """Invoke a crude-meta command with --json; fail (not skip) on a non-zero exit."""
+    from crude_meta.cli import app
+
+    r = _meta_runner.invoke(app, args + ["--json"])
+    assert r.exit_code == 0, f"{' '.join(args)} -> exit {r.exit_code}\n{r.output}"
+    return _json.loads(r.output)
+
+
+@pytest.fixture(scope="session")
+def _meta_ig_media_id(crude_config):
+    _meta_or_skip(crude_config)
+    data = _meta_json(["instagram", "media", "list", "--limit", "1"])
+    if not data:
+        pytest.skip("Instagram account has no media")
+    return data[0]["id"]
+
+
+@pytest.fixture(scope="session")
+def _meta_fb_post_id(crude_config):
+    _meta_or_skip(crude_config)
+    data = _meta_json(["facebook", "post", "list", "--limit", "1"])
+    if not data:
+        pytest.skip("Page has no published posts")
+    return data[0]["id"]
+
+
+# --- reads (must pass when the token is present) ---------------------------
+
+@pytest.mark.live
+def test_meta_account_show(crude_config):
+    _meta_or_skip(crude_config)
+    rec = _meta_json(["account", "show"])
+    assert rec.get("page_id") and rec.get("ig_user_id")
+
+
+@pytest.mark.live
+def test_meta_status(crude_config):
+    _meta_or_skip(crude_config)
+    assert "page_id" in _meta_json(["status"])
+
+
+@pytest.mark.live
+def test_meta_ig_account_get(crude_config):
+    _meta_or_skip(crude_config)
+    rec = _meta_json(["instagram", "account", "get"])
+    assert rec.get("id")
+
+
+@pytest.mark.live
+def test_meta_ig_account_insights(crude_config):
+    _meta_or_skip(crude_config)
+    assert isinstance(_meta_json(["instagram", "account", "insights"]), list)
+
+
+@pytest.mark.live
+def test_meta_ig_media_list(crude_config):
+    _meta_or_skip(crude_config)
+    data = _meta_json(["instagram", "media", "list", "--limit", "5"])
+    assert isinstance(data, list)
+    for m in data:
+        assert m.get("id") and "shortcode" in m
+        print("IG media:", m.get("id"), m.get("shortcode"), "|", repr((m.get("caption") or "")[:90]))
+
+
+@pytest.mark.live
+def test_meta_ig_media_get(crude_config, _meta_ig_media_id):
+    rec = _meta_json(["instagram", "media", "get", _meta_ig_media_id])
+    assert rec.get("id") and "shortcode" in rec
+
+
+@pytest.mark.live
+def test_meta_ig_media_insights(crude_config, _meta_ig_media_id):
+    assert isinstance(_meta_json(["instagram", "media", "insights", _meta_ig_media_id]), list)
+
+
+@pytest.mark.live
+def test_meta_ig_comment_list(crude_config, _meta_ig_media_id):
+    assert isinstance(_meta_json(["instagram", "comment", "list", _meta_ig_media_id]), list)
+
+
+@pytest.mark.live
+def test_meta_fb_page_get(crude_config):
+    _meta_or_skip(crude_config)
+    rec = _meta_json(["facebook", "page", "get"])
+    assert rec.get("id")
+    print("FB page about:", repr(rec.get("about")))
+
+
+@pytest.mark.live
+def test_meta_fb_page_insights(crude_config):
+    _meta_or_skip(crude_config)
+    assert isinstance(_meta_json(["facebook", "page", "insights"]), list)
+
+
+@pytest.mark.live
+def test_meta_fb_post_list(crude_config):
+    _meta_or_skip(crude_config)
+    data = _meta_json(["facebook", "post", "list", "--limit", "5"])
+    assert isinstance(data, list)
+    for p in data:
+        print("FB post:", p.get("id"), "|", repr((p.get("message") or "")[:90]))
+
+
+@pytest.mark.live
+def test_meta_fb_post_get(crude_config, _meta_fb_post_id):
+    assert _meta_json(["facebook", "post", "get", _meta_fb_post_id]).get("id")
+
+
+@pytest.mark.live
+def test_meta_fb_post_insights(crude_config, _meta_fb_post_id):
+    assert isinstance(_meta_json(["facebook", "post", "insights", _meta_fb_post_id]), list)
+
+
+@pytest.mark.live
+def test_meta_fb_comment_list(crude_config, _meta_fb_post_id):
+    assert isinstance(_meta_json(["facebook", "comment", "list", _meta_fb_post_id]), list)
+
+
+# --- writes (reversible, opt-in; touch only content they create) ----------
+
+@pytest.mark.live
+@pytest.mark.skipif(not _META_WRITES, reason="set CRUDE_META_LIVE_WRITES=1 to run live FB writes")
+def test_meta_fb_write_roundtrip(crude_config):
+    """create post -> comment -> hide -> unhide -> delete comment -> edit -> delete."""
+    _meta_or_skip(crude_config)
+    post = _meta_json(["facebook", "post", "create", "-m",
+                       "crude-meta self-test, ignore", "--yes"])
+    pid = post.get("id")
+    assert pid
+    try:
+        c = _meta_json(["facebook", "comment", "reply", pid, "-m", "self-test", "--yes"])
+        cid = c.get("id")
+        if cid:
+            _meta_json(["facebook", "comment", "hide", cid, "--yes"])
+            _meta_json(["facebook", "comment", "unhide", cid, "--yes"])
+            _meta_json(["facebook", "comment", "delete", cid, "--yes"])
+        _meta_json(["facebook", "post", "edit", pid, "-m",
+                    "crude-meta self-test edited, ignore", "--yes"])
+    finally:
+        _meta_json(["facebook", "post", "delete", pid, "--yes"])
+
+
+@pytest.mark.live
+@pytest.mark.skipif(
+    not (_META_PUBLISH and _META_TEST_IMAGE),
+    reason="set CRUDE_META_LIVE_PUBLISH=1 and CRUDE_META_TEST_IMAGE_URL to run live IG publish")
+def test_meta_ig_publish_roundtrip(crude_config):
+    """publish image -> comment on it -> delete comment -> toggle -> delete media."""
+    _meta_or_skip(crude_config)
+    pub = _meta_json(["instagram", "media", "publish", "--type", "image",
+                      "--url", _META_TEST_IMAGE, "--caption", "crude-meta self-test", "--yes"])
+    mid = pub.get("id")
+    assert mid
+    try:
+        _meta_json(["instagram", "comment", "toggle", mid, "--disabled", "--yes"])
+        _meta_json(["instagram", "comment", "toggle", mid, "--enabled", "--yes"])
+    finally:
+        _meta_json(["instagram", "media", "delete", mid, "--yes"])

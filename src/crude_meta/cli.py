@@ -22,9 +22,13 @@ app = typer.Typer(
 register_claude_command(app)
 
 
-def _session() -> MetaSession:
-    """The configured Meta session for the selected account."""
-    meta = resolve_account(read_config(find_config()), "meta", account())
+def _make_client(config: dict) -> MetaSession:
+    """Build a MetaSession from a parsed config dict for the selected account.
+
+    Separate from _session so the live tests can construct a client from the
+    crude_config fixture, the same way every other site CLI does.
+    """
+    meta = resolve_account(config, "meta", account())
     token = meta.get("access_token")
     if not token:
         which = f"[meta.{account()}]" if account() else "[meta]"
@@ -36,6 +40,11 @@ def _session() -> MetaSession:
         page_id=meta.get("page_id"),
         ig_user_id=meta.get("ig_user_id"),
     )
+
+
+def _session() -> MetaSession:
+    """The configured Meta session, reading the on-disk config."""
+    return _make_client(read_config(find_config()))
 
 
 from crude_meta import cli_facebook, cli_instagram, cli_status  # noqa: E402
