@@ -36,13 +36,13 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), and graph.facebook.com (Meta: Facebook Pages and Instagram posts, insights, comments).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), and graph.facebook.com (Facebook Pages: posts, insights, comments).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[meta]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`). Add `--json` to any read command for machine-readable output.
 
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
@@ -284,26 +284,18 @@ AP Clover POS over the documented REST API. A static Bearer token in `[clover]` 
 
 `orders list` writes JSONL (one Order per line) with line items, modifications, payments, and refunds expanded; it slices the range by local day and splits further if a window exceeds Clover's 10000-offset cap. The category dimension is not on line items, so `catalog dump` exposes each item's raw Clover category for `flatten` to join. `flatten` renders the orders into the legacy Square item-level CSV column shape (one row per line item, plus one negative-Net Sales row per refund), so an analysis built on Square exports can read Clover data; `Category` carries the raw Clover category, and mapping it into report buckets is the analysis's job. `--tz` defaults to Australia/Brisbane and sets both the date bounds and the local Date/Time columns.
 
-## crude-meta (graph.facebook.com)
+## crude-facebook (graph.facebook.com)
 
-Facebook Pages and Instagram over the Meta Graph API, one binary for both because they share one app, one token, and one host; the platform is the first resource word. A bearer token in `[meta]` (`access_token`; optional `page_id`, `ig_user_id`, `app_secret`); there is no login step. The Page id and the linked Instagram account id are resolved at runtime from `/me/accounts`, with the config keys as a fallback when that edge is empty. Writes need a Page access token, which the session derives from the token automatically; see the crude repo docs/meta.md for acquiring a durable token.
+Facebook Page posts, insights, and comments over the Graph API. A bearer token in `[facebook]` (`access_token`, `page_id`; optional `app_secret`); there is no login step. The Page id is resolved at runtime from `/me/accounts`, with `page_id` as a fallback when that edge is empty (a Page managed in Business Manager). Page writes need a Page access token; for a Business-managed Page, use a System User token with the Page assigned and set `page_id`. See the crude repo docs/facebook.md for acquiring a durable token.
 
-    crude-meta account show                      # resolved page_id, page name, ig_user_id
-    crude-meta status                            # token check + Instagram publishing quota
-    crude-meta instagram media list [--limit N]
-    crude-meta instagram media get <id>          # returns id and shortcode together
-    crude-meta instagram media insights <id> [--metric ...]
-    crude-meta instagram media publish --type image|video|reel|carousel|story --url <u> [--url ...] [--caption <s>] [--yes]
-    crude-meta instagram media delete <id> [--yes]
-    crude-meta instagram comment list <media-id> ; comment reply <comment-id> -m <s> ; comment hide|unhide|delete <comment-id> ; comment toggle <media-id> --enabled|--disabled
-    crude-meta instagram account get ; account insights [--metric reach,views,total_interactions] [--period day]
-    crude-meta facebook post list [--scheduled] [--limit N] ; post get <id> ; post insights <id> [--metric ...]
-    crude-meta facebook post create [-m <s>] [--link <u>] [--photo-url <u>] [--schedule <time>] [--yes]
-    crude-meta facebook post edit <id> -m <s> [--yes] ; post delete <id> [--yes]
-    crude-meta facebook comment list <post-id> ; comment reply <object-id> -m <s> ; comment hide|unhide|delete <comment-id>
-    crude-meta facebook page get ; page insights [--metric ...] [--period day]
+    crude-facebook status                        # token check + resolved page id/name
+    crude-facebook post list [--scheduled] [--limit N] ; post get <id> ; post insights <id> [--metric ...]
+    crude-facebook post create [-m <s>] [--link <u>] [--photo-url <u>] [--schedule <time>] [--yes]
+    crude-facebook post edit <id> -m <s> [--yes] ; post delete <id> [--yes]
+    crude-facebook comment list <post-id> ; comment reply <object-id> -m <s> ; comment hide|unhide|delete <comment-id>
+    crude-facebook page get ; page insights [--metric ...] [--period day]
 
-Add `--json` to any read for the raw Graph object. Writes prompt unless `--yes`. Insight metric names shift between Graph versions (`impressions` is gone in favour of `views`, `page_fans` in favour of `page_follows`), so the insight commands take `--metric` to override the defaults. Constraints worth knowing: an Instagram caption cannot be edited via the API (delete and repost instead), a Facebook post edit changes only the message and only on posts this app created, and the Page events edge is not reachable (Meta restricts it to Marketing Partners). On the venue's own Page and Instagram account the full surface runs without Meta App Review.
+Add `--json` to any read for the raw Graph object. Writes prompt unless `--yes`. Insight metric names shift between Graph versions (`impressions` is gone in favour of `views`, `page_fans` in favour of `page_follows`), so the insight commands take `--metric` to override the defaults. Constraints worth knowing: a Facebook post edit changes only the message and only on posts this app created, and the Page events edge is not reachable (Meta restricts it to Marketing Partners). On the venue's own Page the full surface runs without Meta App Review. Instagram is a separate product on Meta's roadmap and is not in this binary.
 """
 
 

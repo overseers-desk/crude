@@ -38,13 +38,12 @@ api_key = "your-airwallex-api-key"  # generate both under Developer > API keys i
 # on_behalf_of = "..."   # optional; a connected-account id for platform (Scale) accounts
 # The bearer is fetched on first use and cached in ~/.local/state/crude/airwallex_token.json (re-logs-in on expiry).
 
-[meta]
-access_token = "your-meta-graph-api-token"  # a long-lived Page or System User token is best
-# page_id = "..."      # optional; resolved from /me/accounts otherwise
-# ig_user_id = "..."   # optional; the linked Instagram Business account, resolved otherwise
+[facebook]
+access_token = "your-facebook-graph-api-token"  # a System User or long-lived Page token is best
+page_id = "..."        # the Facebook Page id
 # app_secret = "..."   # optional; when set, every call carries an appsecret_proof signature
-# One token serves both Facebook Pages and Instagram. Writes need a Page access token, which
-# crude derives from this token automatically; see docs/meta.md for acquiring a durable one.
+# Page writes need a Page access token. For a Page managed in Business Manager, use a System
+# User token with the Page assigned and set page_id; see docs/facebook.md for the steps.
 
 # Multiple accounts on one site
 # -----------------------------

@@ -33,7 +33,7 @@ crude-sonas = "crude_sonas.cli:app"
 crude-xero = "crude_xero.cli:app"
 crude-airwallex = "crude_airwallex.cli:app"
 crude-clover = "crude_clover.cli:app"
-crude-meta = "crude_meta.cli:app"
+crude-facebook = "crude_facebook.cli:app"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
