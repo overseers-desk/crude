@@ -433,18 +433,15 @@ def test_airwallex_lists_pa_payment_intents(crude_config):
 # these drive the real CLI commands through a CliRunner to exercise each branch as
 # the user runs it. A test skips when [facebook] access_token is absent; it fails
 # when the token is present but a read does not come back, which is the signal
-# worth having. The write round-trip mutates the live Page, so it is gated behind
-# an env flag and is reversible (it only ever touches content it creates).
+# worth having. The write round-trip mutates the live Page but is reversible: it
+# only ever touches content it creates, then removes it.
 # ---------------------------------------------------------------------------
 
 import json as _json  # noqa: E402
-import os as _os  # noqa: E402
 
 from typer.testing import CliRunner as _CliRunner  # noqa: E402
 
 _fb_runner = _CliRunner()
-
-_FB_WRITES = _os.environ.get("CRUDE_FACEBOOK_LIVE_WRITES") == "1"
 
 
 def _fb_or_skip(crude_config):
@@ -516,12 +513,16 @@ def test_facebook_comment_list(crude_config, _fb_post_id):
     assert isinstance(_fb_json(["comment", "list", _fb_post_id]), list)
 
 
-# --- writes (reversible, opt-in; touch only content they create) ----------
+# --- writes (reversible; touch only content they create) ------------------
 
 @pytest.mark.live
-@pytest.mark.skipif(not _FB_WRITES, reason="set CRUDE_FACEBOOK_LIVE_WRITES=1 to run live FB writes")
 def test_facebook_write_roundtrip(crude_config):
-    """create post -> comment -> hide -> unhide -> delete comment -> edit -> delete."""
+    """create post -> comment -> delete comment -> edit -> delete.
+
+    hide/unhide are not exercised: a Page cannot hide its own comment (Graph rejects
+    it with code 200), so those verbs only act on a visitor's comment, which a
+    self-contained reversible test cannot create.
+    """
     _fb_or_skip(crude_config)
     post = _fb_json(["post", "create", "-m", "crude-facebook self-test, ignore", "--yes"])
     pid = post.get("id")
@@ -530,8 +531,6 @@ def test_facebook_write_roundtrip(crude_config):
         c = _fb_json(["comment", "reply", pid, "-m", "self-test", "--yes"])
         cid = c.get("id")
         if cid:
-            _fb_json(["comment", "hide", cid, "--yes"])
-            _fb_json(["comment", "unhide", cid, "--yes"])
             _fb_json(["comment", "delete", cid, "--yes"])
         _fb_json(["post", "edit", pid, "-m", "crude-facebook self-test edited, ignore", "--yes"])
     finally:

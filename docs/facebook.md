@@ -106,8 +106,15 @@ unless `--yes`.
 
 ## Constraints worth knowing
 
-- **Post editing is message-only**, and only on posts this app created. A post made
-  in Meta Business Suite or another app is not editable or deletable by this one.
+- **Post editing is message-only**: `post edit` changes the message text; a post's
+  photo or link attachment cannot be swapped. With the recommended System User token
+  (full Page control), edit and delete act on any of the Page's posts, including ones
+  made in Meta Business Suite (verified live against this Page). The Graph docs note
+  an "only the app that created it" limit for some token types; it does not apply to a
+  full-control System User token.
+- **Hiding applies to visitor comments only.** A Page cannot hide its own comment
+  (Graph rejects `is_hidden` on it with code 200); `comment hide`/`unhide` moderate
+  comments left by others. Verified live.
 - **Events are not reachable.** The Page events edge is restricted to Facebook
   Marketing Partners, and event creation via the API is unsupported.
 - **Facebook Groups are not reachable.** Meta removed the Groups API from all
@@ -127,5 +134,6 @@ crude-facebook page insights          # page-level metrics
 ```
 
 The live tests cover every read branch and a reversible write round-trip
-(`pytest -m live -k facebook`; writes need `CRUDE_FACEBOOK_LIVE_WRITES=1`).
+(`pytest -m live -k facebook`); the round-trip creates a post, edits and moderates
+it, then deletes it, touching only content it makes.
 Missing-token and code-190/210 errors print a single clean line, not a traceback.
