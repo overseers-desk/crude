@@ -26,10 +26,11 @@ Description: CRUD-style command-line clients for sites without a public API
  records on sites that lack a usable public API, under one predictable
  <site> <resource> <verb> grammar.
  .
- Eight sites ship as their own binaries: crude-atdw (ATDW tourism listings),
+ The sites ship as their own binaries: crude-atdw (ATDW tourism listings),
  crude-skal (Skal Australia member portal), crude-rezdy (Rezdy products,
  availability, and bookings), crude-deputy (Deputy workforce management),
  crude-sonas (Sonas wedding-venue software), crude-xero (Xero accounting),
- crude-airwallex (Airwallex global payments and transactions), and crude-clover
- (Clover POS orders and catalog). The crude command
+ crude-airwallex (Airwallex global payments and transactions), crude-clover
+ (Clover POS orders and catalog), and crude-facebook (Facebook Pages:
+ posts, insights, comments). The crude command
  lists them and carries the shared --version and install-claude-command flags.
