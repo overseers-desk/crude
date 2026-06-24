@@ -47,7 +47,8 @@ def test_appsecret_proof_is_hmac_sha256():
 
 @pytest.mark.parametrize(
     "code,needle",
-    [(190, "190"), (10, "Permission"), (4, "Rate limited"), (100, "code 100")],
+    [(190, "190"), (210, "Page access token"), (10, "Permission"),
+     (4, "Rate limited"), (100, "code 100")],
 )
 def test_raise_maps_graph_error_codes(code, needle):
     s = MetaSession("tok")
