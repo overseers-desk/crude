@@ -14,48 +14,57 @@ In `~/.config/crude/config.toml`:
 ```toml
 [meta]
 access_token = "your-meta-graph-api-token"
-# page_id = "..."      # optional; resolved from /me/accounts otherwise
-# ig_user_id = "..."   # optional; the linked Instagram account, resolved otherwise
-# app_secret = "..."   # optional; when set, every call carries an appsecret_proof
+page_id = "..."      # the Facebook Page id
+ig_user_id = "..."   # the Instagram Business account id
+# app_secret = "..."  # optional; when set, every call carries an appsecret_proof
 ```
 
-There is no login step. On first use the session resolves the Page (and its
-linked Instagram account) from `GET /me/accounts`, and prefers the per-Page access
-token that call returns, because Page and Instagram writes need a Page token. When
-`/me/accounts` returns nothing (a token that does not carry the Pages list), set
-`page_id` and `ig_user_id` explicitly; the configured token is then used as-is, so
-reads work and writes succeed if that token is itself a Page or System User token.
+There is no login step. Which token to use depends on how the Page is held:
 
-`crude-meta account show` reports the ids that were resolved.
+- **Page managed in Business Manager (the common case).** `/me/accounts` returns
+  nothing for a user token, and a plain user token can neither read the Page nor
+  mint a Page token. Use a Business **System User token** with the Page and the
+  Instagram account assigned, and set `page_id` and `ig_user_id` explicitly. The
+  configured token is then used directly as the Page token for every call.
+- **Page held by a classic Page role.** A user token works: leave `page_id` and
+  `ig_user_id` out, and the session resolves them, and a per-Page token, from
+  `GET /me/accounts`.
 
-## Acquiring a durable token
+If the Instagram account is not linked to the Page (the Page's
+`instagram_business_account` is null), `ig_user_id` cannot be derived from the
+Page; set it explicitly. `crude-meta account show` reports the resolved ids.
 
-A token pasted from the Graph API Explorer is a short-lived user token (about one
-hour). For day-to-day use, obtain a durable one:
+## Acquiring a token
 
-1. Short-lived user token from a Facebook Login flow (or the Explorer) with the
-   scopes you need (see the tables below).
-2. Exchange it for a long-lived user token (about 60 days):
+### System User token (Business-managed Pages; also durable)
 
-   ```
-   GET /oauth/access_token?grant_type=fb_exchange_token
-       &client_id={app-id}&client_secret={app-secret}
-       &fb_exchange_token={short-lived-token}
-   ```
+1. Meta Business Settings (`business.facebook.com/settings`) → Users → System
+   users → Add; name it, role Admin.
+2. Add assets to the system user: the Page (full control) and the Instagram
+   account (full control); assign your app.
+3. Generate a token against the app with the scopes you need (see the tables
+   below); set expiry to "Never" for unattended use.
+4. Put it in `[meta] access_token`, with `page_id` and `ig_user_id`.
 
-3. `GET /me/accounts` with the long-lived user token returns a per-Page
-   `access_token`. A Page token derived from a long-lived user token does not
-   expire by time (it is invalidated only if the user changes their password,
-   removes the app, or loses the Page role).
+A System User token can be non-expiring, so there is no refresh to run.
 
-For unattended automation, a Business Manager **System User** token is the cleaner
-credential: it is not tied to one person's password, and an admin system user can
-mint a non-expiring token. Put whichever durable token you choose in
-`[meta] access_token`.
+### Long-lived user token (classic-role Pages)
+
+A Graph API Explorer token is short-lived (about an hour). Exchange it for a
+~60-day token, after which `/me/accounts` yields a per-Page token:
+
+```
+GET /oauth/access_token?grant_type=fb_exchange_token
+    &client_id={app-id}&client_secret={app-secret}
+    &fb_exchange_token={short-lived-token}
+```
+
+A Page token derived from a long-lived user token does not expire by time (only on
+password change, app removal, or loss of the Page role).
 
 `app_secret` is optional. When set, crude sends an `appsecret_proof` (an
-HMAC-SHA256 of the token keyed by the app secret) on every call, which is required
-if the app has "Require App Secret" enabled.
+HMAC-SHA256 of the token keyed by the app secret) on every call, required if the
+app has "Require App Secret" enabled.
 
 ## Access level
 
