@@ -39,8 +39,7 @@ A site can carry more than one account. The bare `[site]` section is the default
 Homebrew (macOS or Linux):
 
 ```
-brew tap SmartLayer/crude https://github.com/SmartLayer/crude
-brew trust --formula SmartLayer/crude/crude
+brew tap SmartLayer/ot https://github.com/SmartLayer/ot
 brew install crude
 ```
 

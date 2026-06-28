@@ -8,8 +8,9 @@ without a usable public API and some over a documented one, under one
 `[project.scripts]` in `pyproject.toml`, which is the source of truth for the set.
 
 Layout: `src/` holds `crude_common` and one `crude_<site>` package per binary.
-Packaging lives in `debian/` (`.deb`), `crude.spec` (`.rpm`), and
-`formula/crude.rb` (Homebrew).
+Packaging lives in `debian/` (`.deb`) and `crude.spec` (`.rpm`). The Homebrew
+formula lives in the shared tap repo, SmartLayer/ot, at `Formula/crude.rb`; it
+points back at crude's own release tarball and sha256.
 
 ## Releasing
 

@@ -27,9 +27,9 @@ does not affect the artifacts.
 3. **Tag and push:** `git tag vX.Y.Z && git push origin vX.Y.Z`.
 
    Everything below depends only on this tag, not on the working tree. The two
-   package builds (steps 4 and 5) and the Homebrew sha256 (step 7) are
-   independent of one another and can run in parallel; step 6 needs both built
-   packages, and step 8 verifies the finished release.
+   package builds (steps 4 and 5) and the Homebrew sha256 in the ot tap (step 7)
+   are independent of one another and can run in parallel; step 6 needs both
+   built packages, and step 8 verifies the finished release.
 
 4. **Build the `.deb`** from the tagged source so the package matches the
    release exactly:
@@ -66,9 +66,10 @@ does not affect the artifacts.
    below verbatim. GitHub auto-attaches the source tarball that the Homebrew
    formula points at.
 
-7. **Update the Homebrew formula sha256.** Compute the sha256 of the release
-   source tarball and write it into `formula/crude.rb`, then commit and push
-   (this commit follows the tag):
+7. **Bump the Homebrew formula sha256 in the ot tap.** The formula lives in the
+   shared tap repo, SmartLayer/ot, at `Formula/crude.rb`. Compute the sha256 of
+   this release's source tarball, then in the ot repo update `Formula/crude.rb`
+   with the new version and sha256 and push that commit:
 
    ```
    curl -sL https://github.com/SmartLayer/crude/archive/refs/tags/vX.Y.Z.tar.gz | sha256sum
@@ -87,7 +88,7 @@ does not affect the artifacts.
 Homebrew:
 
 ```
-brew tap SmartLayer/crude https://github.com/SmartLayer/crude
+brew tap SmartLayer/ot https://github.com/SmartLayer/ot
 brew install crude
 ```
 
@@ -115,5 +116,5 @@ crude install-claude-command
 A recut republishes the same version after the released artifacts change (for
 example, adding a package format). Move the `vX.Y.Z` tag to the new commit
 (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`), then repeat the build,
-upload, and formula-sha256 steps. Moving the tag changes the source tarball, so
-the formula sha256 is recomputed every recut.
+upload, and the ot-tap formula-sha256 step. Moving the tag changes the source
+tarball, so the formula sha256 in SmartLayer/ot is recomputed every recut.
