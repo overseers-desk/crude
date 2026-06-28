@@ -39,8 +39,8 @@ crude-facebook = "crude_facebook.cli:app"
 test = ["pytest>=7"]
 
 [project.urls]
-Homepage = "https://github.com/SmartLayer/crude"
-Issues = "https://github.com/SmartLayer/crude/issues"
+Homepage = "https://github.com/overseers-desk/crude"
+Issues = "https://github.com/overseers-desk/crude/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]

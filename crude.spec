@@ -3,7 +3,7 @@ Version:        1.4
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
-URL:            https://github.com/SmartLayer/crude
+URL:            https://github.com/overseers-desk/crude
 Source0:        %{url}/archive/refs/tags/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
 BuildArch:      noarch
 

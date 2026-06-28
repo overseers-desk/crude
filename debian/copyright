@@ -1,7 +1,7 @@
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: crude
-Upstream-Contact: https://github.com/SmartLayer/crude/issues
-Source: https://github.com/SmartLayer/crude
+Upstream-Contact: https://github.com/overseers-desk/crude/issues
+Source: https://github.com/overseers-desk/crude
 
 Files: *
 Copyright: 2026 Weiwu Zhang

@@ -12,7 +12,7 @@ does not affect the artifacts.
 ## Prerequisites
 
 - `dpkg-buildpackage` (Debian packaging) and `rpmbuild` (RPM).
-- `gh` authenticated against the `SmartLayer/crude` repository.
+- `gh` authenticated against the `overseers-desk/crude` repository.
 - For Homebrew users, no local tooling is needed; the formula references the
   GitHub-generated source tarball.
 
@@ -48,7 +48,7 @@ does not affect the artifacts.
 
    ```
    mkdir -p ~/rpmbuild/SOURCES
-   curl -sL https://github.com/SmartLayer/crude/archive/refs/tags/vX.Y.Z.tar.gz \
+   curl -sL https://github.com/overseers-desk/crude/archive/refs/tags/vX.Y.Z.tar.gz \
      -o ~/rpmbuild/SOURCES/crude-X.Y.Z.tar.gz
    rpmbuild -bb --nodeps crude.spec
    # artifact: ~/rpmbuild/RPMS/noarch/crude-X.Y.Z-1.noarch.rpm
@@ -73,7 +73,7 @@ does not affect the artifacts.
    commit:
 
    ```
-   curl -sL https://github.com/SmartLayer/crude/archive/refs/tags/vX.Y.Z.tar.gz | sha256sum
+   curl -sL https://github.com/overseers-desk/crude/archive/refs/tags/vX.Y.Z.tar.gz | sha256sum
    ```
 
 8. **Verify** the release carries both package types:
