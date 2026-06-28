@@ -9,7 +9,7 @@ without a usable public API and some over a documented one, under one
 
 Layout: `src/` holds `crude_common` and one `crude_<site>` package per binary.
 Packaging lives in `debian/` (`.deb`) and `crude.spec` (`.rpm`). The Homebrew
-formula lives in the dedicated tap repo, SmartLayer/homebrew-ot, at `Formula/crude.rb`; it
+formula lives in the dedicated tap repo, overseers-desk/homebrew-ot, at `Formula/crude.rb`; it
 points back at crude's own release tarball and sha256.
 
 ## Releasing

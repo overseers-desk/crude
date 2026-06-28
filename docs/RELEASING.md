@@ -67,8 +67,8 @@ does not affect the artifacts.
    formula points at.
 
 7. **Bump the Homebrew formula sha256 in the ot tap.** The formula lives in the
-   dedicated tap repo, SmartLayer/homebrew-ot, at `Formula/crude.rb`. Compute the
-   sha256 of this release's source tarball, then in the SmartLayer/homebrew-ot
+   dedicated tap repo, overseers-desk/homebrew-ot, at `Formula/crude.rb`. Compute the
+   sha256 of this release's source tarball, then in the overseers-desk/homebrew-ot
    repo update `Formula/crude.rb` with the new version and sha256 and push that
    commit:
 
@@ -89,7 +89,7 @@ does not affect the artifacts.
 Homebrew:
 
 ```
-brew tap SmartLayer/ot
+brew tap overseers-desk/ot
 brew install crude
 ```
 
@@ -118,4 +118,4 @@ A recut republishes the same version after the released artifacts change (for
 example, adding a package format). Move the `vX.Y.Z` tag to the new commit
 (`git tag -f vX.Y.Z && git push -f origin vX.Y.Z`), then repeat the build,
 upload, and the ot-tap formula-sha256 step. Moving the tag changes the source
-tarball, so the formula sha256 in SmartLayer/homebrew-ot is recomputed every recut.
+tarball, so the formula sha256 in overseers-desk/homebrew-ot is recomputed every recut.
