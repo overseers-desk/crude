@@ -36,14 +36,6 @@ A site can carry more than one account. The bare `[site]` section is the default
 
 ### Install
 
-The simplest cross-platform install is from PyPI:
-
-```
-pip install crude
-```
-
-With uv, `uvx crude ...` runs it without installing and `uv tool install crude` installs it permanently.
-
 Homebrew (macOS or Linux):
 
 ```
@@ -53,7 +45,7 @@ brew install crude
 
 Debian or Ubuntu: download the `.deb` from the releases page and install it with `sudo apt install ./crude_*_all.deb`.
 
-From a clone, for development:
+From source with pip:
 
 ```
 pip install -e .
