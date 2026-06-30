@@ -660,7 +660,7 @@ Trial any new write per the §11 policy.
 
 ## 10. Setup
 
-1. Fill in the `[sonas]` section following `config.example.toml`.
+1. Fill in the `[sonas]` section following the `crude config-sample` output.
 2. The first run from a new device or network triggers the one-time
    device-verification email (§3); open the link once, and later runs resume from
    the cached token.

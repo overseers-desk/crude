@@ -51,7 +51,23 @@ def _root(
     for name, desc in SITES:
         typer.echo(f"  {name:<12} {desc}")
     typer.echo("\nRun a site command for usage, e.g. `crude-rezdy --help`.")
-    typer.echo("Flags: --version, --help, install-claude-command")
+    typer.echo("Flags: --version, --help, install-claude-command, config-sample")
+
+
+@app.command("config-sample")
+def config_sample() -> None:
+    """Print the example config to stdout.
+
+    Redirect it to your config file to get started:
+
+        crude config-sample > ~/.config/crude/config.toml
+    """
+    from importlib.resources import files
+
+    content = files("crude_common").joinpath("config.example.toml").read_text(
+        encoding="utf-8"
+    )
+    typer.echo(content, nl=False)
 
 
 add_install_command(app)

@@ -8,9 +8,12 @@ without a usable public API and some over a documented one, under one
 `[project.scripts]` in `pyproject.toml`, which is the source of truth for the set.
 
 Layout: `src/` holds `crude_common` and one `crude_<site>` package per binary.
-Packaging lives in `debian/` (`.deb`) and `crude.spec` (`.rpm`). The Homebrew
-formula lives in the dedicated tap repo, overseers-desk/homebrew-ot, at `Formula/crude.rb`; it
-points back at crude's own release tarball and sha256.
+The example config lives at `src/crude_common/config.example.toml` (shipped as
+package data); `crude config-sample` prints it. Packaging covers PyPI
+(`pip install crude`, the primary channel), `debian/` (`.deb`), and `crude.spec`
+(`.rpm`). The Homebrew formula lives in the dedicated tap repo,
+overseers-desk/homebrew-od, at `Formula/crude.rb`; its `url`/`sha256` point at
+the PyPI sdist (the same tarball pip downloads), not the GitHub archive.
 
 ## Releasing
 

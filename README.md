@@ -24,28 +24,36 @@ The tools are deliberately narrow. They authenticate, list, show, search, and ed
 
 ## Setup
 
-Copy the example config and fill in your credentials:
+After installing crude (see Install below), write the example config and fill in your credentials:
 
 ```
-cp config.example.toml ~/.config/crude/config.toml
+crude config-sample > ~/.config/crude/config.toml
 ```
 
 Each site reads its own section (`[atdw]`, `[skal]`) from the one file. The CLIs look for `~/.config/crude/config.toml` first, then fall back to a `config.toml` in the repository root or the current directory for development. Config files are gitignored.
 
-A site can carry more than one account. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one, selected with `--account/-a` (or `$CRUDE_ACCOUNT`) before the resource. One example is a Rezdy venue in Australia and another in Spain, each with its own key and timezone. See `config.example.toml`.
+A site can carry more than one account. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one, selected with `--account/-a` (or `$CRUDE_ACCOUNT`) before the resource. One example is a Rezdy venue in Australia and another in Spain, each with its own key and timezone. See the `crude config-sample` output.
 
 ### Install
+
+The simplest cross-platform install is from PyPI:
+
+```
+pip install crude
+```
+
+With uv, `uvx crude ...` runs it without installing and `uv tool install crude` installs it permanently.
 
 Homebrew (macOS or Linux):
 
 ```
-brew tap overseers-desk/ot
+brew tap overseers-desk/od
 brew install crude
 ```
 
 Debian or Ubuntu: download the `.deb` from the releases page and install it with `sudo apt install ./crude_*_all.deb`.
 
-From source with pip:
+From a clone, for development:
 
 ```
 pip install -e .
