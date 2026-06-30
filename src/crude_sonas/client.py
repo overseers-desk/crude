@@ -410,6 +410,50 @@ class SonasClient:
                 return ev
         raise RuntimeError(f"event {event_id} not found")
 
+    def iter_all_event_ids(self, statuses=range(8)) -> list:
+        """Every event id whose status is in ``statuses`` — including the
+        date-less enquiries that ``eventsByDateRange`` (and thus ``event list``)
+        cannot see.
+
+        Drives the ``EventList`` aldeed:tabular table's first step,
+        ``tabular_getInfo``, with an explicit ``{status:{$in:[...]}}`` selector.
+        That selector overrides the table's default "upcoming" filter
+        (docs/sonas.md §6.1), so the published ``tabular_records`` doc carries the
+        ids of every matching event and the filtered count. Pages by that count
+        until all ids are collected. Read-only: a subscription, never a method
+        call — so it is safe on the export path.
+        """
+        self._ensure()
+        store = self.conn["store"]
+        selector = {"status": {"$in": list(statuses)}}
+        ids: list = []
+        seen: set = set()
+        # The server caps a page at 100 ids regardless of the requested size,
+        # so advance ``skip`` by the batch actually returned and stop only when
+        # the records are exhausted or ``recordsFiltered`` is reached. Breaking
+        # on "batch smaller than requested" would stop one page early whenever
+        # the true total exceeds the server cap.
+        skip = 0
+        while True:
+            store.pop("tabular_records", None)
+            sid = ddp_sub(self.conn, "tabular_getInfo",
+                          ["EventList", selector, [], skip, 200, ""])
+            _drain(self.conn, 1)
+            rec = next(iter(store.get("tabular_records", {}).values()), {})
+            ddp_unsub(self.conn, sid)
+            batch = rec.get("ids") or []
+            total = rec.get("recordsFiltered")
+            if not batch:
+                break
+            for i in batch:
+                if i not in seen:
+                    seen.add(i)
+                    ids.append(i)
+            skip += len(batch)
+            if total is not None and len(ids) >= total:
+                break
+        return ids
+
     # -- method calls (writes, and the few read-methods) ----------------
 
     def call(self, method: str, *args):

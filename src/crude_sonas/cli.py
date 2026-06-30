@@ -8,6 +8,7 @@ Sonas has no public API; this drives its Meteor DDP backend directly (see
 
 import json
 import sys
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 import typer
@@ -433,6 +434,101 @@ def event_get(
         typer.echo(json.dumps(event, indent=2))
         return
     _render_record(event)
+
+
+# Pubs read per event for the corpus export. Every one is a DDP subscription
+# (read), never a method call, so the export path cannot write or delete.
+# eventBasicInfo multi-cursors the event doc + venue + timelines; the rest are
+# the same per-event read pubs the `transaction`/`invoice`/`service-booking`/
+# `message` list verbs use. Contact details (email/phone) live on the customer
+# `users` docs published by eventCustomersInfo, not on the event's `customers`
+# stub, so that pub is required for identity/contact.
+def _bundle_event(client, event_id: str) -> dict:
+    """Collect one event's full record from its read pubs into a plain dict."""
+    basic = client.read_pub("eventBasicInfo", [event_id])
+    event = next((d for d in basic if d.get("_collection") == "events"), None)
+    venues = [d for d in basic if d.get("_collection") == "venues"]
+    timelines = [d for d in basic if d.get("_collection") == "timelines"]
+    sb = client.read_pub("eventServiceBookings", [event_id])
+    return {
+        "event_id": event_id,
+        "event": event,
+        "venue": venues[0] if venues else None,
+        "timelines": timelines,
+        "customers_info": client.read_pub("eventCustomersInfo", [event_id]),
+        "enquiry_data": client.read_pub("enquiryData", [event_id]),
+        "messages": client.read_pub("eventMessages", [event_id], collection="messages"),
+        "transactions": client.read_pub("eventTransactions", [event_id],
+                                        collection="transactions"),
+        "financial_records": client.read_pub("eventFinancialRecords", [event_id],
+                                             collection="financial-records"),
+        "service_bookings": [d for d in sb if d.get("_collection") == "service-bookings"],
+        "services": [d for d in sb if d.get("_collection") == "services"],
+    }
+
+
+def _index_row(bundle: dict) -> dict:
+    """One manifest row: identity and per-event counts, no nested arrays."""
+    event = bundle.get("event") or {}
+    main = next((c for c in (event.get("customers") or []) if c.get("main")),
+                (event.get("customers") or [{}])[0] if event.get("customers") else {})
+    by_id = {d.get("_id"): d for d in bundle.get("customers_info") or []}
+    main_user = by_id.get(main.get("userId"), {})
+    return {
+        "event_id": bundle["event_id"],
+        "status": EVENT_STATUS.get(event.get("status"), s(event.get("status"))),
+        "type": EVENT_TYPE.get(event.get("type"), s(event.get("type"))),
+        "date": date_str(event.get("date")) if event.get("date") else "",
+        "name": _couple(event),
+        "email": main_user.get("email") or main.get("email") or "",
+        "messages": len(bundle.get("messages") or []),
+        "transactions": len(bundle.get("transactions") or []),
+        "financial_records": len(bundle.get("financial_records") or []),
+    }
+
+
+@event_app.command("export")
+def event_export(
+    out: str = typer.Option(..., "--out", help="Directory to write the corpus into."),
+    status: List[str] = typer.Option(
+        None, "--status",
+        help="Statuses to include (name or number); repeatable. Default: all eight."),
+):
+    """Export the full enquiry corpus: one JSON per event plus an index.json.
+
+    Enumerates every event via the EventList tabular read (so date-less and
+    exhausted enquiries that `event list` cannot reach are included), then writes
+    `<event_id>.json` carrying the event, venue, customer identity/contact,
+    messages, and financial records (transactions, invoices, service bookings).
+    Read-only by construction: only subscriptions are used, never a DDP method.
+    """
+    statuses = [_parse_status(v) for v in status] if status else list(range(8))
+    out_dir = Path(out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    client = _client()
+    index, failures = [], []
+    try:
+        ids = client.iter_all_event_ids(statuses)
+        typer.echo(f"Enumerated {len(ids)} event(s); exporting to {out_dir}...")
+        for n, event_id in enumerate(ids, 1):
+            try:
+                bundle = _bundle_event(client, event_id)
+            except Exception as e:
+                failures.append((event_id, str(e)))
+                typer.echo(f"  [{n}/{len(ids)}] {event_id}: FAILED — {e}", err=True)
+                continue
+            (out_dir / f"{event_id}.json").write_text(
+                json.dumps(bundle, indent=2, ensure_ascii=False))
+            index.append(_index_row(bundle))
+    except Exception as e:
+        typer.echo(f"Error exporting corpus: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    (out_dir / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False))
+    typer.echo(f"Wrote {len(index)} event file(s) + index.json to {out_dir}.")
+    if failures:
+        typer.echo(f"{len(failures)} event(s) failed; see stderr above.", err=True)
 
 
 def _now_ejson() -> dict:
