@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.4
+Version:        1.4.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -89,6 +89,10 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Mon Jun 30 2026 Weiwu Zhang <a@colourful.land> - 1.4.1-1
+- crude-sonas: add event export for the full enquiry corpus.
+- Rename GitHub owner SmartLayer to overseers-desk in all project URLs.
+
 * Tue Jun 24 2026 Weiwu Zhang <a@colourful.land> - 1.4-1
 - Add crude-facebook: Facebook Pages client via the Meta Graph API. Covers
   posts (list, get, create, edit, hide/unhide, delete), page insights, and

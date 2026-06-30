@@ -1,3 +1,10 @@
+crude (1.4.1) unstable; urgency=medium
+
+  * crude-sonas: add event export for the full enquiry corpus.
+  * Rename GitHub owner SmartLayer to overseers-desk in all project URLs.
+
+ -- Weiwu Zhang <a@colourful.land>  Mon, 30 Jun 2026 00:00:00 +1000
+
 crude (1.4) unstable; urgency=medium
 
   * Add crude-facebook: Facebook Pages client via the Meta Graph API. Covers
