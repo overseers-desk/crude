@@ -724,3 +724,34 @@ def test_sonas_export_bundle_unbound_is_identity(monkeypatch):
 
     bundle = {"event": {"_id": "E1"}, "messages": [{"createdAt": EJ_AFTER}]}
     assert _asof_bundle(bundle) is bundle
+
+
+# ----------------------------------------------------------------------
+# ATDW: the weakest boundary — flag updatedOn, drop nothing
+# ----------------------------------------------------------------------
+
+
+def test_atdw_listings_flagged_never_dropped(bound, monkeypatch, capsys):
+    import json
+
+    from types import SimpleNamespace
+
+    from crude_atdw import cli as acli
+
+    listings = [
+        {"id": "L1", "listingType": "tour", "slug": "a", "status": "ACTIVE",
+         "updatedOn": BEFORE},
+        {"id": "L2", "listingType": "tour", "slug": "b", "status": "ACTIVE",
+         "updatedOn": AFTER},
+    ]
+    stub = SimpleNamespace(list_listings=lambda limit=20, skip=0: list(listings),
+                           search_listings=lambda w, limit=20, skip=0: list(listings))
+    monkeypatch.setattr(acli, "read_config", lambda p: {})
+    monkeypatch.setattr(acli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(acli, "_make_client", lambda config: stub)
+    acli.list_(scope="own", listing_type=None, city=None, state=None, status=None,
+               name=None, limit=20, offset=0, output_json=True)
+    out = json.loads(capsys.readouterr().out)
+    assert [l["id"] for l in out] == ["L1", "L2"]              # nothing dropped
+    assert asof.MARKER_KEY not in out[0]
+    assert out[1][asof.MARKER_KEY] == asof.MUTATED             # touched-after flagged

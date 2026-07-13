@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
@@ -140,6 +141,12 @@ def list_(
         typer.echo(f"Error fetching listings: {e}", err=True)
         raise typer.Exit(1)
 
+    # The weakest WORLD_AS_OF boundary in the tool, by design: listings are
+    # pure mutable documents with no creation date, and a listing's identity
+    # is stable while its body drifts. Nothing is dropped; anything touched
+    # after the cutoff is flagged via updatedOn.
+    items = asof.bound_records(items, None, "updatedOn", what="listing")
+
     emit_list(items, [
         ("ID", "id"),
         ("Type", "listingType"),
@@ -166,6 +173,10 @@ def get(
         except Exception as e:
             typer.echo(f"Error fetching listing {listing_id}: {e}", err=True)
             raise typer.Exit(1)
+
+    # Current state, flagged when touched after the cutoff (never refused:
+    # the listing's identity predates its body).
+    item = asof.check_record(item, None, "updatedOn", what="listing")
 
     if output_json:
         typer.echo(json.dumps(item, indent=2))

@@ -153,3 +153,54 @@ If the listing is already `ACTIVE`, the command reports this and exits without m
 - Update method: PATCH with only changed fields in the JSON body
 
 See `docs/APIs.md` for the full reverse-engineered API reference including all endpoints, the data model, and enumeration values.
+
+## WORLD_AS_OF
+
+`WORLD_AS_OF` is an office-wide environment variable holding an ISO-8601
+instant with a timezone (e.g. `2026-07-12T17:07:00+10:00`). When set, no crude
+binary may emit anything created after that instant, so a benchmark or replay
+session sees the world as it stood then. Three semantics, exactly:
+
+1. **Unset** — unbounded; nothing changes.
+2. **Set** — records created after the cutoff are excluded (server-side where
+   the backend offers a filter, by exact client-side post-filter where it does
+   not); records created before it are served in their **current state**, and
+   any record whose modified-time is after the cutoff carries
+   `"_world_as_of": "mutated-after-cutoff"` in `--json` output, with a one-line
+   stderr notice per command. Inherently now-valued reads (current balances,
+   FX rates, live availability, insights) refuse. **Every write verb refuses**:
+   a bounded run reads the past, and a write would mutate the live present.
+3. **Set but unparseable** (a timezone-naive value counts) — the command
+   aborts with a clear error before any request. Never a silent fallback.
+
+None of these backends offers point-in-time reads, so the pre-cutoff record
+body is best-effort current state, disclosed as such. The per-backend boundary
+(the operator-facing honesty contract):
+
+| Backend | Server-side bound | Post-filter | Current-state-flagged | Refused under bound |
+|---|---|---|---|---|
+| Airwallex | all lists (`to_created_at`) | `get` by `created_at` | `account get`; `updated_at`>bound | `balance current`, `fx-rate current` |
+| Clover | orders `createdTime<=` | payments/refunds/credits | catalog, registry | `--since` mode |
+| Rezdy | bookings `maxDateCreated` | vouchers, cancellations | products/extras/rates etc.; `dateUpdated`>bound | availability at/after cutoff |
+| Deputy | QUERY `Created le` | plain lists, `get` | `Modified`>bound | — |
+| Xero | accounting `where UpdatedDateUTC<=`; journals exact; report date params | projects/payroll etc. where stamps exist | reports (computed-now); stamp-less lists | — |
+| Sonas | — (DDP) | `createdAt`-family per collection; export bundles | event doc bodies | — |
+| Facebook | posts `until` | posts, comments by `created_time` | `page get` | insights, scheduled posts |
+| ATDW | — | — | listings; `updatedOn`>bound | — |
+| Skål | Odoo domain `create_date<=` | — | `write_date`>bound | — |
+| all | — | — | — | **every write verb** |
+
+Notes worth knowing. The bound acts on *knowledge time* (when a record entered
+the world), never the domain timeline: a roster dated next week but entered
+before the cutoff, or a wedding next year enquired-about last year, is
+correctly visible. Xero's boundary deliberately **over-excludes**: filtering on
+`UpdatedDateUTC` hides a pre-cutoff record edited later, because absence is
+honest and a silently newer body is not; journals (append-only,
+`CreatedDateUTC`) are the one exact surface, and reports are still computed
+from today's ledger over the clamped period, disclosed as such. ATDW is the
+weakest boundary in the tool: listings expose no creation date at all, so they
+are served as-is with only the `updatedOn` flag. Pre-parsed outputs respect the
+bound too: `crude-sonas event export` writes a corpus containing nothing
+created after the cutoff (its `index.json` carries the cutoff and drop
+counts), and `crude-clover flatten` drops post-cutoff orders even from a JSONL
+pulled unbounded.
