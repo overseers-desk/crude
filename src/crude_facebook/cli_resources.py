@@ -14,6 +14,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write
 from crude_facebook.client import (
@@ -61,11 +62,33 @@ def post_list(
     limit: int = typer.Option(25, "--limit", help="Maximum posts to fetch."),
     output_json: bool = _JSON,
 ):
+    if scheduled and asof.active():
+        # A scheduled post is future-dated by nature; none existed at the cutoff.
+        asof.refuse("scheduled posts are future-dated by nature")
     sess = _session()
     edge = "scheduled_posts" if scheduled else "published_posts"
+    bound = asof.world_as_of()
     try:
-        items = list(sess.iter_edge(
-            f"/{sess.page_id}/{edge}", params={"fields": FB_POST_FIELDS}, max_items=limit))
+        if bound is None:
+            items = list(sess.iter_edge(
+                f"/{sess.page_id}/{edge}", params={"fields": FB_POST_FIELDS}, max_items=limit))
+        else:
+            # Server filter (`until`) plus belt-and-braces on created_time.
+            # The feed edge is reverse-chronological, so posts newer than the
+            # bound are dropped while walking down until `limit` old-enough
+            # posts are collected — no early stop on the drop side, or a run
+            # of post-cutoff posts would starve the result.
+            params = {"fields": FB_POST_FIELDS, "until": str(asof.bound_s())}
+            items, dropped = [], 0
+            for item in sess.iter_edge(f"/{sess.page_id}/{edge}", params=params):
+                created = asof.parse_stamp(item.get("created_time"))
+                if created is not None and created > bound:
+                    dropped += 1
+                    continue
+                items.append(item)
+                if len(items) >= limit:
+                    break
+            asof.emit_notice("post", dropped, 0)
     except FacebookError as e:
         typer.echo(f"Error fetching posts: {e}", err=True)
         raise typer.Exit(1)
@@ -83,6 +106,7 @@ def post_get(
     except FacebookError as e:
         typer.echo(f"Error fetching post {post_id}: {e}", err=True)
         raise typer.Exit(1)
+    rec = asof.check_record(rec, "created_time", what="post")
     emit_record(rec, output_json)
 
 
@@ -94,6 +118,11 @@ def post_insights(
         help="Comma-separated metrics."),
     output_json: bool = _JSON,
 ):
+    if asof.active():
+        # Insights are rolling aggregates recomputed over current data with no
+        # per-row timestamp: a count fetched today is not the count as of the
+        # cutoff, and no flag fixes a number.
+        asof.refuse("insights are recomputed aggregates with no as-of form")
     sess = _session()
     try:
         data = sess.get(f"/{post_id}/insights", params={"metric": metric}).get("data", [])
@@ -191,6 +220,9 @@ def comment_list(
     except FacebookError as e:
         typer.echo(f"Error fetching comments for {post_id}: {e}", err=True)
         raise typer.Exit(1)
+    # Fetch-then-drop on created_time: the edge offers no ordering guarantee
+    # worth an early stop, and correctness beats a page of extra reads.
+    items = asof.bound_records(items, "created_time", what="comment")
     emit_list(items, _COMMENT_COLS, "comment", output_json)
 
 
@@ -260,6 +292,8 @@ def page_get(output_json: bool = _JSON):
     except FacebookError as e:
         typer.echo(f"Error fetching page: {e}", err=True)
         raise typer.Exit(1)
+    # Follower counts and the like are now-values: served, disclosed as such.
+    rec = asof.current_state(rec, "the Page profile (follower counts are now-values)")
     emit_record(rec, output_json)
 
 
@@ -270,6 +304,8 @@ def page_insights(
     period: str = typer.Option("day", "--period", help="day, week, or days_28."),
     output_json: bool = _JSON,
 ):
+    if asof.active():
+        asof.refuse("insights are recomputed aggregates with no as-of form")
     sess = _session()
     try:
         data = sess.get(

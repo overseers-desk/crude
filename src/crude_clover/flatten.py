@@ -20,6 +20,8 @@ import json
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from crude_common import asof
+
 # The columns the Square analysis reads, by their exact export header names. The
 # real export carries ~34 columns; the rest are unused by the analysis and are
 # omitted rather than emitted empty.
@@ -134,6 +136,8 @@ def flatten(orders_path: str, catalog_path: str, out_path: str, tz_name: str) ->
         category_map = build_category_map(json.load(f))
 
     written = 0
+    dropped = 0
+    bound_ms = asof.bound_ms()
     with open(orders_path) as src, open(out_path, "w", newline="") as dst:
         writer = csv.DictWriter(dst, fieldnames=COLUMNS)
         writer.writeheader()
@@ -141,7 +145,14 @@ def flatten(orders_path: str, catalog_path: str, out_path: str, tz_name: str) ->
             line = line.strip()
             if not line:
                 continue
-            for row in order_rows(json.loads(line), category_map, tz, tz_name):
+            order = json.loads(line)
+            # The CSV is a pre-parsed report: under WORLD_AS_OF it must respect
+            # the bound even when the JSONL came from an unbounded pull.
+            if bound_ms is not None and (order.get("createdTime") or 0) > bound_ms:
+                dropped += 1
+                continue
+            for row in order_rows(order, category_map, tz, tz_name):
                 writer.writerow(row)
                 written += 1
+    asof.emit_notice("order", dropped, 0)
     return written

@@ -13,6 +13,8 @@ than auto-walked.
 
 from __future__ import annotations
 
+from crude_common import asof
+
 BASE = "projects"
 
 
@@ -48,7 +50,9 @@ class ProjectsAPI:
         query = {"page": page, "pageSize": page_size}
         query.update(params)
         query = {k: v for k, v in query.items() if v is not None}
-        return _items(self.session._get(BASE, path, params=query or None))
+        items = _items(self.session._get(BASE, path, params=query or None))
+        # Projects records expose no audit stamps: current-state under the bound.
+        return asof.current_state(items, path)
 
     # ------------------------------------------------------------------
     # Projects

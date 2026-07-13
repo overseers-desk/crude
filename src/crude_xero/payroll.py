@@ -24,6 +24,7 @@ lone dict value beside the envelope scalars for those.
 
 from __future__ import annotations
 
+from crude_common import asof
 from crude_xero.client import _extract_list
 
 BASE = "payroll_au"
@@ -42,8 +43,13 @@ class PayrollAU:
 
         First page only by default; `all_pages` walks to the end and `limit` caps
         the total records (paging as needed, then truncating).
+
+        Under WORLD_AS_OF the same conservative rule as Accounting applies: a
+        record whose UpdatedDateUTC is past the cutoff is excluded client-side
+        (Payroll AU exposes no where filter), never served newer than it claims.
         """
-        return self.session.paginate(BASE, collection, all_pages=all_pages, limit=limit)
+        items = self.session.paginate(BASE, collection, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "UpdatedDateUTC", what=collection)
 
     def _one(self, data):
         """Unwrap a single record from a Payroll AU get response.
@@ -65,7 +71,8 @@ class PayrollAU:
         return data
 
     def _get_one(self, collection, guid):
-        return self._one(self.session._get(BASE, f"{collection}/{guid}"))
+        record = self._one(self.session._get(BASE, f"{collection}/{guid}"))
+        return asof.deny_newer(record, "UpdatedDateUTC", f"{collection} record")
 
     def _create(self, collection, body):
         """Create via POST to the collection (Payroll AU has no PUT)."""

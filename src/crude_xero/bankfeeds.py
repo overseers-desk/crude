@@ -16,6 +16,8 @@ tests are mock-only.
 
 from __future__ import annotations
 
+from crude_common import asof
+
 BASE = "bankfeeds"
 
 
@@ -52,7 +54,9 @@ class BankFeedsAPI:
         """
         params = {"page": page, "pageSize": page_size}
         params = {k: v for k, v in params.items() if v is not None}
-        return self._items(self.session._get(BASE, path, params=params or None))
+        items = self._items(self.session._get(BASE, path, params=params or None))
+        # BankFeeds records expose no audit stamps: current-state under the bound.
+        return asof.current_state(items, path)
 
     # ------------------------------------------------------------------
     # Feed connections (link an FI account to a Xero bank account)

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from urllib3.filepost import encode_multipart_formdata
 
+from crude_common import asof
 from crude_xero.client import PAGE_SIZE
 
 BASE = "files"
@@ -64,10 +65,17 @@ class FilesAPI:
             if limit is None and not all_pages:
                 break
             page += 1
-        return results[:limit] if limit is not None else results
+        results = results[:limit] if limit is not None else results
+        # Files carry real created/updated stamps: drop created-after, flag
+        # updated-after (the true created-time rule, unlike Accounting).
+        return asof.bound_records(results, "CreatedDateUtc", "UpdatedDateUtc", what="file")
 
     def get_file(self, file_id):
-        return self.session._get(BASE, f"Files/{file_id}")
+        record = self.session._get(BASE, f"Files/{file_id}")
+        # Created after the cutoff: excluded. Renamed/moved after: flagged.
+        record = asof.deny_newer(record, "CreatedDateUtc", "file")
+        kept, _, _ = asof.post_filter([record], None, "UpdatedDateUtc")
+        return kept[0]
 
     def upload_file(self, name, content: bytes, mime, folder_id=None):
         """Upload a file as multipart/form-data (the one verb JSON cannot carry).
@@ -100,9 +108,13 @@ class FilesAPI:
     # ------------------------------------------------------------------
 
     def list_folders(self, *, all_pages=False, limit=None):
-        """List folders (a bare array; Folders is not paged). limit truncates."""
+        """List folders (a bare array; Folders is not paged). limit truncates.
+
+        Folders carry no audit stamps: served current-state under WORLD_AS_OF.
+        """
         folders = _items(self.session._get(BASE, "Folders"))
-        return folders[:limit] if limit is not None else folders
+        folders = folders[:limit] if limit is not None else folders
+        return asof.current_state(folders, "folders")
 
     def get_folder(self, folder_id):
         return self.session._get(BASE, f"Folders/{folder_id}")

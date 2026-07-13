@@ -10,9 +10,86 @@ friendly parent name resolved against a whitelist, not duplicated per resource.
 
 from __future__ import annotations
 
+from datetime import timezone
+
+from crude_common import asof
 from crude_xero.client import XeroError, _extract_list
 
 BASE = "accounting"
+
+# WORLD_AS_OF boundary tables. Xero exposes no created-date filter on most
+# accounting collections, so the bound rides UpdatedDateUTC and OVER-EXCLUDES:
+# a pre-cutoff invoice edited yesterday disappears rather than being served
+# newer than it claims. That is the conservative choice — absence is honest, a
+# silently newer body is not.
+#
+# _ASOF_SERVER_BOUND: collections documented to carry UpdatedDateUTC and take a
+# ``where`` filter get the clause injected server-side (the client-side drop
+# below still runs as the belt). The others are bounded client-side only.
+_ASOF_SERVER_BOUND = {
+    "Accounts", "BankTransactions", "BatchPayments", "Contacts", "CreditNotes",
+    "Employees", "Invoices", "Items", "LinkedTransactions", "ManualJournals",
+    "Overpayments", "Payments", "Prepayments", "PurchaseOrders", "Quotes",
+    "Receipts", "Users",
+}
+
+# _ASOF_STAMP: the exclusion stamp per collection where it is not the default
+# UpdatedDateUTC. None = stamp-less: nothing can be dropped or dated, so the
+# rows are served current-state-flagged. BankTransfers are immutable after
+# create, so their CreatedDateUTC drop is exact, the append-only ideal.
+_ASOF_STAMP = {
+    "BankTransfers": "CreatedDateUTC",
+    "BrandingThemes": "CreatedDateUTC",
+    "Currencies": None,
+    "PaymentServices": None,
+    "ContactGroups": None,
+    "TaxRates": None,
+    "TrackingCategories": None,
+    "RepeatingInvoices": None,
+}
+
+
+def _asof_stamp(collection):
+    return _ASOF_STAMP.get(collection, "UpdatedDateUTC")
+
+
+def asof_clamp_report_params(params, *, inject_date=True):
+    """Clamp a report's date params to the WORLD_AS_OF cutoff's date.
+
+    ``date``/``toDate``/``balanceDate`` are clamped (an unparseable value is
+    replaced, never trusted); a ``fromDate`` after the cutoff refuses; with no
+    period at all, ``date`` is injected so the endpoint does not default to
+    today. Shared by the Accounting reports and the Finance statements. Any
+    report is still computed from today's ledger over the period — a
+    post-cutoff back-dated edit leaks in — so the disclosure is emitted here.
+    """
+    b = asof.world_as_of()
+    if b is None:
+        return params
+    out = dict(params or {})
+    asof.check_window_start(out.get("fromDate"), "fromDate")
+    cap = b.date().isoformat()
+    for key in ("date", "toDate", "balanceDate"):
+        if key in out:
+            v = asof.parse_stamp(out[key])
+            if v is None or v > b:
+                out[key] = cap
+    if inject_date and not any(k in out for k in ("date", "fromDate", "toDate", "balanceDate")):
+        out["date"] = cap
+    asof.emit_current_state(
+        "this report (computed from today's ledger over the bounded period)")
+    return out
+
+
+def _asof_where(collection, where):
+    """The caller's where with ``UpdatedDateUTC <= bound`` AND-composed in."""
+    b = asof.world_as_of()
+    if b is None or collection not in _ASOF_SERVER_BOUND:
+        return where
+    u = b.astimezone(timezone.utc)
+    clause = (f"UpdatedDateUTC <= DateTime({u.year},{u.month},{u.day},"
+              f"{u.hour},{u.minute},{u.second})")
+    return f"({where}) AND {clause}" if where else clause
 
 # Friendly singular -> Xero collection, for the attachment-capable resources.
 ATTACHMENT_ENDPOINTS = {
@@ -73,12 +150,22 @@ class AccountingAPI:
     # ------------------------------------------------------------------
 
     def _list(self, collection, *, where=None, order=None, all_pages=False, limit=None, **params):
-        """List a collection (first page by default; all_pages/limit widen it), dropping unset filters."""
-        query = {"where": where, "order": order}
+        """List a collection (first page by default; all_pages/limit widen it), dropping unset filters.
+
+        Under WORLD_AS_OF the bound is enforced here for every accounting list:
+        the ``UpdatedDateUTC <=`` where clause server-side (whitelisted
+        collections), the client-side stamp drop as the belt, and the
+        current-state flag for the stamp-less collections.
+        """
+        query = {"where": _asof_where(collection, where), "order": order}
         query.update(params)
         query = {k: v for k, v in query.items() if v is not None}
-        return self.session.paginate(BASE, collection, params=query or None,
-                                     all_pages=all_pages, limit=limit)
+        items = self.session.paginate(BASE, collection, params=query or None,
+                                      all_pages=all_pages, limit=limit)
+        stamp = _asof_stamp(collection)
+        if stamp is None:
+            return asof.current_state(items, collection)
+        return asof.bound_records(items, stamp, what=collection)
 
     def _one(self, data):
         """Unwrap a single record from the list-wrapped get response."""
@@ -88,7 +175,14 @@ class AccountingAPI:
         return data if isinstance(data, dict) else {}
 
     def _get_one(self, collection, guid):
-        return self._one(self.session._get(BASE, f"{collection}/{guid}"))
+        record = self._one(self.session._get(BASE, f"{collection}/{guid}"))
+        # The same conservative rule as the lists: a record touched after the
+        # cutoff is excluded, not served newer than it claims. Stamp-less
+        # collections are served current-state-flagged.
+        stamp = _asof_stamp(collection)
+        if stamp is None:
+            return asof.current_state(record, f"this {collection} record")
+        return asof.deny_newer(record, stamp, f"{collection} record")
 
     def _create(self, collection, body):
         return self.session._put(BASE, collection, json=body)
@@ -350,7 +444,10 @@ class AccountingAPI:
                 break
             if limit is None and not all_pages:
                 break
-        return results[:limit] if limit is not None else results
+        results = results[:limit] if limit is not None else results
+        # Journals are append-only with a CreatedDateUTC: the one exact as-of
+        # surface in the whole product. Post-filter, nothing to flag.
+        return asof.bound_records(results, "CreatedDateUTC", what="journal")
 
     def get_journal(self, guid):
         return self._get_one("Journals", guid)
@@ -530,7 +627,15 @@ class AccountingAPI:
         return _extract_list(self.session._get(BASE, "Reports"))
 
     def get_report(self, report_name, params=None):
-        """Fetch a named report (report_name is the Xero name, e.g. BalanceSheet)."""
+        """Fetch a named report (report_name is the Xero name, e.g. BalanceSheet).
+
+        Under WORLD_AS_OF the date params are clamped to the cutoff's date (and
+        ``date`` injected when the caller set no period at all, since the
+        endpoint would otherwise default to today). The report is still
+        computed from today's ledger over that period — a post-cutoff
+        back-dated edit leaks in — so it is disclosed as computed-now.
+        """
+        params = asof_clamp_report_params(params)
         return self.session._get(BASE, f"Reports/{report_name}", params=params)
 
     # ------------------------------------------------------------------

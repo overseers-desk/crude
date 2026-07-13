@@ -20,6 +20,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
 from crude_common.config import s
@@ -88,7 +89,7 @@ def _resource(spec) -> typer.Typer:
             except CloverError as e:
                 typer.echo(f"Error: {e}", err=True)
                 raise typer.Exit(1)
-            emit_record(rec, output_json)
+            emit_record(asof.current_state(rec, f"the {name} record"), output_json)
         return sub
 
     @sub.command("list", help=f"List {name}.")
@@ -106,6 +107,13 @@ def _resource(spec) -> typer.Typer:
         except CloverError as e:
             typer.echo(f"Error fetching {name}: {e}", err=True)
             raise typer.Exit(1)
+        # Payments/refunds/credits/cash-events carry createdTime and are
+        # post-filtered exactly; the catalog and registry are mutable
+        # current-state with no usable audit filter, served flagged.
+        if spec.created:
+            items = asof.bound_records(items, spec.created, "modifiedTime", what=name)
+        else:
+            items = asof.current_state(items, name)
         emit_list(items, cols, name, output_json)
 
     @sub.command("get", help=f"Show one {name} by id.")
@@ -119,6 +127,10 @@ def _resource(spec) -> typer.Typer:
         except CloverError as e:
             typer.echo(f"Error fetching {name} {rid}: {e}", err=True)
             raise typer.Exit(1)
+        if spec.created:
+            rec = asof.check_record(rec, spec.created, "modifiedTime", what=name)
+        else:
+            rec = asof.current_state(rec, f"this {name} record")
         emit_record(rec, output_json)
 
     if spec.writable:
@@ -183,6 +195,12 @@ def _g_list(
     except CloverError as e:
         typer.echo(f"Error fetching {segment}: {e}", err=True)
         raise typer.Exit(1)
+    # An unregistered segment's shape is unknown: post-filter on createdTime
+    # when the rows carry it, else serve current-state-flagged.
+    if items and all(isinstance(r, dict) and "createdTime" in r for r in items):
+        items = asof.bound_records(items, "createdTime", "modifiedTime", what=segment)
+    else:
+        items = asof.current_state(items, segment)
     _auto_emit(items, output_json, segment)
 
 
@@ -199,6 +217,10 @@ def _g_get(
     except CloverError as e:
         typer.echo(f"Error fetching {segment} {rid}: {e}", err=True)
         raise typer.Exit(1)
+    if isinstance(rec, dict) and "createdTime" in rec:
+        rec = asof.check_record(rec, "createdTime", "modifiedTime", what=segment)
+    else:
+        rec = asof.current_state(rec, f"this {segment} record")
     emit_record(rec, output_json)
 
 

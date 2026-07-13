@@ -21,11 +21,16 @@ from itertools import islice
 
 from crude_clover.client import PAGE
 
-ResourceSpec = namedtuple("ResourceSpec", "name segment columns expand writable singleton")
+# ``created`` names the record's creation-time field (epoch ms) where one
+# exists — the WORLD_AS_OF post-filter key. None means the resource is mutable
+# current-state with no usable audit stamp (the catalog and the registry),
+# served flagged under a bound rather than filtered.
+ResourceSpec = namedtuple("ResourceSpec", "name segment columns expand writable singleton created")
 
 
-def _spec(name, segment, columns, *, expand=None, writable=False, singleton=False):
-    return ResourceSpec(name, segment, columns, expand, writable, singleton)
+def _spec(name, segment, columns, *, expand=None, writable=False, singleton=False,
+          created=None):
+    return ResourceSpec(name, segment, columns, expand, writable, singleton, created)
 
 
 # --- column formatters -------------------------------------------------------
@@ -135,15 +140,17 @@ REGISTRY = [
           [("ID", "id"), ("Name", "name"), ("Serial", "serial"), ("Model", "model")]),
     _spec("cash-events", "cash_events",
           [("ID", "id"), ("Type", "type"), ("Amount", cents("amountChange")),
-           ("Time", ms_local("timestamp"))]),
+           ("Time", ms_local("timestamp"))], created="timestamp"),
     # Orders domain (read-only: created through payment flows, not plain POST)
     _spec("payments", "payments",
           [("ID", "id"), ("Amount", cents("amount")), ("Result", "result"),
-           ("Time", ms_local("createdTime"))]),
+           ("Time", ms_local("createdTime"))], created="createdTime"),
     _spec("refunds", "refunds",
-          [("ID", "id"), ("Amount", cents("amount")), ("Time", ms_local("createdTime"))]),
+          [("ID", "id"), ("Amount", cents("amount")), ("Time", ms_local("createdTime"))],
+          created="createdTime"),
     _spec("credits", "credits",
-          [("ID", "id"), ("Amount", cents("amount")), ("Time", ms_local("createdTime"))]),
+          [("ID", "id"), ("Amount", cents("amount")), ("Time", ms_local("createdTime"))],
+          created="createdTime"),
     # Read-only singletons (get only, no id)
     _spec("merchant", "",
           [("ID", "id"), ("Name", "name"), ("Currency", "currency")], singleton=True),

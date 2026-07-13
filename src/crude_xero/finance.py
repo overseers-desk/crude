@@ -17,6 +17,9 @@ endpoint.
 
 from __future__ import annotations
 
+from crude_common import asof
+from crude_xero.accounting import asof_clamp_report_params
+
 BASE = "finance"
 
 
@@ -29,8 +32,14 @@ class FinanceAPI:
     # ------------------------------------------------------------------
 
     def get_cash_validation(self, params=None):
-        """Fetch the cash-validation result (query: balanceDate, etc.)."""
-        return self.session._get(BASE, "CashValidation", params=params)
+        """Fetch the cash-validation result (query: balanceDate, etc.).
+
+        Under WORLD_AS_OF the balanceDate is clamped to the cutoff's date (and
+        injected when absent); the result is still computed from today's
+        ledger, disclosed as such by the clamp helper.
+        """
+        return self.session._get(BASE, "CashValidation",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     # ------------------------------------------------------------------
     # Bank statements (BankStatementsPlus — the reconciliation-relevant read)
@@ -44,6 +53,14 @@ class FinanceAPI:
         and `toDate` query params (plus optional `summaryOnly`); unset params are
         dropped.
         """
+        asof.check_window_start(from_date, "fromDate")
+        b = asof.world_as_of()
+        if b is not None:
+            cap = b.date().isoformat()
+            v = asof.parse_stamp(to_date)
+            if to_date is None or v is None or v > b:
+                to_date = cap
+            asof.emit_current_state("these statement lines (a live feed read)")
         params = {
             "bankAccountID": bank_account_id,
             "fromDate": from_date,
@@ -58,29 +75,37 @@ class FinanceAPI:
     # ------------------------------------------------------------------
 
     def get_balance_sheet(self, params=None):
-        return self.session._get(BASE, "FinancialStatements/BalanceSheet", params=params)
+        return self.session._get(BASE, "FinancialStatements/BalanceSheet",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_profit_and_loss(self, params=None):
-        return self.session._get(BASE, "FinancialStatements/ProfitAndLoss", params=params)
+        return self.session._get(BASE, "FinancialStatements/ProfitAndLoss",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_cash_flow(self, params=None):
-        return self.session._get(BASE, "FinancialStatements/Cashflow", params=params)
+        return self.session._get(BASE, "FinancialStatements/Cashflow",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_trial_balance(self, params=None):
-        return self.session._get(BASE, "FinancialStatements/TrialBalance", params=params)
+        return self.session._get(BASE, "FinancialStatements/TrialBalance",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     # ------------------------------------------------------------------
     # Accounting activities
     # ------------------------------------------------------------------
 
     def get_account_usage(self, params=None):
-        return self.session._get(BASE, "AccountingActivities/AccountUsage", params=params)
+        return self.session._get(BASE, "AccountingActivities/AccountUsage",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_lock_history(self, params=None):
-        return self.session._get(BASE, "AccountingActivities/LockHistory", params=params)
+        return self.session._get(BASE, "AccountingActivities/LockHistory",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_report_history(self, params=None):
-        return self.session._get(BASE, "AccountingActivities/ReportHistory", params=params)
+        return self.session._get(BASE, "AccountingActivities/ReportHistory",
+                                 params=asof_clamp_report_params(params, inject_date=False))
 
     def get_user_activities(self, params=None):
-        return self.session._get(BASE, "AccountingActivities/UserActivities", params=params)
+        return self.session._get(BASE, "AccountingActivities/UserActivities",
+                                 params=asof_clamp_report_params(params, inject_date=False))

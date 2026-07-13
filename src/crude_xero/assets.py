@@ -12,6 +12,8 @@ or delete); settings is read-only.
 
 from __future__ import annotations
 
+from crude_common import asof
+
 BASE = "assets"
 
 
@@ -52,7 +54,9 @@ class AssetsAPI:
         """
         params = {"status": status, "page": page, "pageSize": page_size, "orderBy": order_by}
         params = {k: v for k, v in params.items() if v is not None}
-        return self._items(self.session._get(BASE, "Assets", params=params))
+        items = self._items(self.session._get(BASE, "Assets", params=params))
+        # Assets expose no audit stamps: current-state under the bound.
+        return asof.current_state(items, "assets")
 
     def get_asset(self, asset_id):
         return self.session._get(BASE, f"Assets/{asset_id}")
@@ -66,7 +70,7 @@ class AssetsAPI:
 
     def list_asset_types(self):
         data = self.session._get(BASE, "AssetTypes")
-        return data if isinstance(data, list) else []
+        return asof.current_state(data if isinstance(data, list) else [], "asset types")
 
     def create_asset_type(self, body):
         return self.session._post(BASE, "AssetTypes", json=body)

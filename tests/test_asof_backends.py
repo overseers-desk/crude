@@ -370,3 +370,267 @@ def test_skal_unbound_leaves_domain_and_fields_alone(monkeypatch):
     client.list_members()
     assert not any(c[0] == "create_date" for c in seen["domain"] if isinstance(c, (list, tuple)))
     assert "write_date" not in seen["fields"]
+
+
+# ----------------------------------------------------------------------
+# Xero: UpdatedDateUTC where-clause; journals exact; reports clamped
+# ----------------------------------------------------------------------
+
+
+def _xero_session():
+    from crude_xero.client import XeroSession
+
+    return XeroSession("acct", "cid", "secret",
+                       {"access_token": "T", "refresh_token": "R",
+                        "expires_at": time.time() + 9999})
+
+
+def _xero_accounting(monkeypatch, body, seen):
+    from crude_xero.accounting import AccountingAPI
+
+    sess = _xero_session()
+
+    def fake(method, url, **kw):
+        seen.update(url=url, params=kw.get("params"))
+        return _FakeResp(body=body)
+
+    monkeypatch.setattr(sess.session, "request", fake)
+    return AccountingAPI(sess)
+
+
+def test_xero_list_injects_updated_where_and_composes_with_user_where(bound, monkeypatch):
+    seen = {}
+    api = _xero_accounting(monkeypatch, {"Invoices": []}, seen)
+    api.list_invoices()
+    assert seen["params"]["where"] == "UpdatedDateUTC <= DateTime(2026,7,12,7,7,0)"
+    api.list_invoices(where='Status=="AUTHORISED"')
+    assert seen["params"]["where"] == ('(Status=="AUTHORISED") AND '
+                                       "UpdatedDateUTC <= DateTime(2026,7,12,7,7,0)")
+
+
+def test_xero_list_drops_leaked_post_cutoff_rows(bound, monkeypatch):
+    # The conservative rule: touched-after-cutoff rows are excluded, not flagged.
+    rows = [
+        {"InvoiceID": "a", "UpdatedDateUTC": "/Date(1751328000000+0000)/"},   # 2025
+        {"InvoiceID": "b", "UpdatedDateUTC": "/Date(1789999999000+0000)/"},   # post-cutoff
+    ]
+    api = _xero_accounting(monkeypatch, {"Invoices": rows}, {})
+    items = api.list_invoices()
+    assert [r["InvoiceID"] for r in items] == ["a"]
+
+
+def test_xero_stampless_collection_is_current_state_flagged(bound, monkeypatch):
+    api = _xero_accounting(monkeypatch, {"Currencies": [{"Code": "AUD"}]}, {})
+    items = api.list_currencies()
+    assert items[0][asof.MARKER_KEY] == asof.CURRENT_STATE
+
+
+def test_xero_get_refuses_record_touched_after_cutoff(bound, monkeypatch):
+    body = {"Invoices": [{"InvoiceID": "b",
+                          "UpdatedDateUTC": "/Date(1789999999000+0000)/"}]}
+    api = _xero_accounting(monkeypatch, body, {})
+    with pytest.raises(asof.WorldAsOfError):
+        api.get_invoice("b")
+
+
+def test_xero_journals_post_filter_created_exactly(bound, monkeypatch):
+    rows = [
+        {"JournalNumber": 1, "CreatedDateUTC": "/Date(1751328000000+0000)/"},
+        {"JournalNumber": 2, "CreatedDateUTC": "/Date(1789999999000+0000)/"},
+    ]
+    api = _xero_accounting(monkeypatch, {"Journals": rows}, {})
+    items = api.list_journals()
+    assert [j["JournalNumber"] for j in items] == [1]
+
+
+def test_xero_report_params_clamped_and_injected(bound, monkeypatch, capsys):
+    seen = {}
+    api = _xero_accounting(monkeypatch, {"Reports": []}, seen)
+    api.get_report("BalanceSheet", {"date": "2026-08-01"})
+    assert seen["params"]["date"] == "2026-07-12"              # clamped to the cutoff's date
+    api.get_report("BalanceSheet", None)
+    assert seen["params"]["date"] == "2026-07-12"              # injected, never defaults to today
+    api.get_report("ProfitAndLoss", {"fromDate": "2026-06-01", "toDate": "2026-06-30"})
+    assert seen["params"]["toDate"] == "2026-06-30"            # inside the world: untouched
+    assert "computed from today's ledger" in capsys.readouterr().err
+
+
+def test_xero_report_from_date_after_cutoff_refuses(bound, monkeypatch):
+    import typer
+
+    api = _xero_accounting(monkeypatch, {"Reports": []}, {})
+    with pytest.raises(typer.Exit):
+        api.get_report("ProfitAndLoss", {"fromDate": "2026-08-01"})
+
+
+def test_xero_payroll_list_drops_touched_after_cutoff(bound, monkeypatch):
+    from crude_xero.payroll import PayrollAU
+
+    sess = _xero_session()
+    rows = [
+        {"EmployeeID": "a", "UpdatedDateUTC": "/Date(1751328000000+0000)/"},
+        {"EmployeeID": "b", "UpdatedDateUTC": "/Date(1789999999000+0000)/"},
+    ]
+    monkeypatch.setattr(sess.session, "request",
+                        lambda method, url, **kw: _FakeResp(body={"Employees": rows}))
+    items = PayrollAU(sess).list_employees()
+    assert [r["EmployeeID"] for r in items] == ["a"]
+
+
+# ----------------------------------------------------------------------
+# Facebook: until server param, reverse-chron belt filter, refusals
+# ----------------------------------------------------------------------
+
+
+def _fb_session_stub(posts, seen):
+    from types import SimpleNamespace
+
+    def iter_edge(path, params=None, token=None, max_items=None):
+        seen.update(path=path, params=dict(params or {}), max_items=max_items)
+        rows = iter(posts)
+        count = 0
+        for row in rows:
+            yield row
+            count += 1
+            if max_items and count >= max_items:
+                return
+
+    return SimpleNamespace(page_id="P1", iter_edge=iter_edge,
+                           get=lambda path, params=None: {})
+
+
+def test_facebook_post_list_until_and_created_time_belt(bound, monkeypatch, capsys):
+    import json
+
+    from crude_facebook import cli_resources as fbr
+
+    posts = [
+        {"id": "p3", "created_time": AFTER},    # newest first: post-cutoff, dropped
+        {"id": "p2", "created_time": BEFORE},
+        {"id": "p1", "created_time": "2026-06-01T00:00:00+0000"},
+    ]
+    seen = {}
+    monkeypatch.setattr(fbr, "_session", lambda: _fb_session_stub(posts, seen))
+    fbr.post_list(scheduled=False, limit=2, output_json=True)
+    assert seen["params"]["until"] == str(asof.bound_s())      # server filter sent
+    out = json.loads(capsys.readouterr().out)
+    assert [p["id"] for p in out] == ["p2", "p1"]              # belt keeps walking past drops
+
+
+def test_facebook_scheduled_posts_refuse(bound, monkeypatch):
+    import typer
+
+    from crude_facebook import cli_resources as fbr
+
+    monkeypatch.setattr(fbr, "_session",
+                        lambda: pytest.fail("refused read built a session"))
+    with pytest.raises(typer.Exit):
+        fbr.post_list(scheduled=True, limit=25, output_json=False)
+
+
+def test_facebook_insights_refuse(bound, monkeypatch):
+    import typer
+
+    from crude_facebook import cli_resources as fbr
+
+    monkeypatch.setattr(fbr, "_session",
+                        lambda: pytest.fail("refused read built a session"))
+    with pytest.raises(typer.Exit):
+        fbr.post_insights(post_id="p1", metric="post_clicks", output_json=False)
+    with pytest.raises(typer.Exit):
+        fbr.page_insights(metric="page_follows", period="day", output_json=False)
+
+
+def test_facebook_comments_fetch_then_drop(bound, monkeypatch, capsys):
+    import json
+
+    from crude_facebook import cli_resources as fbr
+
+    comments = [
+        {"id": "c1", "created_time": BEFORE},
+        {"id": "c2", "created_time": AFTER},
+    ]
+    monkeypatch.setattr(fbr, "_session", lambda: _fb_session_stub(comments, {}))
+    fbr.comment_list(post_id="p1", output_json=True)
+    out = json.loads(capsys.readouterr().out)
+    assert [c["id"] for c in out] == ["c1"]
+
+
+def test_facebook_page_get_is_current_state(bound, monkeypatch, capsys):
+    import json
+
+    from types import SimpleNamespace
+
+    from crude_facebook import cli_resources as fbr
+
+    stub = SimpleNamespace(page_id="P1",
+                           get=lambda path, params=None: {"id": "P1", "followers_count": 9})
+    monkeypatch.setattr(fbr, "_session", lambda: stub)
+    fbr.page_get(output_json=True)
+    out = json.loads(capsys.readouterr().out)
+    assert out[asof.MARKER_KEY] == asof.CURRENT_STATE
+
+
+# ----------------------------------------------------------------------
+# Rezdy: availability refusal, vouchers by issueDate, catalog current-state
+# ----------------------------------------------------------------------
+
+
+def test_rezdy_availability_past_cutoff_refuses(bound, monkeypatch):
+    import typer
+
+    from crude_rezdy import cli as rcli
+
+    monkeypatch.setattr(rcli, "read_config",
+                        lambda p: {"rezdy": {"api_key": "k", "timezone": "Australia/Brisbane"}})
+    monkeypatch.setattr(rcli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(rcli, "_client", lambda: pytest.fail("refused read built a client"))
+    with pytest.raises(typer.Exit):
+        rcli.list_availability(product="P1", from_="2026-07-20 00:00:00",
+                               to="2026-07-25 23:59:59", min_availability=None,
+                               limit=100, output_json=False)
+
+
+def test_rezdy_vouchers_drop_issued_after_cutoff(bound, monkeypatch, capsys):
+    import json
+
+    from types import SimpleNamespace
+
+    from crude_rezdy import cli as rcli
+
+    vouchers = [
+        {"code": "V1", "issueDate": BEFORE},
+        {"code": "V2", "issueDate": AFTER},
+    ]
+    stub = SimpleNamespace(list_vouchers=lambda search="", limit=100, offset=0: list(vouchers))
+    monkeypatch.setattr(rcli, "_client", lambda: stub)
+    rcli.list_vouchers(search=None, limit=100, offset=0, output_json=True)
+    out = json.loads(capsys.readouterr().out)
+    assert [v["code"] for v in out] == ["V1"]
+
+
+# ----------------------------------------------------------------------
+# Clover: payments post-filtered by createdTime; flatten respects the bound
+# ----------------------------------------------------------------------
+
+
+def test_clover_flatten_drops_post_cutoff_orders(bound, tmp_path, capsys):
+    import json
+
+    from crude_clover.flatten import flatten
+
+    catalog = tmp_path / "catalog.json"
+    catalog.write_text(json.dumps({"items": []}))
+    orders = tmp_path / "orders.jsonl"
+    orders.write_text("\n".join(json.dumps(o) for o in [
+        {"id": "o1", "createdTime": BOUND_MS - 1000,
+         "lineItems": {"elements": [{"name": "Flat White", "price": 500}]}},
+        {"id": "o2", "createdTime": BOUND_MS + 1000,
+         "lineItems": {"elements": [{"name": "Future Latte", "price": 500}]}},
+    ]))
+    out = tmp_path / "out.csv"
+    written = flatten(str(orders), str(catalog), str(out), "Australia/Brisbane")
+    assert written == 1
+    text = out.read_text()
+    assert "Flat White" in text and "Future Latte" not in text
+    assert "1 order(s) created after cutoff dropped" in capsys.readouterr().err

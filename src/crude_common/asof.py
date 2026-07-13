@@ -321,6 +321,40 @@ def flag_current_state(record):
     return out
 
 
+def current_state(items_or_record, what: str):
+    """Serve a stamp-less surface as current state, disclosed: mark each record
+    with the ``current-state`` JSON key and emit the stderr notice once.
+
+    For the mutable-catalog reads (Rezdy products, Clover inventory, Sonas
+    catalogs, ATDW listings' weaker cousins) where nothing can be dropped or
+    dated. A no-op when the bound is unset.
+    """
+    if world_as_of() is None:
+        return items_or_record
+    emit_current_state(what)
+    if isinstance(items_or_record, list):
+        return [flag_current_state(r) for r in items_or_record]
+    return flag_current_state(items_or_record)
+
+
+def deny_newer(record, stamp, what: str, parse=parse_stamp):
+    """The library-layer get gate: raise WorldAsOfError when ``record[stamp]``
+    parses after the bound. For API modules whose conservative rule excludes a
+    record touched after the cutoff (Xero) rather than flagging it. Returns the
+    record unchanged otherwise.
+    """
+    b = world_as_of()
+    if b is None or not isinstance(record, dict):
+        return record
+    v = parse(_pick(record, stamp))
+    if v is not None and v > b:
+        raise WorldAsOfError(
+            f"this {what} was created or modified after the WORLD_AS_OF cutoff "
+            f"({raw_value()}) and is excluded under the bound"
+        )
+    return record
+
+
 # ----------------------------------------------------------------------
 # Messaging and refusals
 # ----------------------------------------------------------------------

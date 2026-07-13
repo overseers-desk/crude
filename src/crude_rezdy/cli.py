@@ -158,6 +158,7 @@ def list_products(
     except Exception as e:
         typer.echo(f"Error fetching products: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "products")
     emit_list(items, [
         ("Code", "productCode"),
         ("Name", "name"),
@@ -178,6 +179,7 @@ def get_product(
     except Exception as e:
         typer.echo(f"Error fetching product {product_code}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this product")
     emit_record(item, output_json)
 
 
@@ -273,6 +275,7 @@ def product_pickups(
     except Exception as e:
         typer.echo(f"Error fetching pickups: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "product pickups")
     emit_list(items, [
         ("Name", "locationName"),
         ("Address", "address"),
@@ -297,6 +300,20 @@ def list_availability(
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List availability sessions for a product within a date range."""
+    if asof.active():
+        # Availability is a live seat count. Rezdy keeps no history of past
+        # remaining-seats, so a window reaching at/past the cutoff is
+        # unanswerable as of then and refuses; a window fully before it is
+        # served, but the counts are still today's inventory, disclosed below.
+        bound = asof.world_as_of()
+        tz = _account_timezone(read_config(find_config()))
+        try:
+            end_local = datetime.strptime(to, "%Y-%m-%d %H:%M:%S").replace(tzinfo=tz)
+        except (TypeError, ValueError):
+            end_local = None
+        if end_local is None or end_local.astimezone(_utc.utc) > bound:
+            asof.refuse("availability is a live seat count; a window at or past "
+                        "the cutoff has no as-of answer")
     client = _client()
     try:
         items = client.list_availability(
@@ -305,6 +322,7 @@ def list_availability(
     except Exception as e:
         typer.echo(f"Error fetching availability: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "availability (seat counts are live values)")
     if not output_json:
         # Confirm which product the code names, resolving best-effort.
         try:
@@ -651,6 +669,7 @@ def list_customers(
     except Exception as e:
         typer.echo(f"Error fetching customers: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "customers")
     emit_list(items, [
         ("ID", "id"),
         ("Name", lambda c: " ".join(p for p in (c.get("firstName"), c.get("lastName")) if p)),
@@ -671,6 +690,7 @@ def get_customer(
     except Exception as e:
         typer.echo(f"Error fetching customer {customer_id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this customer")
     emit_record(item, output_json)
 
 
@@ -717,6 +737,7 @@ def list_extras(
     except Exception as e:
         typer.echo(f"Error fetching extras: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "extras")
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
@@ -737,6 +758,7 @@ def get_extra(
     except Exception as e:
         typer.echo(f"Error fetching extra {extra_id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this extra")
     emit_record(item, output_json)
 
 
@@ -801,6 +823,7 @@ def list_pickup_lists(
     except Exception as e:
         typer.echo(f"Error fetching pickup lists: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "pickup lists")
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
@@ -820,6 +843,7 @@ def get_pickup_list(
     except Exception as e:
         typer.echo(f"Error fetching pickup list {pickup_list_id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this pickup list")
     emit_record(item, output_json)
 
 
@@ -886,6 +910,7 @@ def list_categories(
     except Exception as e:
         typer.echo(f"Error fetching categories: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "categories")
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
@@ -905,6 +930,7 @@ def get_category(
     except Exception as e:
         typer.echo(f"Error fetching category {category_id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this category")
     emit_record(item, output_json)
 
 
@@ -922,6 +948,7 @@ def category_products(
     except Exception as e:
         typer.echo(f"Error fetching category products: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "category products")
     emit_list(items, [
         ("Code", "productCode"),
         ("Name", "name"),
@@ -975,6 +1002,7 @@ def list_rates(
     except Exception as e:
         typer.echo(f"Error fetching rates: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "rates")
     emit_list(items, [
         ("Rate ID", "rateId"),
         ("Name", "name"),
@@ -994,6 +1022,7 @@ def get_rate(
     except Exception as e:
         typer.echo(f"Error fetching rate {rate_id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this rate")
     emit_record(item, output_json)
 
 
@@ -1043,6 +1072,7 @@ def list_resources(
     except Exception as e:
         typer.echo(f"Error fetching resources: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "resources")
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
@@ -1063,6 +1093,7 @@ def resource_sessions(
     except Exception as e:
         typer.echo(f"Error fetching resource sessions: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "resource sessions")
     emit_list(items, [
         ("Session ID", "id"),
         ("Start", "startTimeLocal"),
@@ -1087,6 +1118,7 @@ def resource_for_session(
     except Exception as e:
         typer.echo(f"Error fetching session resources: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.current_state(items, "session resources")
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
@@ -1143,6 +1175,7 @@ def order_checkin_status(
     except Exception as e:
         typer.echo(f"Error fetching order check-in: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this check-in state")
     emit_record(item, output_json)
 
 
@@ -1192,6 +1225,7 @@ def session_checkin_status(
     except Exception as e:
         typer.echo(f"Error fetching session check-in: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this check-in state")
     emit_record(item, output_json)
 
 
@@ -1244,6 +1278,7 @@ def list_vouchers(
     except Exception as e:
         typer.echo(f"Error fetching vouchers: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.bound_records(items, "issueDate", what="voucher")
     emit_list(items, [
         ("Code", "code"),
         ("Status", "status"),
@@ -1265,6 +1300,7 @@ def get_voucher(
     except Exception as e:
         typer.echo(f"Error fetching voucher {voucher_code}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.check_record(item, "issueDate", what="voucher")
     emit_record(item, output_json)
 
 
@@ -1280,6 +1316,7 @@ def get_company(
     except Exception as e:
         typer.echo(f"Error fetching company {alias}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this company record")
     emit_record(item, output_json)
 
 
@@ -1295,6 +1332,7 @@ def find_company(
     except Exception as e:
         typer.echo(f"Error finding company '{name}': {e}", err=True)
         raise typer.Exit(1)
+    item = asof.current_state(item, "this company record")
     emit_record(item, output_json)
 
 
