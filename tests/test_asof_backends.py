@@ -193,6 +193,36 @@ def test_clover_since_mode_refuses(bound, monkeypatch):
                          output="/dev/null", since=123, compare=False)
 
 
+def test_clover_scopes_probe_writes_refuses_under_bound(bound, monkeypatch):
+    # --probe-writes sends live POSTs; under a bound it refuses before any
+    # client is built, so no write call reaches the API.
+    import typer
+
+    from crude_clover import cli_status
+
+    monkeypatch.setattr(cli_status, "_client",
+                        lambda: pytest.fail("refused --probe-writes built a client"))
+    with pytest.raises(typer.Exit):
+        cli_status.scopes(probe_writes=True)
+
+
+def test_clover_scopes_read_only_runs_under_bound(bound, monkeypatch):
+    # Without --probe-writes, scopes is read-only and is not refused: it builds
+    # a client and GET-probes each resource, never a write probe.
+    from types import SimpleNamespace
+
+    from crude_clover import cli_status
+
+    def probe(method, path, *, params=None, json=None):
+        assert method == "GET"
+        return 200
+
+    sess = SimpleNamespace(merchant_id="M1", probe=probe)
+    monkeypatch.setattr(cli_status, "_client",
+                        lambda: SimpleNamespace(session=sess))
+    cli_status.scopes(probe_writes=False)
+
+
 # ----------------------------------------------------------------------
 # Rezdy: bookings bounded by maxDateCreated; dateUpdated flags mutation
 # ----------------------------------------------------------------------
@@ -441,6 +471,31 @@ def test_xero_journals_post_filter_created_exactly(bound, monkeypatch):
     api = _xero_accounting(monkeypatch, {"Journals": rows}, {})
     items = api.list_journals()
     assert [j["JournalNumber"] for j in items] == [1]
+
+
+def test_xero_pdf_refuses_record_touched_after_cutoff(bound, monkeypatch):
+    # A PDF's bytes cannot carry the flag, so the render is gated on the
+    # record's stamp: a post-cutoff invoice refuses before any bytes leave.
+    body = {"Invoices": [{"InvoiceID": "b",
+                          "UpdatedDateUTC": "/Date(1789999999000+0000)/"}]}
+    api = _xero_accounting(monkeypatch, body, {})
+    with pytest.raises(asof.WorldAsOfError):
+        api.get_invoice_pdf("b")
+
+
+def test_xero_pdf_before_cutoff_renders(bound, monkeypatch):
+    body = {"Invoices": [{"InvoiceID": "a",
+                          "UpdatedDateUTC": "/Date(1751328000000+0000)/"}]}   # 2025
+    api = _xero_accounting(monkeypatch, body, {})
+    assert api.get_invoice_pdf("a") == b"x"                    # untouched: renders
+
+
+def test_xero_attachment_refuses_when_parent_touched_after_cutoff(bound, monkeypatch):
+    body = {"Invoices": [{"InvoiceID": "b",
+                          "UpdatedDateUTC": "/Date(1789999999000+0000)/"}]}
+    api = _xero_accounting(monkeypatch, body, {})
+    with pytest.raises(asof.WorldAsOfError):
+        api.get_attachment("invoice", "b", "receipt.pdf")
 
 
 def test_xero_report_params_clamped_and_injected(bound, monkeypatch, capsys):

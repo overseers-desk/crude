@@ -198,6 +198,13 @@ class AccountingAPI:
         return self.session._post(BASE, f"{collection}/{guid}", json={"Status": status})
 
     def _pdf(self, collection, guid):
+        # A PDF renders the record's live state and its bytes carry no stamp to
+        # flag, so under WORLD_AS_OF the render is gated on the record's
+        # metadata: the JSON get applies the same conservative rule (deny_newer,
+        # or current-state for a stamp-less collection), refusing the download
+        # for a record touched after the cutoff before any bytes leave the tool.
+        if asof.active():
+            self._get_one(collection, guid)
         return self.session._get(BASE, f"{collection}/{guid}", accept="application/pdf")
 
     # ------------------------------------------------------------------
@@ -709,6 +716,11 @@ class AccountingAPI:
     def get_attachment(self, endpoint, guid, file_id_or_name):
         """Download an attachment's bytes by file id or filename."""
         collection = self._attachment_collection(endpoint)
+        # Same byte-path rule as _pdf: gate the download on the parent record's
+        # stamp. Adding an attachment bumps the parent's UpdatedDateUTC, so a
+        # record touched after the cutoff is excluded before its bytes leave.
+        if asof.active():
+            self._get_one(collection, guid)
         return self.session._get(
             BASE, f"{collection}/{guid}/Attachments/{file_id_or_name}",
             accept="application/octet-stream")

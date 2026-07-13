@@ -17,6 +17,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_clover.client import CloverError
 from crude_clover.orders import day_windows
 from crude_clover.resources import REGISTRY
@@ -79,6 +80,12 @@ def scopes(
         help="Also probe write scope. Sends POSTs that create nothing; opt-in."),
 ):
     """Report which read (and optionally write) scopes the token has."""
+    if probe_writes and asof.active():
+        # The write probe sends live POST calls (to a nonexistent id, creating
+        # nothing, but write calls all the same); a bounded run must not touch
+        # the live present. Run `scopes` without --probe-writes for read scope.
+        asof.refuse("--probe-writes sends live write calls (POSTs); it is "
+                    "refused under a bound — run `scopes` without it for read scope")
     if probe_writes:
         typer.confirm(
             "Probe write scope? This sends POST requests to the live API. They target a "
