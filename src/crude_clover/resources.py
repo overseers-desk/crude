@@ -22,7 +22,7 @@ from itertools import islice
 from crude_clover.client import PAGE
 
 # ``created`` names the record's creation-time field (epoch ms) where one
-# exists — the WORLD_AS_OF post-filter key. None means the resource is mutable
+# exists: the WORLD_AS_OF post-filter key. None means the resource is mutable
 # current-state with no usable audit stamp (the catalog and the registry),
 # served flagged under a bound rather than filtered.
 ResourceSpec = namedtuple("ResourceSpec", "name segment columns expand writable singleton created")

@@ -76,8 +76,8 @@ def post_list(
             # Server filter (`until`) plus belt-and-braces on created_time.
             # The feed edge is reverse-chronological, so posts newer than the
             # bound are dropped while walking down until `limit` old-enough
-            # posts are collected — no early stop on the drop side, or a run
-            # of post-cutoff posts would starve the result.
+            # posts are collected. There is no early stop on the drop side; a
+            # run of post-cutoff posts would otherwise starve the result.
             params = {"fields": FB_POST_FIELDS, "until": str(asof.bound_s())}
             items, dropped = [], 0
             for item in sess.iter_edge(f"/{sess.page_id}/{edge}", params=params):

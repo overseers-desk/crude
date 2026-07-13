@@ -4,8 +4,8 @@ mutated-after-cutoff flag. No network: transports are monkeypatched with the
 repo's standard fake-response pattern, CLI bodies get stub clients.
 
 Every backend test includes the design's guard case: a record whose business
-date is in the future but whose creation is before the cutoff stays visible —
-the bound acts on knowledge time, never on the domain timeline.
+date is in the future but whose creation is before the cutoff stays visible.
+The bound acts on knowledge time, never on the domain timeline.
 """
 
 from __future__ import annotations
@@ -782,7 +782,7 @@ def test_sonas_export_bundle_unbound_is_identity(monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# ATDW: the weakest boundary — flag updatedOn, drop nothing
+# ATDW: the weakest boundary, flag updatedOn, drop nothing
 # ----------------------------------------------------------------------
 
 

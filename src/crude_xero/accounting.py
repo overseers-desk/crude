@@ -20,7 +20,7 @@ BASE = "accounting"
 # WORLD_AS_OF boundary tables. Xero exposes no created-date filter on most
 # accounting collections, so the bound rides UpdatedDateUTC and OVER-EXCLUDES:
 # a pre-cutoff invoice edited yesterday disappears rather than being served
-# newer than it claims. That is the conservative choice — absence is honest, a
+# newer than it claims. That is the conservative choice: absence is honest, a
 # silently newer body is not.
 #
 # _ASOF_SERVER_BOUND: collections documented to carry UpdatedDateUTC and take a
@@ -60,8 +60,8 @@ def asof_clamp_report_params(params, *, inject_date=True):
     replaced, never trusted); a ``fromDate`` after the cutoff refuses; with no
     period at all, ``date`` is injected so the endpoint does not default to
     today. Shared by the Accounting reports and the Finance statements. Any
-    report is still computed from today's ledger over the period — a
-    post-cutoff back-dated edit leaks in — so the disclosure is emitted here.
+    report is still computed from today's ledger over the period (a post-cutoff
+    back-dated edit leaks in), so the disclosure is emitted here.
     """
     b = asof.world_as_of()
     if b is None:
@@ -639,8 +639,8 @@ class AccountingAPI:
         Under WORLD_AS_OF the date params are clamped to the cutoff's date (and
         ``date`` injected when the caller set no period at all, since the
         endpoint would otherwise default to today). The report is still
-        computed from today's ledger over that period — a post-cutoff
-        back-dated edit leaks in — so it is disclosed as computed-now.
+        computed from today's ledger over that period (a post-cutoff back-dated
+        edit leaks in), so it is disclosed as computed-now.
         """
         params = asof_clamp_report_params(params)
         return self.session._get(BASE, f"Reports/{report_name}", params=params)

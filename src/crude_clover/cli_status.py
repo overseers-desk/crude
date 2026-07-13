@@ -85,7 +85,7 @@ def scopes(
         # nothing, but write calls all the same); a bounded run must not touch
         # the live present. Run `scopes` without --probe-writes for read scope.
         asof.refuse("--probe-writes sends live write calls (POSTs); it is "
-                    "refused under a bound — run `scopes` without it for read scope")
+                    "refused under a bound. Run `scopes` without it for read scope")
     if probe_writes:
         typer.confirm(
             "Probe write scope? This sends POST requests to the live API. They target a "

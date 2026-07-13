@@ -3,22 +3,22 @@
 ``WORLD_AS_OF`` is an environment variable holding an ISO-8601 instant with a
 timezone (e.g. ``2026-07-12T17:07:00+10:00``). Three semantics, exactly:
 
-1. **Unset** — unbounded; zero behavioural change for existing callers.
-2. **Set** — nothing created after that instant may leave a tool. Queries are
+1. **Unset**: unbounded; zero behavioural change for existing callers.
+2. **Set**: nothing created after that instant may leave a tool. Queries are
    bounded at the server where the backend allows it and post-filtered where it
    does not; a record whose modified-time is after the cutoff is served in its
    current state and flagged; inherently now-valued reads refuse; **every write
    verb refuses**, because a bounded run reads the past and a write would mutate
    the live present.
-3. **Set but unparseable** (a timezone-naive value counts as unparseable) —
-   hard failure with a clear message, never a silent fallback: a cutoff a tool
+3. **Set but unparseable** (a timezone-naive value counts as unparseable):
+   hard failure with a clear message, never a silent fallback. A cutoff a tool
    quietly ignores yields a contaminated run that looks valid.
 
 This module is the shared machinery: the parse (with the hard-failure gate the
 CLI root callbacks call), the server-side clamps, the client-side post-filter
 and its ``_world_as_of`` JSON marker, the stderr notices, and the write
-refusals. The per-backend boundary — which field is creation time, which server
-parameter takes the clamp, what refuses — lives in each ``crude_<site>``
+refusals. The per-backend boundary (which field is creation time, which server
+parameter takes the clamp, what refuses) lives in each ``crude_<site>``
 package and is documented in ``WORLD_AS_OF.design.md`` and ``docs/manual.md``.
 """
 
@@ -84,7 +84,7 @@ def world_as_of() -> Optional[datetime]:
     """The bound as an aware datetime, or None when unset.
 
     Raises WorldAsOfError when the variable is set but unparseable or
-    timezone-naive — semantic 3, the hard failure.
+    timezone-naive: semantic 3, the hard failure.
     """
     raw = os.environ.get(ENV)
     if raw is None or raw.strip() == "":
@@ -137,10 +137,10 @@ def parse_stamp(value) -> Optional[datetime]:
     """Best-effort parse of a backend record timestamp to an aware UTC datetime.
 
     Covers the wire formats the crude backends actually emit: ISO-8601 strings
-    (with Z, an offset, or naive-meaning-UTC — Odoo, Xero where params, Rezdy,
+    (with Z, an offset, or naive-meaning-UTC: Odoo, Xero where params, Rezdy,
     Airwallex, Deputy, ATDW, Facebook), Meteor EJSON ``{"$date": ms}`` (Sonas),
     bare epoch numbers (Clover ms), and the .NET ``/Date(ms)/`` shape (Xero
-    JSON bodies). Anything unrecognisable yields None — never a guess.
+    JSON bodies). Anything unrecognisable yields None, never a guess.
     """
     if value is None:
         return None
@@ -251,7 +251,7 @@ def post_filter(records, created=None, modified=None, parse=parse_stamp):
 
     Drops records whose creation stamp exceeds the bound; marks records whose
     modified stamp exceeds it with ``_world_as_of: "mutated-after-cutoff"``
-    (a copy — inputs are not mutated). ``created``/``modified`` are a field
+    (a copy; inputs are not mutated). ``created``/``modified`` are a field
     name, a dotted path, or a callable over the record. A record with no
     readable creation stamp is kept: absence of evidence is not a future date.
 
@@ -288,7 +288,7 @@ def check_record(record, created=None, modified=None, parse=parse_stamp,
                  what: str = "record"):
     """The single-record (get) form of the honest rule.
 
-    Refuses (exit 1) when the record was created after the cutoff — it did not
+    Refuses (exit 1) when the record was created after the cutoff: it did not
     exist in the bounded world. Returns the record flagged when its modified
     stamp is after the cutoff, else unchanged. Bound unset: unchanged.
     """

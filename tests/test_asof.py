@@ -1,4 +1,4 @@
-"""crude_common.asof — the WORLD_AS_OF core: the three semantics, the parse,
+"""crude_common.asof, the WORLD_AS_OF core: the three semantics, the parse,
 the clamps, the post-filter, and the shared write gate. No network anywhere.
 
 Semantic 1 (unset) is asserted as zero behavioural change: every helper passes

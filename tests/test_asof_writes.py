@@ -2,9 +2,9 @@
 
 One test pair per write choke point, across both layers: the CLI gate
 (writeio.do_write, covered in test_asof.py) and the client/transport gates this
-file exercises — Sonas DDP method calls, Deputy resource writes, ATDW listing
+file exercises (Sonas DDP method calls, Deputy resource writes, ATDW listing
 writes, Rezdy's ``_write``, and the mutating transport verbs of Xero, Facebook,
-Airwallex, and Clover. No test touches the network: each guard is asserted to
+Airwallex, and Clover). No test touches the network: each guard is asserted to
 fire before any transport call, and the pass-through cases ride a monkeypatched
 requests session (the repo's standard fake-response pattern).
 """
@@ -47,7 +47,7 @@ def _no_network(*a, **k):
 
 
 # ----------------------------------------------------------------------
-# Sonas — DDP method calls (every method is a write path)
+# Sonas: DDP method calls (every method is a write path)
 # ----------------------------------------------------------------------
 
 
@@ -72,7 +72,7 @@ def test_sonas_call_passes_when_unbound(unbound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Deputy — resource create/update/delete (not routed through do_write)
+# Deputy: resource create/update/delete (not routed through do_write)
 # ----------------------------------------------------------------------
 
 
@@ -110,7 +110,7 @@ def test_deputy_query_read_still_posts_under_bound(bound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# ATDW — listing writes (not routed through do_write)
+# ATDW: listing writes (not routed through do_write)
 # ----------------------------------------------------------------------
 
 
@@ -150,7 +150,7 @@ def test_atdw_search_post_still_reads_under_bound(bound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Rezdy — every _write verb (and the now-valued quote riding it)
+# Rezdy: every _write verb (and the now-valued quote riding it)
 # ----------------------------------------------------------------------
 
 
@@ -184,7 +184,7 @@ def test_rezdy_write_passes_when_unbound(unbound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Xero — every non-GET transport verb across all seven products
+# Xero: every non-GET transport verb across all seven products
 # ----------------------------------------------------------------------
 
 
@@ -226,7 +226,7 @@ def test_xero_write_passes_when_unbound(unbound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Facebook — the Graph write verbs (POST/DELETE)
+# Facebook: the Graph write verbs (POST/DELETE)
 # ----------------------------------------------------------------------
 
 
@@ -262,7 +262,7 @@ def test_facebook_post_passes_when_unbound(unbound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Airwallex — every non-GET transport verb
+# Airwallex: every non-GET transport verb
 # ----------------------------------------------------------------------
 
 
@@ -298,7 +298,7 @@ def test_airwallex_write_passes_when_unbound(unbound, monkeypatch):
 
 
 # ----------------------------------------------------------------------
-# Clover — the POST/DELETE write verbs
+# Clover: the POST/DELETE write verbs
 # ----------------------------------------------------------------------
 
 

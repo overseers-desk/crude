@@ -93,7 +93,7 @@ class SkalClient:
         offset: int = 0,
         order: str = "name ASC",
     ) -> list:
-        """One search_read — the single read choke point, where WORLD_AS_OF binds.
+        """One search_read: the single read choke point, where WORLD_AS_OF binds.
 
         Odoo keeps ``create_date``/``write_date`` on every model (deliberately
         not fetched otherwise). Under a bound the domain gains
