@@ -180,10 +180,10 @@ body is best-effort current state, disclosed as such. The per-backend boundary
 | Backend | Server-side bound | Post-filter | Current-state-flagged | Refused under bound |
 |---|---|---|---|---|
 | Airwallex | all lists (`to_created_at`) | `get` by `created_at` | `account get`; `updated_at`>bound | `balance current`, `fx-rate current` |
-| Clover | orders `createdTime<=` | payments/refunds/credits | catalog, registry | `--since` mode |
+| Clover | orders `createdTime<=` | payments/refunds/credits | catalog, registry | `--since` mode; `scopes --probe-writes` |
 | Rezdy | bookings `maxDateCreated` | vouchers, cancellations | products/extras/rates etc.; `dateUpdated`>bound | availability at/after cutoff |
 | Deputy | QUERY `Created le` | plain lists, `get` | `Modified`>bound | — |
-| Xero | accounting `where UpdatedDateUTC<=`; journals exact; report date params | projects/payroll etc. where stamps exist | reports (computed-now); stamp-less lists | — |
+| Xero | accounting `where UpdatedDateUTC<=`; journals exact; report date params | projects/payroll etc. where stamps exist | reports (computed-now); stamp-less lists | PDF / attachment of a post-cutoff record |
 | Sonas | — (DDP) | `createdAt`-family per collection; export bundles | event doc bodies | — |
 | Facebook | posts `until` | posts, comments by `created_time` | `page get` | insights, scheduled posts |
 | ATDW | — | — | listings; `updatedOn`>bound | — |
@@ -203,4 +203,9 @@ are served as-is with only the `updatedOn` flag. Pre-parsed outputs respect the
 bound too: `crude-sonas event export` writes a corpus containing nothing
 created after the cutoff (its `index.json` carries the cutoff and drop
 counts), and `crude-clover flatten` drops post-cutoff orders even from a JSONL
-pulled unbounded.
+pulled unbounded. Byte artifacts cannot carry the `_world_as_of` flag, so they
+are gated on the record's stamp instead: a Xero PDF (invoice, credit note,
+purchase order, quote) or an attachment download refuses when its record was
+touched after the cutoff. A write-probe is still a write, so `crude-clover
+scopes --probe-writes` (which issues live POSTs) refuses; plain `scopes`
+(read-only) runs.

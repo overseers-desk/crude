@@ -107,3 +107,15 @@ Each stage is a coherent commit and independently shippable; nothing depends on 
 5. **ATDW flagging and documentation:** `updatedOn` flag, a WORLD_AS_OF section in `docs/manual.md` stating the per-backend boundary table verbatim (the operator-facing honesty contract), and a line in the Claude command doc's static text noting the variable's effect.
 
 Resume note for the implementing session: the four survey conclusions in "Discoveries" above were established by reading every `src/crude_*` package on 2026-07-13; endpoint and field names quoted here (e.g. Deputy `Created`, Rezdy `maxDateCreated`, Sonas `enquiryData.date`, Xero `UpdatedDateUTC`) were taken from that code and the backends' documented APIs, and the ones marked "verify" in risk 1 are the only load points not yet observed live.
+
+## As built: residual boundaries and deferred work
+
+The plan above shipped across commits `b266e82`..`02c108a`, with the byte-path and write-probe closures in the review that followed. This section records what a later session still owns; everything else is closed and tested (mock transports, isolated-config binary runs, no network).
+
+**Server-side clauses ride belt-and-braces client filters, so no live probe gates correctness.** Four backends inject a server clause whose exactness is not observed in this codebase: Facebook `published_posts?until=`, Clover orders `createdTime<=`, Skål's Odoo `create_date <=` domain, and Deputy QUERY `Created le`. Each is an early-exclusion optimization only: the same records are dropped again by an exact client-side post-filter (`bound_records` / `post_filter`) after fetch, so a server that silently ignores the clause is slower, never wrong. The remaining work is one `live`-marked test per clause confirming the server honours it (a performance and cost check, not a correctness one). Until then the clause is trusted but not relied upon.
+
+**Byte artifacts are gated on a metadata read, not a flag.** A PDF or attachment download returns opaque bytes that cannot carry `_world_as_of`, so `AccountingAPI._pdf` and `get_attachment` perform one metadata GET first and apply the record's stamp rule (`deny_newer`): a record created or modified after the cutoff refuses before any bytes leave. This costs one extra GET per download under a bound only. Xero report/statement PDFs are bounded earlier, by their clamped date params.
+
+**Sonas PDF generation refuses as a write, not a read.** `terms pdf` (`termsGeneratePDF`) and `invoice pdf` (`generateFinancialRecordDocument`) are DDP method calls, which the client's `guard_write` refuses under a bound; they generate a portal artifact, so refusing is both correct and stricter than a stamp check would be. No separate byte gate is needed for them.
+
+**`list_attachments` is a metadata list served current-state.** It returns the attachments a record carries now, with no per-row creation stamp; bounding it exactly would require fetching the parent per row. It is left as an unflagged current-state read — the lowest-severity residual surface, noted here rather than closed.
