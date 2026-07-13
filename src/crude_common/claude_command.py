@@ -19,7 +19,7 @@ from typing import Optional
 
 import typer
 
-from crude_common import version as crude_version
+from crude_common import asof, version as crude_version
 from crude_common.config import set_account
 
 COMMAND_NAME = "crude"
@@ -380,6 +380,9 @@ def register_claude_command(app) -> None:
             None, "--account", "-a", envvar="CRUDE_ACCOUNT", help=ACCOUNT_HELP
         ),
     ):
+        # The WORLD_AS_OF gate runs before anything else: a set-but-unparseable
+        # bound must abort the process before any request could fire.
+        asof.check_env()
         set_account(account)
         refresh()
 

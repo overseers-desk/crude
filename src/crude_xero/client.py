@@ -17,6 +17,8 @@ import time
 
 import requests
 
+from crude_common import asof
+
 PRODUCT_BASES = {
     "accounting": "https://api.xero.com/api.xro/2.0/",
     "payroll_au": "https://api.xero.com/payroll.xro/1.0/",
@@ -204,7 +206,14 @@ class XeroSession:
         Returns parsed JSON, raw bytes when `accept` is a non-JSON type (PDF,
         octet-stream), or {} on an empty body. A raw `data` body with an explicit
         Content-Type header carries attachment uploads.
+
+        Every non-GET verb here is a write (Xero reads are GET-only across all
+        seven products), so the WORLD_AS_OF write refusal sits on the transport:
+        it covers the CLI paths (which also refuse earlier, in writeio.do_write)
+        and any library caller alike.
         """
+        if method != "GET":
+            asof.guard_write(f"{method} {path} on the Xero {product} API")
         self._ensure_token()
         url = PRODUCT_BASES[product] + path.lstrip("/")
         extra = dict(headers or {})

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import time
 
+from crude_common import asof
 from crude_common.httpapi import HttpSession
 
 # Default page_num/page_size page; the list commands hint when a full page returns.
@@ -80,6 +81,14 @@ class AirwallexSession(HttpSession):
     # ------------------------------------------------------------------
     # Transport
     # ------------------------------------------------------------------
+
+    def _request(self, method, path, **kw):
+        """Every non-GET Airwallex call is a write (reads are GET-only), so the
+        WORLD_AS_OF write refusal sits on the transport, belt and braces with
+        the do_write gate in the CLI layer. Login rides its own path in auth."""
+        if method != "GET":
+            asof.guard_write(f"{method} {path} on the Airwallex API")
+        return super()._request(method, path, **kw)
 
     def _auth_headers(self, extra):
         """Mint the per-call Bearer (the token rotates) plus the optional

@@ -16,6 +16,7 @@ from typing import Optional
 import typer
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.claude_command import (
     ACCOUNT_HELP,
     VERSION_HELP,
@@ -95,6 +96,7 @@ def _root(
         help="Select the Xero organisation (tenant) by name or id; default the sole connection.",
     ),
 ):
+    asof.check_env()
     set_account(account)
     global _tenant
     _tenant = tenant

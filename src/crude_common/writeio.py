@@ -14,6 +14,8 @@ from typing import Callable, Optional
 
 import typer
 
+from crude_common import asof
+
 
 def read_data(data: Optional[str], file: Optional[str], required: bool = True) -> dict:
     """Resolve a write body: --data inline JSON, then -f file, then stdin.
@@ -46,7 +48,12 @@ def read_data(data: Optional[str], file: Optional[str], required: bool = True) -
 
 def do_write(action: Callable, what: str, *, confirm: Optional[str] = None,
              yes: bool = False, output_json: bool = False) -> None:
-    """Write command body: confirm if asked, run the action, report the outcome."""
+    """Write command body: confirm if asked, run the action, report the outcome.
+
+    Refuses outright while WORLD_AS_OF is set: a bounded run reads the past,
+    and a write would mutate the live present (see crude_common.asof).
+    """
+    asof.refuse_write_cli(what)
     if confirm and not yes:
         typer.confirm(confirm, abort=True)
     try:

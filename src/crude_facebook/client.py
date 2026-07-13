@@ -19,6 +19,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 
+from crude_common import asof
 from crude_common.httpapi import HttpSession
 
 GRAPH = "https://graph.facebook.com"
@@ -97,10 +98,16 @@ class FacebookSession(HttpSession):
         return self._call("GET", path, token or self.page_token, params=params)
 
     def post(self, path, *, params=None, token=None):
-        """Graph writes carry their fields as query params, not a JSON body."""
+        """Graph writes carry their fields as query params, not a JSON body.
+
+        POST and DELETE are the Graph write verbs; both refuse under
+        WORLD_AS_OF (belt and braces with the do_write gate in the CLI layer).
+        """
+        asof.guard_write(f"POST {path} on the Graph API")
         return self._call("POST", path, token or self.page_token, params=params)
 
     def delete(self, path, *, params=None, token=None):
+        asof.guard_write(f"DELETE {path} on the Graph API")
         return self._call("DELETE", path, token or self.page_token, params=params)
 
     def _raise(self, r) -> None:

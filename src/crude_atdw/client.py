@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from crude_common import asof
 from crude_common.config import account
 from crude_common.httpapi import HttpSession
 from crude_common.statestore import atomic_write, state_path
@@ -130,12 +131,16 @@ class ATDWClient(HttpSession):
 
         ATDW requires at least listingType, category, owningOrganisation, name,
         and physicalAddress; a created listing starts as a draft and is not
-        distributed until submit().
+        distributed until submit(). Refuses under WORLD_AS_OF, as do all the
+        write verbs below: ATDW writes do not pass through writeio.do_write,
+        so the gate lives here.
         """
+        asof.guard_write("create a listing")
         return self._post("/listings", json=body)
 
     def patch_listing(self, listing_id: str, fields: dict) -> dict:
         """PATCH a listing with only the changed fields."""
+        asof.guard_write(f"update listing {listing_id}")
         return self._patch(f"/listings/{listing_id}", json=fields)
 
     # ------------------------------------------------------------------
@@ -144,6 +149,7 @@ class ATDWClient(HttpSession):
 
     def submit(self, listing_id: str) -> dict:
         """POST /api/listings/:id/submit — submit a listing for review."""
+        asof.guard_write(f"submit listing {listing_id}")
         return self._post(f"/listings/{listing_id}/submit", json={})
 
     def list_media(self, listing_id: str) -> list:
@@ -160,8 +166,10 @@ class ATDWClient(HttpSession):
 
     def add_tag(self, listing_id: str, tag_id: str) -> dict:
         """POST /api/listings/:id/tags/:tagId — add a tag to a listing."""
+        asof.guard_write(f"tag listing {listing_id}")
         return self._post(f"/listings/{listing_id}/tags/{tag_id}", json={})
 
     def remove_tag(self, listing_id: str, tag_id: str) -> dict:
         """DELETE /api/listings/:id/tags/:tagId — remove a tag from a listing."""
+        asof.guard_write(f"untag listing {listing_id}")
         return self._delete(f"/listings/{listing_id}/tags/{tag_id}")

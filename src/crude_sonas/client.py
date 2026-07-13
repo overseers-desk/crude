@@ -25,6 +25,7 @@ import json as _json
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from crude_common import asof
 from crude_common.config import account
 from crude_common.statestore import atomic_write, state_path
 
@@ -458,6 +459,13 @@ class SonasClient:
 
     def call(self, method: str, *args):
         """Invoke a DDP method; ``args`` are the DDP params array (typically one
-        object argument)."""
+        object argument).
+
+        Refuses while WORLD_AS_OF is set: every Sonas DDP method here is a write
+        path (reads are subscriptions), and a bounded run must not mutate the
+        live store. The refusal sits before ``_ensure`` so no session is even
+        opened for a call that will not run.
+        """
+        asof.guard_write(f"call Sonas method {method}")
         self._ensure()
         return ddp_call(self.conn, method, list(args))

@@ -17,6 +17,8 @@ from urllib.parse import quote
 
 import requests
 
+from crude_common import asof
+
 PROD_BASE = "https://api.rezdy.com"
 STAGING_BASE = "https://api.rezdy-staging.com"
 
@@ -92,6 +94,12 @@ class RezdyClient:
         return val if isinstance(val, dict) else {}
 
     def _write(self, method: str, path: str, body: dict = None, params: dict = None):
+        """One write (or now-valued POST) to the live API; refuses under WORLD_AS_OF.
+
+        The quote verb also rides this path: a quote mutates nothing, but it is
+        priced from the live present, which a bounded replay must not observe.
+        """
+        asof.guard_write(f"{method} {path}")
         return _payload(self._request(method, path, params, body))
 
     # ------------------------------------------------------------------

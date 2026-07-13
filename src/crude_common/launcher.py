@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import typer
 
+from crude_common import asof
 from crude_common.claude_command import (
     VERSION_HELP,
     add_install_command,
@@ -44,6 +45,7 @@ def _root(
         None, "--version", callback=version_callback, is_eager=True, help=VERSION_HELP
     ),
 ):
+    asof.check_env()
     refresh()
     if ctx.invoked_subcommand is not None:
         return

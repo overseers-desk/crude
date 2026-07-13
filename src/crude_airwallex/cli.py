@@ -15,6 +15,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.claude_command import (
     ACCOUNT_HELP,
     VERSION_HELP,
@@ -63,6 +64,7 @@ def _root(
         help="Act on a connected account (platforms only): send x-on-behalf-of with this id.",
     ),
 ):
+    asof.check_env()
     set_account(account_opt)
     global _on_behalf_of
     _on_behalf_of = on_behalf_of

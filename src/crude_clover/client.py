@@ -17,6 +17,7 @@ from __future__ import annotations
 import sys
 import time
 
+from crude_common import asof
 from crude_common.httpapi import HttpSession
 
 # AP production base. EU/US/sandbox bases reject AP tokens with HTTP 401; only
@@ -64,10 +65,13 @@ class CloverSession(HttpSession):
 
     def post(self, path, *, json=None) -> dict:
         """POST a body. Clover creates via POST to the collection and updates via
-        POST to the element, so this serves both create and update."""
+        POST to the element, so this serves both create and update. Refuses
+        under WORLD_AS_OF (belt and braces with the do_write gate in the CLI)."""
+        asof.guard_write(f"POST {path} on the Clover API")
         return self._post(path, json=json)
 
     def delete(self, path) -> dict:
+        asof.guard_write(f"DELETE {path} on the Clover API")
         return self._delete(path)
 
     def _raise(self, r) -> None:

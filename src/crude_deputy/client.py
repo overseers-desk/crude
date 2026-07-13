@@ -9,6 +9,7 @@ login or refresh.
 
 from __future__ import annotations
 
+from crude_common import asof
 from crude_common.httpapi import HttpSession
 
 PAGE_MAX = 500  # Deputy's default and hard cap of records per page.
@@ -85,13 +86,19 @@ class DeputyClient(HttpSession):
     def info_resource(self, obj: str) -> dict:
         return self._get(f"/resource/{obj}/INFO")
 
+    # The write verbs refuse under WORLD_AS_OF (crude_common.asof): Deputy's
+    # writes do not pass through writeio.do_write, so the gate lives here.
+
     def create_resource(self, obj: str, data: dict) -> dict:
+        asof.guard_write(f"create {obj}")
         return self._post(f"/resource/{obj}", json=data or {})
 
     def update_resource(self, obj: str, id: str, data: dict) -> dict:
+        asof.guard_write(f"update {obj} {id}")
         return self._post(f"/resource/{obj}/{id}", json=data or {})
 
     def delete_resource(self, obj: str, id: str) -> dict:
+        asof.guard_write(f"delete {obj} {id}")
         return self._delete(f"/resource/{obj}/{id}")
 
     # ------------------------------------------------------------------
