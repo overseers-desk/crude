@@ -634,3 +634,93 @@ def test_clover_flatten_drops_post_cutoff_orders(bound, tmp_path, capsys):
     text = out.read_text()
     assert "Flat White" in text and "Future Latte" not in text
     assert "1 order(s) created after cutoff dropped" in capsys.readouterr().err
+
+
+# ----------------------------------------------------------------------
+# Sonas: createdAt-family post-filters (all bounding is client-side by
+# construction of DDP) and the bounded corpus export
+# ----------------------------------------------------------------------
+
+EJ_BEFORE = {"$date": BOUND_MS - 86_400_000}
+EJ_AFTER = {"$date": BOUND_MS + 86_400_000}
+
+
+def test_sonas_filter_drops_created_after_and_flags_stampless(bound, capsys):
+    from crude_sonas.cli import _asof_filter
+
+    docs = [
+        {"_id": "m1", "createdAt": EJ_BEFORE},
+        {"_id": "m2", "createdAt": EJ_AFTER},
+        {"_id": "m3"},                          # no stamp: kept, current-state
+    ]
+    kept = _asof_filter(docs, "message")
+    assert [d["_id"] for d in kept] == ["m1", "m3"]
+    assert asof.MARKER_KEY not in kept[0]
+    assert kept[1][asof.MARKER_KEY] == asof.CURRENT_STATE
+    assert "1 message(s) created after cutoff dropped" in capsys.readouterr().err
+
+
+def test_sonas_event_created_prefers_enquiry_date(bound):
+    from crude_sonas.cli import _event_created
+
+    # The wedding date is the domain timeline and is never consulted.
+    doc = {"date": EJ_AFTER, "enquiryData": {"date": EJ_BEFORE},
+           "createdAt": EJ_AFTER}
+    assert _event_created(doc) == EJ_BEFORE
+    assert _event_created({"createdAt": EJ_BEFORE}) == EJ_BEFORE
+
+
+def test_sonas_export_bundle_drops_post_cutoff_event(bound):
+    from crude_sonas.cli import _asof_bundle
+
+    bundle = {"event_id": "E1",
+              "event": {"_id": "E1", "enquiryData": {"date": EJ_AFTER}},
+              "messages": [], "transactions": [], "financial_records": [],
+              "timelines": [], "service_bookings": []}
+    assert _asof_bundle(bundle) is None
+
+
+def test_sonas_export_bundle_filters_and_flags(bound):
+    from crude_sonas.cli import _asof_bundle
+
+    bundle = {
+        "event_id": "E1",
+        "event": {"_id": "E1", "enquiryData": {"date": EJ_BEFORE}, "status": 1},
+        "messages": [{"_id": "m1", "createdAt": EJ_BEFORE},
+                     {"_id": "m2", "createdAt": EJ_AFTER}],
+        "transactions": [{"_id": "t1", "createdAt": EJ_AFTER}],
+        "financial_records": [{"_id": "f1", "createdAt": EJ_BEFORE}],
+        "timelines": [{"_id": "tl1"}],
+        "service_bookings": [{"_id": "sb1"}],
+    }
+    out = _asof_bundle(bundle)
+    assert [m["_id"] for m in out["messages"]] == ["m1"]        # post-cutoff message gone
+    assert out["transactions"] == []
+    assert [f["_id"] for f in out["financial_records"]] == ["f1"]
+    assert out["event"][asof.MARKER_KEY] == asof.CURRENT_STATE  # mutable doc, flagged
+    assert out["timelines"][0][asof.MARKER_KEY] == asof.CURRENT_STATE
+    summary = out[asof.MARKER_KEY]
+    assert summary["cutoff"] == BOUND
+    assert summary["dropped"] == {"messages": 1, "transactions": 1,
+                                  "financial_records": 0}
+
+
+def test_sonas_export_bundle_falls_back_to_earliest_stamp(bound):
+    from crude_sonas.cli import _asof_bundle
+
+    # No enquiry date anywhere: the earliest createdAt in the bundle decides.
+    late = {"event_id": "E2", "event": {"_id": "E2"},
+            "messages": [{"_id": "m", "createdAt": EJ_AFTER}],
+            "transactions": [], "financial_records": [],
+            "timelines": [], "service_bookings": []}
+    assert _asof_bundle(dict(late)) is None
+    early = dict(late, messages=[{"_id": "m", "createdAt": EJ_BEFORE}])
+    assert _asof_bundle(early) is not None
+
+
+def test_sonas_export_bundle_unbound_is_identity(monkeypatch):
+    monkeypatch.delenv(asof.ENV, raising=False)
+    from crude_sonas.cli import _asof_bundle
+
+    bundle = {"event": {"_id": "E1"}, "messages": [{"createdAt": EJ_AFTER}]}
+    assert _asof_bundle(bundle) is bundle

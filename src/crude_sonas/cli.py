@@ -15,6 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
@@ -296,10 +297,14 @@ def _require_event(client, event_id: str) -> None:
 
 def _pub_list(pub: str, params: list, columns: Optional[List[Tuple[str, str]]],
               output_json: bool, what: str, collection: Optional[str] = None,
-              event_id: Optional[str] = None) -> None:
+              event_id: Optional[str] = None, created=None,
+              current: bool = False) -> None:
     """List command body: subscribe to a publication and emit its documents.
 
-    Pass ``event_id`` for an event-scoped pub to validate the event first."""
+    Pass ``event_id`` for an event-scoped pub to validate the event first.
+    Under WORLD_AS_OF, ``created`` names the creation stamp to post-filter on;
+    ``current`` serves the docs current-state-flagged instead (no stamp).
+    """
     client = _client()
     if event_id is not None:
         _require_event(client, event_id)
@@ -310,6 +315,10 @@ def _pub_list(pub: str, params: list, columns: Optional[List[Tuple[str, str]]],
         raise typer.Exit(1)
     finally:
         client.close()
+    if created is not None:
+        items = _asof_filter(items, what, created)
+    elif current:
+        items = asof.current_state(items, f"{what}s")
     _emit(items, output_json, columns=columns, what=what)
 
 
@@ -334,6 +343,36 @@ def _do_call(method: str, arg: dict, what: str, confirm: Optional[str] = None,
         typer.echo(json.dumps(result))
     elif result is not None and not isinstance(result, list):
         typer.echo(str(result))
+
+
+def _asof_filter(items: list, what: str, created="createdAt") -> list:
+    """The Sonas knowledge bound over a per-event collection.
+
+    All bounding is client-side by construction of DDP. Docs created after the
+    cutoff are dropped by ``created`` (a key or a callable); a doc with no
+    readable creation stamp is kept but flagged current-state, since Sonas
+    documents are mutated in place and absence of a stamp is not a date.
+    """
+    if not asof.active():
+        return items
+    getter = created if callable(created) else (
+        lambda d: d.get(created) if isinstance(d, dict) else None)
+    kept, dropped, _ = asof.post_filter(items, getter)
+    kept = [d if asof.parse_stamp(getter(d)) is not None else asof.flag_current_state(d)
+            for d in kept]
+    asof.emit_notice(what, dropped, 0)
+    return kept
+
+
+def _event_created(doc: dict):
+    """An event's knowledge-time creation: the enquiry's own date where the doc
+    carries it, else the doc's createdAt. The event date is the wedding's
+    domain date and is never consulted: a wedding next year enquired-about last
+    year is legitimately visible under a cutoff between the two."""
+    enquiry = doc.get("enquiryData")
+    if isinstance(enquiry, dict) and enquiry.get("date") is not None:
+        return enquiry.get("date")
+    return doc.get("createdAt")
 
 
 def _matches(value, term: str) -> bool:
@@ -376,6 +415,7 @@ def _tabular_list(table: str, data_pub: str, columns: Optional[List[Tuple[str, s
         )
     if search:
         rows = [r for r in rows if _matches(r, search)][:limit]
+    rows = asof.current_state(rows, f"{what}s (mutable catalog)")
     _emit(rows, output_json, columns=columns, what=what)
     if output_json:
         return
@@ -408,6 +448,12 @@ def event_list(
         client.close()
     if status:
         events = [e for e in events if _status_matches(e, status)]
+    # Knowledge bound: drop events whose enquiry entered the world after the
+    # cutoff; the survivors' docs are mutated in place on every status change,
+    # so they are served as current state, flagged.
+    if asof.active():
+        events = _asof_filter(events, "event", _event_created)
+        events = [asof.flag_current_state(e) for e in events]
     events.sort(key=lambda e: (e.get("date") or {}).get("$date", 0) if isinstance(e.get("date"), dict) else 0)
     if output_json:
         typer.echo(json.dumps(events, indent=2))
@@ -430,6 +476,11 @@ def event_get(
         raise typer.Exit(1)
     finally:
         client.close()
+    if asof.active():
+        created = asof.parse_stamp(_event_created(event))
+        if created is not None and created > asof.world_as_of():
+            asof.refuse(f"event {event_id} was created after the cutoff")
+        event = asof.current_state(event, "this event document (mutated in place)")
     if output_json:
         typer.echo(json.dumps(event, indent=2))
         return
@@ -465,6 +516,51 @@ def _bundle_event(client, event_id: str) -> dict:
         "service_bookings": [d for d in sb if d.get("_collection") == "service-bookings"],
         "services": [d for d in sb if d.get("_collection") == "services"],
     }
+
+
+def _asof_bundle(bundle: dict):
+    """The corpus-export boundary for one bundle, per the design.
+
+    Returns None when the whole event's enquiry entered the world after the
+    cutoff (the bundle is dropped from the corpus). Otherwise the volatile
+    collections are filtered on their creation stamps, the mutable docs
+    (event, timelines, service bookings) are flagged current-state, and the
+    bundle carries a ``_world_as_of`` summary so a consumer can discount what
+    the cutoff cannot pin.
+    """
+    bound = asof.world_as_of()
+    if bound is None:
+        return bundle
+    event = bundle.get("event") or {}
+    created = asof.parse_stamp(_event_created(event))
+    if created is None:
+        # No enquiry date on the doc: fall back to the earliest creation stamp
+        # anywhere in the bundle, the design's stated substitute.
+        stamps = [asof.parse_stamp(d.get("createdAt"))
+                  for key in ("messages", "transactions", "financial_records")
+                  for d in bundle.get(key) or [] if isinstance(d, dict)]
+        stamps = [s_ for s_ in stamps if s_ is not None]
+        created = min(stamps) if stamps else None
+    if created is not None and created > bound:
+        return None
+    dropped = {}
+    for key in ("messages", "transactions", "financial_records"):
+        docs = bundle.get(key) or []
+        kept, n_dropped, _ = asof.post_filter(docs, "createdAt")
+        bundle[key] = kept
+        dropped[key] = n_dropped
+    if isinstance(bundle.get("event"), dict):
+        bundle["event"] = asof.flag_current_state(bundle["event"])
+    bundle["timelines"] = [asof.flag_current_state(d) for d in bundle.get("timelines") or []]
+    bundle["service_bookings"] = [asof.flag_current_state(d)
+                                  for d in bundle.get("service_bookings") or []]
+    bundle[asof.MARKER_KEY] = {
+        "cutoff": asof.raw_value(),
+        "event_doc": asof.CURRENT_STATE,
+        "dropped": dropped,
+        "enquiry_created": created.isoformat() if created else None,
+    }
+    return bundle
 
 
 def _index_row(bundle: dict) -> dict:
@@ -510,12 +606,17 @@ def event_export(
     try:
         ids = client.iter_all_event_ids(statuses)
         typer.echo(f"Enumerated {len(ids)} event(s); exporting to {out_dir}...")
+        events_dropped = 0
         for n, event_id in enumerate(ids, 1):
             try:
                 bundle = _bundle_event(client, event_id)
             except Exception as e:
                 failures.append((event_id, str(e)))
                 typer.echo(f"  [{n}/{len(ids)}] {event_id}: FAILED — {e}", err=True)
+                continue
+            bundle = _asof_bundle(bundle)
+            if bundle is None:
+                events_dropped += 1
                 continue
             (out_dir / f"{event_id}.json").write_text(
                 json.dumps(bundle, indent=2, ensure_ascii=False))
@@ -525,7 +626,17 @@ def event_export(
         raise typer.Exit(1)
     finally:
         client.close()
-    (out_dir / "index.json").write_text(json.dumps(index, indent=2, ensure_ascii=False))
+    if asof.active():
+        # Under a bound the index carries the boundary summary alongside the
+        # rows, so the corpus discloses on disk what it excludes and flags.
+        payload = {"world_as_of": {"cutoff": asof.raw_value(),
+                                   "events_dropped": events_dropped,
+                                   "event_docs": asof.CURRENT_STATE},
+                   "events": index}
+        asof.emit_notice("event", events_dropped, len(index))
+    else:
+        payload = index
+    (out_dir / "index.json").write_text(json.dumps(payload, indent=2, ensure_ascii=False))
     typer.echo(f"Wrote {len(index)} event file(s) + index.json to {out_dir}.")
     if failures:
         typer.echo(f"{len(failures)} event(s) failed; see stderr above.", err=True)
@@ -762,6 +873,7 @@ def guest_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    guests = asof.current_state(guests, "guests")
     if not output_json:
         for g in guests:
             g["attendingStatus"] = GUEST_ATTENDING.get(
@@ -919,6 +1031,7 @@ def timeline_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    entries = asof.current_state(entries, "timeline entries")
     if not output_json:
         for entry in entries:
             entry["type"] = TIMELINE_TYPE.get(entry.get("type"), s(entry.get("type")))
@@ -1041,7 +1154,8 @@ def note_list(
     _pub_list("eventNotes", [event_id], columns=[
         ("Id", "_id"), ("Created", "createdAt"), ("Section", "sectionId"),
         ("Author", "author"), ("Text", "text"),
-    ], output_json=output_json, what="note", collection="notes", event_id=event_id)
+    ], output_json=output_json, what="note", collection="notes", event_id=event_id,
+        created="createdAt")
 
 
 @note_app.command("add")
@@ -1119,6 +1233,7 @@ def transaction_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    items = _asof_filter(items, "transaction")
     if not output_json:
         _name_enums(items, {"kind": TRANSACTION_KIND, "status": TRANSACTION_STATUS,
                             "method": PAYMENT_METHOD})
@@ -1259,6 +1374,7 @@ def invoice_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    records = _asof_filter(records, "financial record")
     if not output_json:
         _name_enums(records, {"type": FINANCIAL_RECORD_TYPE,
                               "status": FINANCIAL_RECORD_STATUS})
@@ -1286,6 +1402,7 @@ def invoice_get(
         raise typer.Exit(1)
     finally:
         client.close()
+    records = _asof_filter(records, "financial record")
     record = next((r for r in records if r["_id"] == record_id), None)
     if record is None:
         typer.echo(f"Error: record {record_id} not found on event {event_id}.", err=True)
@@ -1339,6 +1456,7 @@ def service_booking_list(
         client.close()
     services = {d["_id"]: d.get("name") for d in docs if d["_collection"] == "services"}
     bookings = [d for d in docs if d["_collection"] == "service-bookings"]
+    bookings = _asof_filter(bookings, "service booking")
     if output_json:
         _emit(bookings, True, what="booking")
         return
@@ -1522,6 +1640,7 @@ def message_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    messages = _asof_filter(messages, "message")
     messages.sort(key=lambda m: (m.get("createdAt") or {}).get("$date", 0)
                   if isinstance(m.get("createdAt"), dict) else 0)
     if not output_json:
@@ -1570,6 +1689,7 @@ def document_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    files = _asof_filter(files, "document")
     _emit(files, output_json, columns=[
         ("Id", "_id"), ("Name", "displayName"), ("Type", "type"),
         ("Content-Type", "contentType"), ("Size", "size"), ("Created", "createdAt"),
@@ -1607,6 +1727,9 @@ def terms_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    terms = _asof_filter(
+        terms, "terms record",
+        created=lambda d: d.get("answeredAt") or d.get("createdAt"))
     if not output_json:
         _name_enums(terms, {"status": TERMS_STATUS})
     _emit(terms, output_json, columns=[
@@ -1724,6 +1847,7 @@ def activity_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    acts = _asof_filter(acts, "activity")
     acts.sort(key=lambda a: (a.get("createdAt") or {}).get("$date", 0)
               if isinstance(a.get("createdAt"), dict) else 0)
     _emit(acts, output_json, columns=[
@@ -1784,6 +1908,7 @@ def availability_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    items = _asof_filter(items, "availability window")
     if not output_json:
         for item in items:
             item["availableFor"] = ", ".join(
@@ -1859,6 +1984,7 @@ def appointment_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    items = _asof_filter(items, "appointment")
     items.sort(key=lambda a: (a.get("start") or {}).get("$date", 0)
                if isinstance(a.get("start"), dict) else 0)
     if not output_json:
@@ -1891,6 +2017,9 @@ def appointment_get(
     if not docs:
         typer.echo(f"Error: appointment {appointment_id} not found.", err=True)
         raise typer.Exit(1)
+    docs = _asof_filter(docs, "appointment")
+    if not docs:
+        asof.refuse(f"appointment {appointment_id} was created after the cutoff")
     _emit_record(docs[0], output_json)
 
 
@@ -1980,6 +2109,7 @@ def tasting_list(
         raise typer.Exit(1)
     finally:
         client.close()
+    items = _asof_filter(items, "tasting event")
     if not output_json:
         for item in items:
             item["startTime"] = _dt_str(item.get("startTime"))
@@ -2059,7 +2189,7 @@ def _make_catalog_app(label: str, help_text: str, table: str, data_pub: str,
         if not rows:
             typer.echo(f"Error: {label} {record_id} not found in {table}.", err=True)
             raise typer.Exit(1)
-        _emit_record(rows[0], output_json)
+        _emit_record(asof.current_state(rows[0], f"this {label} record"), output_json)
 
     return sub
 
@@ -2170,7 +2300,7 @@ def report_list(
     """List reports (reportsBasicInfo publication: id, name and type only)."""
     _pub_list("reportsBasicInfo", [], columns=[
         ("Id", "_id"), ("Name", "name"), ("Type", "type"),
-    ], output_json=output_json, what="report", collection="reports")
+    ], output_json=output_json, what="report", collection="reports", current=True)
 
 
 @report_app.command("get")
@@ -2190,7 +2320,7 @@ def report_get(
     if not docs:
         typer.echo(f"Error: report {report_id} not found.", err=True)
         raise typer.Exit(1)
-    _emit_record(docs[0], output_json)
+    _emit_record(asof.current_state(docs[0], "this report definition"), output_json)
 
 
 if __name__ == "__main__":
