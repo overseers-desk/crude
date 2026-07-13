@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import uuid
 
+from crude_common import asof
+
 
 class TransfersAPI:
     def __init__(self, session):
@@ -19,11 +21,19 @@ class TransfersAPI:
 
     def list_transfers(self, *, status=None, from_=None, to=None,
                        all_pages=False, limit=None) -> list:
-        """Transfers, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
-        params = {"status": status, "from_created_at": from_, "to_created_at": to}
+        """Transfers, page-paged. `from_`/`to` are ISO-8601 UTC instants.
+
+        Under WORLD_AS_OF ``to_created_at`` is clamped server-side; a transfer
+        created before the cutoff whose status settled after it is served in
+        its settled state, flagged via ``updated_at``.
+        """
+        asof.check_window_start(from_)
+        params = {"status": status, "from_created_at": from_,
+                  "to_created_at": asof.clamp_upper_iso(to)}
         params = {k: v for k, v in params.items() if v is not None}
-        return self.session.paginate("/api/v1/transfers",
-                                     params=params or None, all_pages=all_pages, limit=limit)
+        items = self.session.paginate("/api/v1/transfers",
+                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="transfer")
 
     def get_transfer(self, transfer_id) -> dict:
         """One transfer by id."""

@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 from zoneinfo import ZoneInfo
 
+from crude_common import asof
 from crude_clover.client import OFFSET_CAP, PAGE
 
 # lineItems carry the item FK (for catalog category resolution) plus their
@@ -77,7 +78,16 @@ class OrdersAPI:
         Pages the window; if it reaches the 10000-offset cap it discards the
         partial read and splits the window in half by time, recursing into each
         disjoint half (so an arbitrarily busy window is still read in full).
+
+        Under WORLD_AS_OF the window's upper edge is clamped to the bound, so
+        the server-side ``createdTime<=`` filter is exact: a window entirely
+        after the cutoff yields nothing.
         """
+        bound_ms = asof.bound_ms()
+        if bound_ms is not None:
+            if start_ms > bound_ms:
+                return
+            end_ms = min(end_ms, bound_ms)
         buf = []
         offset = 0
         capped = False

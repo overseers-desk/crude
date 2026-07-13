@@ -10,6 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
@@ -410,6 +411,11 @@ def list_bookings(
     config = read_config(find_config())
     client = _make_client(config)
 
+    # WORLD_AS_OF acts on knowledge time: creation is bounded server-side via
+    # maxDateCreated (clamped or injected), the update side is post-filtered.
+    # Tour time (--from/--to) is the domain timeline and stays user-controlled:
+    # a tour next week booked before the cutoff is legitimately visible.
+    asof.check_window_start(created_from, "--created-from")
     kwargs = dict(
         order_status=status,
         search=search,
@@ -417,7 +423,7 @@ def list_bookings(
         min_tour_start=from_,
         max_tour_start=to,
         min_date_created=created_from,
-        max_date_created=created_to,
+        max_date_created=asof.clamp_upper_iso(created_to),
     )
 
     try:
@@ -435,8 +441,11 @@ def list_bookings(
             lo = _day_bound_utc(updated_from, tz, end=False)
             items = [b for b in items if b.get("dateUpdated", "") >= lo]
         if updated_to:
-            hi = _day_bound_utc(updated_to, tz, end=True)
+            hi = asof.clamp_upper_iso(_day_bound_utc(updated_to, tz, end=True))
             items = [b for b in items if b.get("dateUpdated", "") <= hi]
+
+    # Belt and braces on creation, plus the mutated-after-cutoff flag.
+    items = asof.bound_records(items, "dateCreated", "dateUpdated", what="booking")
 
     if output_json:
         typer.echo(json.dumps(items, indent=2))
@@ -493,14 +502,20 @@ def list_cancellations(
         typer.echo(f"Error fetching cancellations: {e}", err=True)
         raise typer.Exit(1)
 
-    if from_ or to:
+    # A cancellation is dated by when it occurred (dateUpdated); one that
+    # occurred after the cutoff had not happened in the bounded world, so the
+    # upper filter is clamped to the bound (and applied even with no --to).
+    if from_ or to or asof.active():
         tz = _account_timezone(config)
         if from_:
+            asof.check_window_start(_day_bound_utc(from_, tz, end=False), "--from")
             lo = _day_bound_utc(from_, tz, end=False)
             items = [b for b in items if b.get("dateUpdated", "") >= lo]
-        if to:
-            hi = _day_bound_utc(to, tz, end=True)
+        hi = asof.clamp_upper_iso(_day_bound_utc(to, tz, end=True) if to else None)
+        if hi:
             items = [b for b in items if b.get("dateUpdated", "") <= hi]
+
+    items = asof.bound_records(items, "dateCreated", what="cancellation")
 
     if output_json:
         typer.echo(json.dumps(items, indent=2))
@@ -547,6 +562,7 @@ def get_booking(
     except Exception as e:
         typer.echo(f"Error fetching booking {order_number}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.check_record(item, "dateCreated", "dateUpdated", what="booking")
     emit_record(item, output_json)
 
 

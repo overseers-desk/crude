@@ -14,6 +14,7 @@ import json
 
 import typer
 
+from crude_common import asof
 from crude_clover.client import CloverError
 from crude_clover.orders import day_windows
 
@@ -28,12 +29,23 @@ def _client():
 
 
 def _pull_range(client, from_, to, tz, path) -> int:
+    """Pull a range to JSONL. Under WORLD_AS_OF the windows are clamped at the
+    API layer (server-exact on createdTime); this adds the belt-and-braces
+    client drop and the modifiedTime>bound flag on each row written, so the
+    file itself carries the honesty markers a downstream reader needs."""
     total = 0
+    dropped = mutated = 0
     with open(path, "w") as out:
         for start_ms, end_ms in day_windows(from_, to, tz):
-            for order in client.orders.iter_orders(start_ms, end_ms):
+            orders, d, m = asof.post_filter(
+                list(client.orders.iter_orders(start_ms, end_ms)),
+                "createdTime", "modifiedTime")
+            dropped += d
+            mutated += m
+            for order in orders:
                 out.write(json.dumps(order, separators=(",", ":")) + "\n")
                 total += 1
+    asof.emit_notice("order", dropped, mutated)
     return total
 
 
@@ -49,6 +61,11 @@ def list_(
         False, "--compare", help="Also pull the matching 364-day-prior period to <output>.prior."),
 ):
     """Pull orders to a JSONL file: a date range, or everything since a timestamp."""
+    if since is not None and asof.active():
+        # --since is explicitly a live-sync tool (modifiedTime>=): its whole
+        # point is to pull mutations, which a bounded run must not observe.
+        asof.refuse("--since pulls live mutations (modifiedTime>=) and is "
+                    "incompatible with a bound; use --from/--to")
     client = _client()
     try:
         if since is not None:
@@ -99,6 +116,7 @@ def get(
     except CloverError as e:
         typer.echo(f"Error fetching order {order_id}: {e}", err=True)
         raise typer.Exit(1)
+    order = asof.check_record(order, "createdTime", "modifiedTime", what="order")
     text = json.dumps(order, indent=2, default=str)
     if output:
         with open(output, "w") as f:

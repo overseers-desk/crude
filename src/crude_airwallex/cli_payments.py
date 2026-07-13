@@ -19,6 +19,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
@@ -88,6 +89,7 @@ def intent_get(
 ):
     """Show one payment intent by id."""
     rec = _client().payments.get_payment_intent(intent_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="payment intent")
     emit_record(localize(rec, _TS), output_json)
 
 
@@ -213,6 +215,7 @@ def refund_get(
 ):
     """Show one refund by id."""
     rec = _client().payments.get_refund(refund_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="refund")
     emit_record(localize(rec, _TS), output_json)
 
 
@@ -278,6 +281,7 @@ def customer_get(
 ):
     """Show one customer by id."""
     rec = _client().payments.get_customer(customer_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="customer")
     emit_record(localize(rec, _TS), output_json)
 
 
@@ -383,6 +387,7 @@ def consent_get(
 ):
     """Show one payment consent by id."""
     rec = _client().payments.get_payment_consent(consent_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="payment consent")
     emit_record(localize(rec, _TS), output_json)
 
 
@@ -439,6 +444,7 @@ def link_get(
 ):
     """Show one payment link by id."""
     rec = _client().payments.get_payment_link(link_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="payment link")
     emit_record(localize(rec, _LINK_TS), output_json)
 
 

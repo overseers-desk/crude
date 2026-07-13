@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
@@ -79,6 +80,7 @@ def beneficiary_get(
 ):
     """Show one beneficiary by id."""
     rec = _client().beneficiaries.get_beneficiary(beneficiary_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="beneficiary")
     emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 

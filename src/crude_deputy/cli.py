@@ -15,6 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
@@ -218,6 +219,11 @@ def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, wha
     except Exception as e:
         typer.echo(f"Error fetching {what}: {e}", err=True)
         raise typer.Exit(1)
+    # QUERY already carries the server-side `Created le` bound; this is the
+    # belt-and-braces drop plus the Modified>bound flag. The bound acts on the
+    # audit fields, never the business Date: a roster dated next week but
+    # entered before the cutoff is correctly visible.
+    items = asof.bound_records(items, "Created", "Modified", what=what)
     _emit(items, output_json, columns=columns)
 
 
@@ -228,6 +234,7 @@ def _curated_get(obj, id, output_json, what):
     except Exception as e:
         typer.echo(f"Error fetching {what} {id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.check_record(item, "Created", "Modified", what=what)
     emit_record(item, output_json)
 
 
@@ -394,6 +401,9 @@ def resource_list(
     except Exception as e:
         typer.echo(f"Error listing {obj}: {e}", err=True)
         raise typer.Exit(1)
+    # The plain GET list takes no query clauses, so the bound is enforced
+    # entirely client-side on the returned Created/Modified audit fields.
+    items = asof.bound_records(items, "Created", "Modified", what=obj)
     _emit(items, output_json)
 
 
@@ -410,6 +420,7 @@ def resource_get(
     except Exception as e:
         typer.echo(f"Error fetching {obj} {id}: {e}", err=True)
         raise typer.Exit(1)
+    item = asof.check_record(item, "Created", "Modified", what=obj)
     emit_record(item, output_json)
 
 
@@ -454,6 +465,7 @@ def resource_query(
     except Exception as e:
         typer.echo(f"Error querying {obj}: {e}", err=True)
         raise typer.Exit(1)
+    items = asof.bound_records(items, "Created", "Modified", what=obj)
     _emit(items, output_json)
 
 

@@ -9,6 +9,7 @@ records unchanged.
 
 from __future__ import annotations
 
+from crude_common import asof
 from crude_airwallex.client import _items
 
 
@@ -29,20 +30,32 @@ class CoreAPI:
         """Balance-affecting entries (the ledger behind the balance), cursor-paged.
 
         `from_`/`to` are ISO-8601 UTC instants (the CLI converts local dates).
+        Under WORLD_AS_OF the upper bound is clamped server-side and entries are
+        post-filtered on ``posted_at`` (the ledger's own instant).
         """
-        params = {"currency": currency, "from_created_at": from_, "to_created_at": to}
+        asof.check_window_start(from_)
+        params = {"currency": currency, "from_created_at": from_,
+                  "to_created_at": asof.clamp_upper_iso(to)}
         params = {k: v for k, v in params.items() if v is not None}
-        return self.session.paginate_cursor("/api/v1/balances/history",
-                                            params=params or None, limit=limit)
+        items = self.session.paginate_cursor("/api/v1/balances/history",
+                                             params=params or None, limit=limit)
+        return asof.bound_records(items, "posted_at", what="balance entry")
 
     def list_financial_transactions(self, *, currency=None, status=None, from_=None,
                                     to=None, all_pages=False, limit=None) -> list:
-        """The financial-transactions ledger, filtered and page-paged."""
+        """The financial-transactions ledger, filtered and page-paged.
+
+        Under WORLD_AS_OF ``to_created_at`` is clamped server-side; a ledger row
+        settled after the cutoff is served in its settled state, flagged.
+        """
+        asof.check_window_start(from_)
         params = {"currency": currency, "status": status,
-                  "from_created_at": from_, "to_created_at": to}
+                  "from_created_at": from_,
+                  "to_created_at": asof.clamp_upper_iso(to)}
         params = {k: v for k, v in params.items() if v is not None}
-        return self.session.paginate("/api/v1/financial_transactions",
-                                     params=params or None, all_pages=all_pages, limit=limit)
+        items = self.session.paginate("/api/v1/financial_transactions",
+                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "createdAt", "settledAt", what="transaction")
 
     def get_financial_transaction(self, txn_id) -> dict:
         """One financial transaction by id."""

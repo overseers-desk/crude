@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
@@ -38,6 +39,10 @@ account_app = typer.Typer(help="The connected Airwallex account.")
 def account_get(output_json: bool = _JSON):
     """Show the connected account's details."""
     rec = _client().core.get_account()
+    # Slow-moving current state under WORLD_AS_OF: served, disclosed as such.
+    if asof.active():
+        rec = asof.flag_current_state(rec)
+        asof.emit_current_state("the account record")
     emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 
@@ -51,6 +56,11 @@ balance_app = typer.Typer(help="Airwallex balances.")
 @balance_app.command("current")
 def balance_current(output_json: bool = _JSON):
     """Current balance per held currency."""
+    if asof.active():
+        # A balance is inherently now-valued and keeps no history; the bounded
+        # substitute is `balance history`, which is filtered on posted_at.
+        asof.refuse("a current balance is a now-value with no as-of history; "
+                    "use `balance history` instead")
     items = _client().core.list_current_balances()
     emit_list(
         items,
@@ -146,6 +156,7 @@ def transaction_get(
 ):
     """Show one financial transaction by id."""
     rec = _client().core.get_financial_transaction(txn_id)
+    rec = asof.check_record(rec, "createdAt", "settledAt", what="transaction")
     emit_record(localize(rec, ("createdAt", "settledAt", "estimatedSettledAt")), output_json)
 
 

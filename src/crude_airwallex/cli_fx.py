@@ -14,6 +14,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
 from crude_common.localtime import to_utc_iso
@@ -44,6 +45,9 @@ def fx_rate_current(
     output_json: bool = _JSON,
 ):
     """Show the current indicative rate for a buy/sell currency pair."""
+    if asof.active():
+        # An FX rate is a now-value; there is no as-of substitute to offer.
+        asof.refuse("a current FX rate is a now-value with no as-of history")
     rec = _client().fx.get_current_rate(buy_currency=buy, sell_currency=sell, sell_amount=amount)
     emit_record(localize(rec, ("created_at",)), output_json)
 
@@ -94,6 +98,7 @@ def conversion_get(
 ):
     """Show one conversion by id."""
     rec = _client().fx.get_conversion(conversion_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="conversion")
     emit_record(localize(rec, ("created_at", "updated_at", "settlement_cutoff_at")), output_json)
 
 

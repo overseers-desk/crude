@@ -11,6 +11,8 @@ fields are localized by the CLI layer, not here.
 
 from __future__ import annotations
 
+from crude_common import asof
+
 
 class BeneficiariesAPI:
     def __init__(self, session):
@@ -18,12 +20,19 @@ class BeneficiariesAPI:
 
     def list_beneficiaries(self, *, entity_type=None, from_=None, to=None,
                            all_pages=False, limit=None) -> list:
-        """Saved beneficiaries, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
+        """Saved beneficiaries, page-paged. `from_`/`to` are ISO-8601 UTC instants.
+
+        Under WORLD_AS_OF ``to_created_at`` is clamped server-side and records
+        are post-filtered on ``created_at``/``updated_at``.
+        """
+        asof.check_window_start(from_)
         params = {"entity_type": entity_type,
-                  "from_created_at": from_, "to_created_at": to}
+                  "from_created_at": from_,
+                  "to_created_at": asof.clamp_upper_iso(to)}
         params = {k: v for k, v in params.items() if v is not None}
-        return self.session.paginate("/api/v1/beneficiaries",
-                                     params=params or None, all_pages=all_pages, limit=limit)
+        items = self.session.paginate("/api/v1/beneficiaries",
+                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="beneficiary")
 
     def get_beneficiary(self, beneficiary_id) -> dict:
         """One beneficiary by id."""

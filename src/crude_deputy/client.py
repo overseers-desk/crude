@@ -65,6 +65,22 @@ class DeputyClient(HttpSession):
     def get_resource(self, obj: str, id: str) -> dict:
         return self._get(f"/resource/{obj}/{id}")
 
+    @staticmethod
+    def _bounded_search(search: dict) -> dict:
+        """The caller's search block with the WORLD_AS_OF clause injected.
+
+        Every Deputy object carries a ``Created`` audit field and QUERY takes
+        arbitrary clauses, so the bound is enforced server-side: a record
+        created after the cutoff never leaves Deputy. The clause key sits
+        outside the auto-numbered f1..fn namespace the CLI builds.
+        """
+        b = asof.world_as_of()
+        if b is None:
+            return search
+        bounded = dict(search or {})
+        bounded["_worldAsOf"] = {"field": "Created", "type": "le", "data": b.isoformat()}
+        return bounded
+
     def query_resource(
         self,
         obj: str,
@@ -74,6 +90,7 @@ class DeputyClient(HttpSession):
         start: int = 0,
         max_: int = PAGE_MAX,
     ) -> list:
+        search = self._bounded_search(search)
         body = {"start": start, "max": max_}
         if search:
             body["search"] = search

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import timezone
 from pathlib import Path
 
 import requests
 
+from crude_common import asof
 from crude_common.config import account
 from crude_common.statestore import atomic_write, state_path
 
@@ -91,6 +93,20 @@ class SkalClient:
         offset: int = 0,
         order: str = "name ASC",
     ) -> list:
+        """One search_read — the single read choke point, where WORLD_AS_OF binds.
+
+        Odoo keeps ``create_date``/``write_date`` on every model (deliberately
+        not fetched otherwise). Under a bound the domain gains
+        ``create_date <= bound`` (server-side, exact on creation), the audit
+        fields join the request, records are belt-and-braces post-filtered on
+        ``create_date`` and flagged when ``write_date`` is past the cutoff.
+        """
+        bound = asof.world_as_of()
+        if bound is not None:
+            odoo_bound = bound.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            domain = list(domain) + [["create_date", "<=", odoo_bound]]
+            fields = list(fields) + [f for f in ("create_date", "write_date")
+                                     if f not in fields]
         result = self._call_kw(
             model=model,
             method="search_read",
@@ -99,7 +115,10 @@ class SkalClient:
         )
         if not result:
             return []
-        return [self._normalise_record(r) for r in result]
+        records = [self._normalise_record(r) for r in result]
+        if bound is not None:
+            records = asof.bound_records(records, "create_date", "write_date", what=model)
+        return records
 
     def verify_session(self) -> bool:
         """Return True if the current session_id is authenticated."""

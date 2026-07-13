@@ -13,6 +13,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
 from crude_common.localtime import to_utc_iso
@@ -71,6 +72,7 @@ def transfer_get(
 ):
     """Show one transfer by id."""
     rec = _client().transfers.get_transfer(transfer_id)
+    rec = asof.check_record(rec, "created_at", "updated_at", what="transfer")
     emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 

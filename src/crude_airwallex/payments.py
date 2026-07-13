@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import uuid
 
+from crude_common import asof
+
 _PA = "/api/v1/pa"
 
 
@@ -28,8 +30,14 @@ def _with_request_id(body: dict) -> dict:
 
 
 def _date_params(status=None, from_=None, to=None) -> dict:
-    """The shared list filters, Nones dropped (from_/to are ISO-8601 UTC instants)."""
-    params = {"status": status, "from_created_at": from_, "to_created_at": to}
+    """The shared list filters, Nones dropped (from_/to are ISO-8601 UTC instants).
+
+    Under WORLD_AS_OF ``to_created_at`` is clamped to the bound here, the one
+    place every pa list builds its date window.
+    """
+    asof.check_window_start(from_)
+    params = {"status": status, "from_created_at": from_,
+              "to_created_at": asof.clamp_upper_iso(to)}
     return {k: v for k, v in params.items() if v is not None}
 
 
@@ -45,8 +53,9 @@ class PaymentsAPI:
                              all_pages=False, limit=None) -> list:
         """Payment intents, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
         params = _date_params(status, from_, to)
-        return self.session.paginate(f"{_PA}/payment_intents",
+        items = self.session.paginate(f"{_PA}/payment_intents",
                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="payment intent")
 
     def get_payment_intent(self, intent_id) -> dict:
         """One payment intent by id."""
@@ -84,8 +93,9 @@ class PaymentsAPI:
                      all_pages=False, limit=None) -> list:
         """Refunds, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
         params = _date_params(status, from_, to)
-        return self.session.paginate(f"{_PA}/refunds",
+        items = self.session.paginate(f"{_PA}/refunds",
                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="refund")
 
     def get_refund(self, refund_id) -> dict:
         """One refund by id."""
@@ -104,8 +114,9 @@ class PaymentsAPI:
     def list_customers(self, *, from_=None, to=None, all_pages=False, limit=None) -> list:
         """Saved customers, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
         params = _date_params(None, from_, to)
-        return self.session.paginate(f"{_PA}/customers",
+        items = self.session.paginate(f"{_PA}/customers",
                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="customer")
 
     def get_customer(self, customer_id) -> dict:
         """One customer by id."""
@@ -135,8 +146,9 @@ class PaymentsAPI:
                               all_pages=False, limit=None) -> list:
         """Payment consents (saved mandates), page-paged."""
         params = _date_params(status, from_, to)
-        return self.session.paginate(f"{_PA}/payment_consents",
+        items = self.session.paginate(f"{_PA}/payment_consents",
                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="payment consent")
 
     def get_payment_consent(self, consent_id) -> dict:
         """One payment consent by id."""
@@ -151,8 +163,9 @@ class PaymentsAPI:
                            all_pages=False, limit=None) -> list:
         """Payment links, page-paged."""
         params = _date_params(status, from_, to)
-        return self.session.paginate(f"{_PA}/payment_links",
+        items = self.session.paginate(f"{_PA}/payment_links",
                                      params=params or None, all_pages=all_pages, limit=limit)
+        return asof.bound_records(items, "created_at", "updated_at", what="payment link")
 
     def get_payment_link(self, link_id) -> dict:
         """One payment link by id."""

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import uuid
 
+from crude_common import asof
+
 # The Airwallex date-version the FX endpoints are pinned to. Verified live: the rate
 # and conversions endpoints 400 with ``incorrect_version`` unless x-api-version is set.
 FX_API_VERSION = "2024-06-30"
@@ -39,12 +41,18 @@ class FxAPI:
         return data if isinstance(data, dict) else {}
 
     def list_conversions(self, *, from_=None, to=None, all_pages=False, limit=None) -> list:
-        """Booked FX conversions, page-paged. `from_`/`to` are ISO-8601 UTC instants."""
-        params = {"from_created_at": from_, "to_created_at": to}
+        """Booked FX conversions, page-paged. `from_`/`to` are ISO-8601 UTC instants.
+
+        Under WORLD_AS_OF ``to_created_at`` is clamped server-side and records
+        are post-filtered on ``created_at``/``updated_at``.
+        """
+        asof.check_window_start(from_)
+        params = {"from_created_at": from_, "to_created_at": asof.clamp_upper_iso(to)}
         params = {k: v for k, v in params.items() if v is not None}
-        return self.session.paginate("/api/v1/fx/conversions",
-                                     params=params or None, all_pages=all_pages, limit=limit,
-                                     headers=_FX_HEADERS)
+        items = self.session.paginate("/api/v1/fx/conversions",
+                                      params=params or None, all_pages=all_pages, limit=limit,
+                                      headers=_FX_HEADERS)
+        return asof.bound_records(items, "created_at", "updated_at", what="conversion")
 
     def get_conversion(self, conversion_id) -> dict:
         """One conversion by id."""
