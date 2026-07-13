@@ -49,7 +49,6 @@ def test_set_parses_to_aware_instant(bound):
     assert asof.world_as_of() == BOUND_UTC
     assert asof.active()
     assert asof.bound_ms() == int(BOUND_UTC.timestamp() * 1000)
-    assert asof.bound_utc_iso() == "2026-07-12T07:07:00Z"
 
 
 @pytest.mark.parametrize("bad", [

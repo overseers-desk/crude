@@ -8,6 +8,8 @@ Design only; no code changed. Written 2026-07-13 against crude 1.4.1.
 
 Crude fronts nine third-party backends, most of which keep no history: a booking's current state overwrote "just booked", a Sonas event was edited in place, a roster changed. The deliverable here is a reasonable, documented per-backend boundary, not a pretence that mutable stores can be rewound.
 
+The operator fixed that boundary in the originating requirement: "a booking is either closed or served no longer just booked, or an event has been updated, that's fine; there has to be a reasonable boundary to get data and not everything can be done by limiting server query." So serving a pre-cutoff record in its current (post-cutoff-mutated) state, flagged, is an accepted requirement rather than an author default: where this doc later attributes a boundary to "the operator" (Rezdy `dateUpdated`, the Sonas event body), it means this directive, and a maintainer should not tighten those flags to a drop without the operator revisiting it.
+
 ## Discoveries that shape the design
 
 1. **No single request choke point.** `crude_common.httpapi.HttpSession._request` covers only ATDW, Airwallex, Clover, and Deputy. Rezdy, Xero, Skål (Odoo JSON-RPC), and Sonas (Meteor DDP) each have their own single central request method; Facebook uses plain Graph calls. Enforcement therefore lives at two layers: one shared as-of module in `crude_common` (parse, clamp, post-filter, refuse helpers), invoked per backend at its own choke point and at its date-argument handling.
@@ -25,7 +27,7 @@ A new module, say `crude_common/asof.py`:
 - Messaging: one stderr line per command when the bound is active, e.g. `WORLD_AS_OF 2026-07-12T17:07+10:00: 12 records created after cutoff dropped; 3 records mutated after cutoff served as current state`. In `--json` output, mutated-after-cutoff records additionally carry a `"_world_as_of": "mutated-after-cutoff"` key so a machine consumer can discount them. Plain-table output relies on the stderr notice alone; per-cell markers would be noise.
 - **Writes refuse.** A replay session reads the past; a write mutates the live present and contaminates both the run and the real store. When `WORLD_AS_OF` is set, `crude_common.writeio.do_write` (and the non-writeio write paths: Sonas DDP method calls, Xero writes, Facebook writes) refuse with a message. This is the cheapest rule in the design and closes the largest contamination hole.
 
-`crude_common/localtime.to_utc_iso` is where several CLIs convert typed `--from/--to` dates; the clamp hooks there for those CLIs, but Rezdy (config IANA zone) and Sonas (venue-local EJSON) convert their own dates, so each of those clamps at its own conversion helper. A bound implemented only in `localtime` would silently miss two backends.
+`crude_common/localtime.to_utc_iso` converts typed `--from/--to` dates for several CLIs, but Rezdy (config IANA zone) and Sonas (venue-local EJSON) convert their own, and the conversion is not uniform. So the clamp (`asof.clamp_upper_iso`) is applied per backend at each list call rather than hooked into one shared place; `localtime` itself is untouched by the change. A bound placed only in `localtime` would silently miss the two backends that bypass it.
 
 ## Per-backend boundaries
 

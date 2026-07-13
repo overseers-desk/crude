@@ -128,12 +128,6 @@ def bound_s() -> Optional[int]:
     return None if b is None else int(b.timestamp())
 
 
-def bound_utc_iso(fmt: str = "%Y-%m-%dT%H:%M:%SZ") -> Optional[str]:
-    """The bound rendered as a UTC instant string, or None."""
-    b = world_as_of()
-    return None if b is None else b.astimezone(timezone.utc).strftime(fmt)
-
-
 # ----------------------------------------------------------------------
 # Timestamp parsing for record post-filters
 # ----------------------------------------------------------------------
