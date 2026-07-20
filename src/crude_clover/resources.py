@@ -20,17 +20,21 @@ from datetime import datetime
 from itertools import islice
 
 from crude_clover.client import PAGE
+from crude_common.ldif import PersonMap, parse_epoch_ms
 
 # ``created`` names the record's creation-time field (epoch ms) where one
 # exists: the WORLD_AS_OF post-filter key. None means the resource is mutable
 # current-state with no usable audit stamp (the catalog and the registry),
 # served flagged under a bound rather than filtered.
-ResourceSpec = namedtuple("ResourceSpec", "name segment columns expand writable singleton created")
+# ``ldif`` carries a PersonMap for the people-shaped resources (customers,
+# employees); None means the resource has no --ldif flag.
+ResourceSpec = namedtuple(
+    "ResourceSpec", "name segment columns expand writable singleton created ldif")
 
 
 def _spec(name, segment, columns, *, expand=None, writable=False, singleton=False,
-          created=None):
-    return ResourceSpec(name, segment, columns, expand, writable, singleton, created)
+          created=None, ldif=None):
+    return ResourceSpec(name, segment, columns, expand, writable, singleton, created, ldif)
 
 
 # --- column formatters -------------------------------------------------------
@@ -60,6 +64,33 @@ def _customer_name(r):
 def _role_name(r):
     roles = (r.get("roles") or {}).get("elements") or []
     return roles[0].get("name", "") if roles else (r.get("role") or "")
+
+
+# --- LDIF person maps --------------------------------------------------------
+
+# Customers carry a name split, a first email and a first phone under the
+# expanded emailAddresses/phoneNumbers children, and an epoch-ms createdTime.
+CUSTOMER_PM = PersonMap(
+    attrs={
+        "givenName": "firstName",
+        "sn": "lastName",
+        "mail": _first("emailAddresses", "emailAddress"),
+        "telephoneNumber": _first("phoneNumbers", "phoneNumber"),
+    },
+    id_key="id",
+    created="createdTime",
+    parse_dt=parse_epoch_ms,
+)
+
+# Employees carry a single display name and a role; they have no timestamp we
+# can trust, so no created/modified is mapped.
+EMPLOYEE_PM = PersonMap(
+    attrs={
+        "cn": "name",
+        "title": _role_name,
+    },
+    id_key="id",
+)
 
 
 # --- the generic API ---------------------------------------------------------
@@ -121,10 +152,10 @@ REGISTRY = [
           [("ID", "id"), ("Name", _customer_name),
            ("Email", _first("emailAddresses", "emailAddress")),
            ("Phone", _first("phoneNumbers", "phoneNumber"))],
-          expand="emailAddresses,phoneNumbers", writable=True),
+          expand="emailAddresses,phoneNumbers", writable=True, ldif=CUSTOMER_PM),
     _spec("employees", "employees",
           [("ID", "id"), ("Name", "name"), ("Role", _role_name), ("Nickname", "nickname")],
-          expand="roles", writable=True),
+          expand="roles", writable=True, ldif=EMPLOYEE_PM),
     # Merchant configuration (writable)
     _spec("order-types", "order_types",
           [("ID", "id"), ("Label", "label"), ("System", "systemOrderTypeId")], writable=True),

@@ -23,13 +23,23 @@ from rich.table import Table
 from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
-from crude_common.config import s
+from crude_common.config import (
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
+    s,
+)
+from crude_common.ldif import LdifSink
 from crude_clover.client import CloverError
 from crude_clover.resources import REGISTRY
 
 console = Console()
 
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
+_LDIF = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table.")
 _YES = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt.")
 
 
@@ -38,6 +48,13 @@ def _client():
     from crude_clover.cli import _client as _impl
 
     return _impl()
+
+
+def _ldif_sink(pm) -> LdifSink:
+    """Build the LDIF sink for the selected account (timezone and base DN from config)."""
+    cfg = read_config(find_config())
+    site_cfg = resolve_account(cfg, "clover", account())
+    return LdifSink(pm, "clover", resolve_timezone(cfg, site_cfg), resolve_base_dn(cfg))
 
 
 def _auto_columns(first: dict) -> list:
@@ -92,15 +109,10 @@ def _resource(spec) -> typer.Typer:
             emit_record(asof.current_state(rec, f"the {name} record"), output_json)
         return sub
 
-    @sub.command("list", help=f"List {name}.")
-    def _list(
-        filter_: Optional[List[str]] = typer.Option(
-            None, "--filter", help="Clover filter, e.g. name=Coffee (repeatable)."),
-        expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
-        limit: int = typer.Option(100, "--limit", help="Maximum rows (one page) unless --all."),
-        all_: bool = typer.Option(False, "--all", help="Fetch every page (to the 10000 cap)."),
-        output_json: bool = _JSON,
-    ):
+    # People-shaped resources (customers, employees) carry a PersonMap and get a
+    # --ldif flag on list/get; every other resource has neither the flag nor
+    # any change to its signature.
+    def _list_body(filter_, expand, limit, all_, output_json, ldif):
         try:
             items = _client().resources.list(
                 seg, expand=expand, filters=filter_, limit=limit, all_pages=all_)
@@ -114,14 +126,10 @@ def _resource(spec) -> typer.Typer:
             items = asof.bound_records(items, spec.created, "modifiedTime", what=name)
         else:
             items = asof.current_state(items, name)
-        emit_list(items, cols, name, output_json)
+        emit_list(items, cols, name, output_json,
+                  ldif=_ldif_sink(spec.ldif) if ldif else None)
 
-    @sub.command("get", help=f"Show one {name} by id.")
-    def _get(
-        rid: str = typer.Argument(..., help=f"{name} id."),
-        expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
-        output_json: bool = _JSON,
-    ):
+    def _get_body(rid, expand, output_json, ldif):
         try:
             rec = _client().resources.get(seg, rid, expand=expand)
         except CloverError as e:
@@ -131,7 +139,48 @@ def _resource(spec) -> typer.Typer:
             rec = asof.check_record(rec, spec.created, "modifiedTime", what=name)
         else:
             rec = asof.current_state(rec, f"this {name} record")
-        emit_record(rec, output_json)
+        emit_record(rec, output_json, ldif=_ldif_sink(spec.ldif) if ldif else None)
+
+    if spec.ldif is not None:
+        @sub.command("list", help=f"List {name}.")
+        def _list(
+            filter_: Optional[List[str]] = typer.Option(
+                None, "--filter", help="Clover filter, e.g. name=Coffee (repeatable)."),
+            expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
+            limit: int = typer.Option(100, "--limit", help="Maximum rows (one page) unless --all."),
+            all_: bool = typer.Option(False, "--all", help="Fetch every page (to the 10000 cap)."),
+            output_json: bool = _JSON,
+            ldif: bool = _LDIF,
+        ):
+            _list_body(filter_, expand, limit, all_, output_json, ldif)
+
+        @sub.command("get", help=f"Show one {name} by id.")
+        def _get(
+            rid: str = typer.Argument(..., help=f"{name} id."),
+            expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
+            output_json: bool = _JSON,
+            ldif: bool = _LDIF,
+        ):
+            _get_body(rid, expand, output_json, ldif)
+    else:
+        @sub.command("list", help=f"List {name}.")
+        def _list(
+            filter_: Optional[List[str]] = typer.Option(
+                None, "--filter", help="Clover filter, e.g. name=Coffee (repeatable)."),
+            expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
+            limit: int = typer.Option(100, "--limit", help="Maximum rows (one page) unless --all."),
+            all_: bool = typer.Option(False, "--all", help="Fetch every page (to the 10000 cap)."),
+            output_json: bool = _JSON,
+        ):
+            _list_body(filter_, expand, limit, all_, output_json, False)
+
+        @sub.command("get", help=f"Show one {name} by id.")
+        def _get(
+            rid: str = typer.Argument(..., help=f"{name} id."),
+            expand: Optional[str] = typer.Option(spec.expand, "--expand", help="Expand related objects."),
+            output_json: bool = _JSON,
+        ):
+            _get_body(rid, expand, output_json, False)
 
     if spec.writable:
         @sub.command("create", help=f"Create a {name} from a JSON body. MUTATES THE LIVE POS.")

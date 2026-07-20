@@ -61,3 +61,69 @@ def test_resource_api_path_construction():
     assert api._path("items") == "/v3/merchants/M123/items"
     assert api._path("items", "ABC") == "/v3/merchants/M123/items/ABC"
     assert api._path("") == "/v3/merchants/M123"  # merchant singleton
+
+
+# --- LDIF export -------------------------------------------------------------
+
+def _list_params(spec):
+    sub = _resource(spec)
+    cmd = [c for c in sub.registered_commands if c.name == "list"][0]
+    return set(cmd.callback.__annotations__)
+
+
+def test_people_resources_carry_an_ldif_flag():
+    assert BY_NAME["customers"].ldif is not None
+    assert BY_NAME["employees"].ldif is not None
+    assert "ldif" in _list_params(BY_NAME["customers"])
+    assert "ldif" in _list_params(BY_NAME["employees"])
+
+
+def test_non_people_resource_has_no_ldif_flag():
+    assert BY_NAME["items"].ldif is None
+    assert "ldif" not in _list_params(BY_NAME["items"])
+    # get is untouched too.
+    sub = _resource(BY_NAME["items"])
+    get = [c for c in sub.registered_commands if c.name == "get"][0]
+    assert "ldif" not in get.callback.__annotations__
+
+
+def test_customer_map_renders_parseable_entry(capsys):
+    from zoneinfo import ZoneInfo
+
+    from crude_common.ldif import emit_ldif
+    from crude_clover.resources import CUSTOMER_PM
+
+    emit_ldif(
+        [{"id": "C1", "firstName": "Ada", "lastName": "Lovelace",
+          "createdTime": 1709284500000,
+          "emailAddresses": {"elements": [{"emailAddress": "ada@x.com"}]},
+          "phoneNumbers": {"elements": [{"phoneNumber": "123"}]}}],
+        CUSTOMER_PM, "clover", ZoneInfo("Australia/Brisbane"),
+        "ou=people,dc=example,dc=com")
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[0] == "dn: uid=clover-C1,ou=people,dc=example,dc=com"
+    assert "givenName: Ada" in lines
+    assert "sn: Lovelace" in lines
+    assert "cn: Ada Lovelace" in lines
+    assert "mail: ada@x.com" in lines
+    assert "telephoneNumber: 123" in lines
+    assert "createdDateTime: 2024-03-01T19:15:00+10:00" in lines
+
+
+def test_employee_map_uses_name_and_role(capsys):
+    from zoneinfo import ZoneInfo
+
+    from crude_common.ldif import emit_ldif
+    from crude_clover.resources import EMPLOYEE_PM
+
+    emit_ldif(
+        [{"id": "E1", "name": "Bob Smith",
+          "roles": {"elements": [{"name": "Manager"}]}}],
+        EMPLOYEE_PM, "clover", ZoneInfo("Australia/Brisbane"),
+        "ou=people,dc=example,dc=com")
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == "dn: uid=clover-E1,ou=people,dc=example,dc=com"
+    assert "cn: Bob Smith" in lines
+    assert "title: Manager" in lines
+    assert not any(l.startswith("createdDateTime") for l in lines)

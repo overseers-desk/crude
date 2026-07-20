@@ -103,3 +103,59 @@ def test_beneficiary_update_and_delete_post_to_id_suffix_paths():
     BeneficiariesAPI(xs).delete_beneficiary("ben_1")
     assert seen["method"] == "POST"
     assert seen["url"].endswith("/api/v1/beneficiaries/delete/ben_1")
+
+
+# --- LDIF export -------------------------------------------------------------
+
+def _emit(items):
+    from zoneinfo import ZoneInfo
+
+    from crude_common.ldif import emit_ldif
+    from crude_airwallex.cli_beneficiaries import _PERSON_PM
+
+    emit_ldif(items, _PERSON_PM, "airwallex", ZoneInfo("Australia/Brisbane"),
+              "ou=people,dc=example,dc=com")
+
+
+def test_ldif_flag_on_list_and_get():
+    from crude_airwallex.cli_beneficiaries import beneficiary_list, beneficiary_get
+
+    assert "ldif" in beneficiary_list.__annotations__
+    assert "ldif" in beneficiary_get.__annotations__
+
+
+def test_personal_beneficiary_renders_parseable_entry(capsys):
+    _emit([{
+        "beneficiary_id": "ben_1",
+        "payer_entity_type": "PERSONAL",
+        "created_at": "2024-02-29T23:15:00Z",
+        "updated_at": "2024-03-01T00:00:00Z",
+        "beneficiary": {
+            "first_name": "Zoe", "last_name": "Ng",
+            "bank_details": {"account_name": "Zoe Ng"},
+            "email": "zoe@example.com",
+            "phone_number": "+61 400 000 000",
+        },
+    }])
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    assert lines[0] == "dn: uid=airwallex-ben_1,ou=people,dc=example,dc=com"
+    assert "objectClass: inetOrgPerson" in lines
+    assert "cn: Zoe Ng" in lines
+    assert "givenName: Zoe" in lines
+    assert "sn: Ng" in lines
+    assert "mail: zoe@example.com" in lines
+    assert "telephoneNumber: +61 400 000 000" in lines
+    assert "createdDateTime: 2024-03-01T09:15:00+10:00" in lines
+    assert "modifiedDateTime: 2024-03-01T10:00:00+10:00" in lines
+
+
+def test_company_beneficiary_skipped_with_stderr_note(capsys):
+    _emit([{
+        "beneficiary_id": "ben_2",
+        "payer_entity_type": "COMPANY",
+        "beneficiary": {"bank_details": {"account_name": "Acme Pty Ltd"}},
+    }])
+    res = capsys.readouterr()
+    assert res.out == ""
+    assert "skipping" in res.err and "airwallex" in res.err

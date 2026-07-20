@@ -14,12 +14,22 @@ from typing import Optional
 import typer
 
 from crude_common import asof
+from crude_common.config import (
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
+)
+from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
 from crude_airwallex.render import localize, ts
 
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
+_LDIF = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table.")
 
 
 def _client():
@@ -41,6 +51,56 @@ def _methods(b: dict) -> str:
     return ", ".join(b.get("payment_methods") or [])
 
 
+def _nested(b: dict, field: str) -> str:
+    """A field out of the nested `beneficiary` object (first_name, last_name)."""
+    return (b.get("beneficiary") or {}).get(field) or ""
+
+
+def _cn(b: dict) -> str:
+    """The display name: the bank account_name, else the nested first/last name."""
+    name = _bank(b, "account_name")
+    if name:
+        return name
+    return " ".join(x for x in (_nested(b, "first_name"), _nested(b, "last_name")) if x)
+
+
+def _mail(b: dict) -> str:
+    """A contact email if the beneficiary carries one (top-level or additional_info)."""
+    ben = b.get("beneficiary") or {}
+    return (ben.get("email")
+            or (ben.get("additional_info") or {}).get("personal_email")
+            or "")
+
+
+def _phone(b: dict) -> str:
+    ben = b.get("beneficiary") or {}
+    return ben.get("phone_number") or ben.get("phone") or ""
+
+
+# Only PERSONAL payees are people; COMPANY rows are skipped with a stderr note.
+_PERSON_PM = PersonMap(
+    attrs={
+        "cn": _cn,
+        "givenName": lambda b: _nested(b, "first_name"),
+        "sn": lambda b: _nested(b, "last_name"),
+        "mail": _mail,
+        "telephoneNumber": _phone,
+    },
+    id_key="beneficiary_id",
+    created="created_at",
+    modified="updated_at",
+    include=lambda b: b.get("payer_entity_type") == "PERSONAL",
+)
+
+
+def _ldif_sink() -> LdifSink:
+    """Build the LDIF sink for the selected account (timezone and base DN from config)."""
+    cfg = read_config(find_config())
+    site_cfg = resolve_account(cfg, "airwallex", account())
+    return LdifSink(_PERSON_PM, "airwallex",
+                    resolve_timezone(cfg, site_cfg), resolve_base_dn(cfg))
+
+
 @beneficiary_app.command("list")
 def beneficiary_list(
     entity_type: Optional[str] = typer.Option(None, "--entity-type", help="Filter by entity type (COMPANY/PERSONAL)."),
@@ -49,6 +109,7 @@ def beneficiary_list(
     all_: bool = typer.Option(False, "--all", help="Fetch every page, not just the first."),
     limit: Optional[int] = typer.Option(None, "--limit", help="Maximum beneficiaries to return."),
     output_json: bool = _JSON,
+    ldif: bool = _LDIF,
 ):
     """List saved beneficiaries (filters: entity type, --from/--to date)."""
     items = _client().beneficiaries.list_beneficiaries(
@@ -70,6 +131,7 @@ def beneficiary_list(
         ],
         "beneficiary",
         output_json,
+        ldif=_ldif_sink() if ldif else None,
     )
 
 
@@ -77,10 +139,16 @@ def beneficiary_list(
 def beneficiary_get(
     beneficiary_id: str = typer.Argument(..., help="Beneficiary id."),
     output_json: bool = _JSON,
+    ldif: bool = _LDIF,
 ):
     """Show one beneficiary by id."""
     rec = _client().beneficiaries.get_beneficiary(beneficiary_id)
     rec = asof.check_record(rec, "created_at", "updated_at", what="beneficiary")
+    if ldif:
+        # LDIF parses the raw ISO timestamps itself, so pass the record before
+        # the local-time rendering that emit_record would otherwise show.
+        emit_record(rec, output_json, ldif=_ldif_sink())
+        return
     emit_record(localize(rec, ("created_at", "updated_at")), output_json)
 
 
