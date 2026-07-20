@@ -131,14 +131,13 @@ def _render_dt(pm: PersonMap, record, getter: Getter, tz) -> Optional[str]:
 
 
 def emit_ldif(items, pm: PersonMap, site: str, tz, base_dn: str) -> None:
-    """Write the records as LDIF entries on stdout, blank line between entries.
+    """Write the records as LDIF entries on stdout, each followed by a blank line.
 
     Attributes whose value is None, False or empty are omitted. cn and sn are
     mandatory for inetOrgPerson: cn falls back to givenName plus sn, sn falls
     back to the whole cn, and a record with no name at all is skipped with a
     warning on stderr.
     """
-    first = True
     for record in items:
         if pm.include is not None and not pm.include(record):
             print(f"crude: skipping non-person record ({site})", file=sys.stderr)
@@ -192,7 +191,6 @@ def emit_ldif(items, pm: PersonMap, site: str, tz, base_dn: str) -> None:
             if rendered:
                 lines.append(_attr_line(attr, rendered))
 
-        if not first:
-            sys.stdout.write("\n")
-        first = False
-        sys.stdout.write("\n".join(lines) + "\n")
+        # A blank line after every entry, the last included, keeps plain
+        # concatenation of several crude runs a valid single LDIF stream.
+        sys.stdout.write("\n".join(lines) + "\n\n")

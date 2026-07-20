@@ -129,13 +129,16 @@ def test_custom_parse_dt(capsys):
 
 
 def test_concatenation_purity(capsys):
+    # Two runs joined by plain shell concatenation form one valid stream,
+    # so every entry, the last included, is followed by a blank line.
     items = [{"id": i, "first": "A", "last": f"B{i}"} for i in (1, 2)]
     out = run(items, capsys=capsys).out
-    entries = out.split("\n\n")
-    assert len(entries) == 2
-    assert not out.endswith("\n\n")
+    assert out.endswith("\n\n")
+    joined = out + out
+    entries = [e for e in joined.split("\n\n") if e]
+    assert len(entries) == 4
     for entry in entries:
-        assert entry.strip().startswith("dn: uid=rezdy-")
+        assert entry.startswith("dn: uid=rezdy-")
 
 
 def test_parse_epoch_ms():
