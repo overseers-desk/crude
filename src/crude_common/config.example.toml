@@ -1,6 +1,12 @@
 # crude configuration. Copy to ~/.config/crude/config.toml (or the repo root for
 # development) and fill in your credentials. One file holds every site's section.
 
+# timezone = "Australia/Brisbane"  # optional (IANA name): LDIF timestamps render in this
+#                                  # zone; a site section's own timezone key wins over it,
+#                                  # and the machine's local zone is the fallback.
+# base_dn = "ou=people,dc=crude,dc=local"  # optional: the DN suffix for LDIF entries;
+#                                          # this default is used when unset.
+
 [atdw]
 username = "your-email@example.com"
 password = "your-password"

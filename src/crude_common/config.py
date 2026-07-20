@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -118,6 +119,34 @@ def resolve_account(config: dict, site: str, name: Optional[str]) -> dict:
         )
         raise typer.Exit(1)
     return named[name]
+
+
+def resolve_timezone(cfg: dict, site_cfg: dict):
+    """Resolve the display timezone: site section, then top level, then machine.
+
+    The `timezone` key holds an IANA zone name. An invalid name aborts with a
+    clear message rather than silently falling back, because a wrong zone would
+    corrupt every rendered timestamp.
+    """
+    from zoneinfo import ZoneInfo
+
+    name = site_cfg.get("timezone") or cfg.get("timezone")
+    if not name:
+        return datetime.now().astimezone().tzinfo
+    try:
+        return ZoneInfo(name)
+    except (KeyError, ValueError):
+        typer.echo(
+            f"Error: unknown timezone '{name}' in config.toml; use an IANA name "
+            "like Australia/Brisbane.",
+            err=True,
+        )
+        raise typer.Exit(1)
+
+
+def resolve_base_dn(cfg: dict) -> str:
+    """The LDIF base DN: top-level `base_dn`, else a crude-local default."""
+    return cfg.get("base_dn") or "ou=people,dc=crude,dc=local"
 
 
 def s(value) -> str:

@@ -21,12 +21,16 @@ console = Console()
 
 
 def emit_list(items: list, columns: list, what: str, output_json: bool,
-              header_style: str = "bold magenta") -> None:
+              header_style: str = "bold magenta", ldif=None) -> None:
     """Render a list of records as a table, or raw JSON with --json.
 
     `columns` is a list of (header, key) where key is a field name or a callable
-    taking the record.
+    taking the record. With `ldif` set (an LdifSink), the records are written as
+    LDIF instead and no table, JSON or count line is printed.
     """
+    if ldif is not None:
+        _emit_ldif(items, output_json, ldif)
+        return
     if output_json:
         typer.echo(json.dumps(items, indent=2, default=str))
         return
@@ -43,7 +47,17 @@ def emit_list(items: list, columns: list, what: str, output_json: bool,
     typer.echo(f"\n{len(items)} {what}(s) found.")
 
 
-def emit_record(item: dict, output_json: bool) -> None:
+def _emit_ldif(items: list, output_json: bool, sink) -> None:
+    if output_json:
+        raise typer.BadParameter("--json and LDIF output are mutually exclusive")
+    from crude_common.ldif import emit_ldif
+    emit_ldif(items, sink.pm, sink.site, sink.tz, sink.base_dn)
+
+
+def emit_record(item: dict, output_json: bool, ldif=None) -> None:
+    if ldif is not None:
+        _emit_ldif([item], output_json, ldif)
+        return
     if output_json:
         typer.echo(json.dumps(item, indent=2, default=str))
         return
