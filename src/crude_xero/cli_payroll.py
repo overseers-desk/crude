@@ -20,9 +20,42 @@ from typing import Optional
 
 import typer
 
+from crude_common.config import (
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
+)
+from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
+from crude_xero.cli_accounting import _parse_xero_dt
 from crude_xero.client import PAGE_SIZE
+
+LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
+
+# Xero Payroll AU employees as inetOrgPerson. The records carry UpdatedDateUTC
+# (the WORLD_AS_OF bound rides it), reported as Xero's /Date(ms)/ or ISO form,
+# so the modified stamp is mapped; no created stamp is exposed, so it is unset.
+EMPLOYEE_PM = PersonMap(
+    attrs={
+        "givenName": "FirstName",
+        "sn": "LastName",
+    },
+    id_key="EmployeeID",
+    modified="UpdatedDateUTC",
+    parse_dt=_parse_xero_dt,
+)
+
+
+def _ldif_sink(person_map: PersonMap) -> LdifSink:
+    """Build the per-invocation LDIF sink for the selected account and config."""
+    cfg = read_config(find_config())
+    site_cfg = resolve_account(cfg, "xero", account())
+    return LdifSink(person_map, "xero", resolve_timezone(cfg, site_cfg),
+                    resolve_base_dn(cfg))
 
 
 def _client(*args, **kwargs):
@@ -92,6 +125,7 @@ def _resource(
     create_fn: Optional[str] = None,
     update_fn: Optional[str] = None,
     delete_fn: Optional[str] = None,
+    person_map: Optional[PersonMap] = None,
 ) -> typer.Typer:
     """Create a resource sub-app with the standard verbs and return it.
 
@@ -99,11 +133,37 @@ def _resource(
     share and bound to the `.payroll` group. Create POSTs to the collection and
     update is a read-merge-write POST to the element (both Payroll AU's convention).
     Irregular verbs are added to the returned sub-app by the caller.
+
+    `person_map` (a PersonMap) marks the resource as people-shaped: its list and
+    get gain a `--ldif` flag that emits inetOrgPerson LDIF. Resources built
+    without one are unchanged and gain no flag.
     """
     sub = typer.Typer(help=f"Xero {label}.")
     app.add_typer(sub, name=name)
 
-    if list_fn:
+    def _fetch_list(fetch_all, limit):
+        try:
+            return getattr(_payroll(), list_fn)(
+                all_pages=fetch_all, limit=None if fetch_all else limit)
+        except Exception as e:
+            typer.echo(f"Error fetching {label}: {e}", err=True)
+            raise typer.Exit(1)
+
+    if list_fn and person_map is not None:
+
+        @sub.command("list", help=f"List {label}.")
+        def _list(
+            fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (default: the first page only)."),
+            limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
+            output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+            ldif: bool = typer.Option(False, "--ldif", help=LDIF_HELP),
+        ):
+            items = _fetch_list(fetch_all, limit)
+            _list_hint(items, fetch_all, limit)
+            emit_list(items, columns, name, output_json,
+                      ldif=_ldif_sink(person_map) if ldif else None)
+
+    elif list_fn:
 
         @sub.command("list", help=f"List {label}.")
         def _list(
@@ -111,27 +171,37 @@ def _resource(
             limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
-            try:
-                items = getattr(_payroll(), list_fn)(
-                    all_pages=fetch_all, limit=None if fetch_all else limit)
-            except Exception as e:
-                typer.echo(f"Error fetching {label}: {e}", err=True)
-                raise typer.Exit(1)
+            items = _fetch_list(fetch_all, limit)
             _list_hint(items, fetch_all, limit)
             emit_list(items, columns, name, output_json)
 
-    if get_fn:
+    def _fetch_one(guid):
+        try:
+            return getattr(_payroll(), get_fn)(guid)
+        except Exception as e:
+            typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
+            raise typer.Exit(1)
+
+    if get_fn and person_map is not None:
+
+        @sub.command("get", help=f"Show a single {label}.")
+        def _get(
+            guid: str = typer.Argument(..., help=f"{label} id (GUID)."),
+            output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+            ldif: bool = typer.Option(False, "--ldif", help=LDIF_HELP),
+        ):
+            item = _fetch_one(guid)
+            emit_record(item, output_json,
+                        ldif=_ldif_sink(person_map) if ldif else None)
+
+    elif get_fn:
 
         @sub.command("get", help=f"Show a single {label}.")
         def _get(
             guid: str = typer.Argument(..., help=f"{label} id (GUID)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
-            try:
-                item = getattr(_payroll(), get_fn)(guid)
-            except Exception as e:
-                typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
-                raise typer.Exit(1)
+            item = _fetch_one(guid)
             emit_record(item, output_json)
 
     if create_fn:
@@ -205,6 +275,7 @@ def register(app: typer.Typer) -> None:
         app, "pay-employee", "payroll employee", _EMPLOYEE_COLS,
         list_fn="list_employees", get_fn="get_employee",
         create_fn="create_employee", update_fn="update_employee",
+        person_map=EMPLOYEE_PM,
     )
 
     _resource(

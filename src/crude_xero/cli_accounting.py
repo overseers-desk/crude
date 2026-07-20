@@ -11,15 +11,80 @@ writes go through `do_write`/`merge_update`, with confirm-before-write.
 
 from __future__ import annotations
 
+import re
 import sys
 from typing import List, Optional
 
 import typer
 
+from crude_common.config import (
+    account,
+    find_config,
+    read_config,
+    resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
+)
+from crude_common.ldif import LdifSink, PersonMap, parse_epoch_ms
+from crude_common.localtime import parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.accounting import REPORT_NAMES
 from crude_xero.client import PAGE_SIZE
+
+LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
+
+# The .NET JSON date Xero sometimes emits, /Date(1672531200000+0000)/: the digits
+# are the millisecond UTC epoch, the trailing offset is presentation only.
+_DOTNET_DATE = re.compile(r"^/Date\((-?\d+)(?:[+-]\d{4})?\)/$")
+
+
+def _parse_xero_dt(value):
+    """Parse a Xero timestamp that may arrive as /Date(ms)/ or as ISO-8601.
+
+    Different Accounting endpoints report UpdatedDateUTC in either form, so a
+    /Date(ms)/ value is unwrapped to its epoch milliseconds and anything else
+    falls through to the ISO parser.
+    """
+    if isinstance(value, str):
+        m = _DOTNET_DATE.match(value.strip())
+        if m:
+            return parse_epoch_ms(m.group(1))
+    return parse_iso_utc(value)
+
+
+def _contact_phone(contact: dict):
+    """The contact's DEFAULT phone number, joined from its parts, else None."""
+    for phone in contact.get("Phones") or []:
+        if phone.get("PhoneType") == "DEFAULT":
+            parts = (phone.get("PhoneCountryCode"), phone.get("PhoneAreaCode"),
+                     phone.get("PhoneNumber"))
+            return "".join(p for p in parts if p) or None
+    return None
+
+
+# Xero contacts as inetOrgPerson. Created is not exposed by the Contacts API, so
+# only the modified stamp is mapped; UpdatedDateUTC is parsed by _parse_xero_dt.
+CONTACT_PM = PersonMap(
+    attrs={
+        "cn": "Name",
+        "givenName": "FirstName",
+        "sn": "LastName",
+        "mail": "EmailAddress",
+        "telephoneNumber": _contact_phone,
+    },
+    id_key="ContactID",
+    modified="UpdatedDateUTC",
+    parse_dt=_parse_xero_dt,
+)
+
+
+def _ldif_sink(person_map: PersonMap) -> LdifSink:
+    """Build the per-invocation LDIF sink for the selected account and config."""
+    cfg = read_config(find_config())
+    site_cfg = resolve_account(cfg, "xero", account())
+    return LdifSink(person_map, "xero", resolve_timezone(cfg, site_cfg),
+                    resolve_base_dn(cfg))
 
 
 def _client(*args, **kwargs):
@@ -126,6 +191,7 @@ def _resource(
     update_fn: Optional[str] = None,
     delete_fn: Optional[str] = None,
     remove: Optional[tuple] = None,
+    person_map: Optional[PersonMap] = None,
 ) -> typer.Typer:
     """Create a resource sub-app with the standard CRUD verbs and return it.
 
@@ -133,11 +199,40 @@ def _resource(
     takes no where/order (currencies, branding themes, ...). `delete_fn` is a hard
     delete; `remove` is a (command_name, method_name) soft delete/archive. Both
     confirm. Irregular verbs are added to the returned sub-app by the caller.
+
+    `person_map` (a PersonMap) marks the resource as people-shaped: its list and
+    get gain a `--ldif` flag that emits inetOrgPerson LDIF. Resources built
+    without one are unchanged and gain no flag.
     """
     sub = typer.Typer(help=f"Xero {label}.")
     app.add_typer(sub, name=name)
 
-    if list_fn and list_filters:
+    def _fetch_list(where, order, fetch_all, limit):
+        try:
+            return getattr(_client().accounting, list_fn)(
+                where=where, order=order, all_pages=fetch_all,
+                limit=None if fetch_all else limit)
+        except Exception as e:
+            typer.echo(f"Error fetching {label}: {e}", err=True)
+            raise typer.Exit(1)
+
+    if list_fn and list_filters and person_map is not None:
+
+        @sub.command("list", help=f"List {label}.")
+        def _list(
+            where: Optional[str] = typer.Option(None, "--where", help="Xero filter expression (where=)."),
+            order: Optional[str] = typer.Option(None, "--order", help="Xero sort expression (order=)."),
+            fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (default: the first page only)."),
+            limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
+            output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+            ldif: bool = typer.Option(False, "--ldif", help=LDIF_HELP),
+        ):
+            items = _fetch_list(where, order, fetch_all, limit)
+            _list_hint(items, fetch_all, limit)
+            emit_list(items, columns, name, output_json,
+                      ldif=_ldif_sink(person_map) if ldif else None)
+
+    elif list_fn and list_filters:
 
         @sub.command("list", help=f"List {label}.")
         def _list(
@@ -147,13 +242,7 @@ def _resource(
             limit: Optional[int] = typer.Option(None, "--limit", help="Fetch up to N records across pages (--all wins)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
-            try:
-                items = getattr(_client().accounting, list_fn)(
-                    where=where, order=order, all_pages=fetch_all,
-                    limit=None if fetch_all else limit)
-            except Exception as e:
-                typer.echo(f"Error fetching {label}: {e}", err=True)
-                raise typer.Exit(1)
+            items = _fetch_list(where, order, fetch_all, limit)
             _list_hint(items, fetch_all, limit)
             emit_list(items, columns, name, output_json)
 
@@ -174,18 +263,33 @@ def _resource(
             _list_hint(items, fetch_all, limit)
             emit_list(items, columns, name, output_json)
 
-    if get_fn:
+    def _fetch_one(guid):
+        try:
+            return getattr(_client().accounting, get_fn)(guid)
+        except Exception as e:
+            typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
+            raise typer.Exit(1)
+
+    if get_fn and person_map is not None:
+
+        @sub.command("get", help=f"Show a single {label}.")
+        def _get(
+            guid: str = typer.Argument(..., help=f"{label} id (GUID)."),
+            output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+            ldif: bool = typer.Option(False, "--ldif", help=LDIF_HELP),
+        ):
+            item = _fetch_one(guid)
+            emit_record(item, output_json,
+                        ldif=_ldif_sink(person_map) if ldif else None)
+
+    elif get_fn:
 
         @sub.command("get", help=f"Show a single {label}.")
         def _get(
             guid: str = typer.Argument(..., help=f"{label} id (GUID)."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
         ):
-            try:
-                item = getattr(_client().accounting, get_fn)(guid)
-            except Exception as e:
-                typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
-                raise typer.Exit(1)
+            item = _fetch_one(guid)
             emit_record(item, output_json)
 
     if create_fn:
@@ -301,6 +405,7 @@ def register(app: typer.Typer) -> None:
         list_fn="list_contacts", get_fn="get_contact",
         create_fn="create_contact", update_fn="update_contact",
         remove=("archive", "archive_contact"),
+        person_map=CONTACT_PM,
     )
 
     contact_group = _resource(
