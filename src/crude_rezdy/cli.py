@@ -17,8 +17,11 @@ from crude_common.config import (
     find_config,
     read_config,
     resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
     s,
 )
+from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 
@@ -655,15 +658,37 @@ def cancel_booking(
 # ----------------------------------------------------------------------
 
 
+# How a Rezdy customer record maps onto inetOrgPerson for LDIF export. Rezdy
+# customers carry no creation or modification timestamps of their own (unlike
+# bookings), so createdDateTime/modifiedDateTime are left unset.
+CUSTOMER_PM = PersonMap(
+    attrs={
+        "givenName": "firstName",
+        "sn": "lastName",
+        "mail": "email",
+        "telephoneNumber": "phone",
+    },
+    id_key="id",
+)
+
+
+def _customer_sink(config: dict) -> LdifSink:
+    rezdy_cfg = resolve_account(config, "rezdy", account())
+    return LdifSink(CUSTOMER_PM, "rezdy",
+                    resolve_timezone(config, rezdy_cfg), resolve_base_dn(config))
+
+
 @customer_app.command("list")
 def list_customers(
     search: Optional[str] = typer.Option(None, "--search", help="Filter by name or email."),
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ldif: bool = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """List customers."""
-    client = _client()
+    config = read_config(find_config())
+    client = _make_client(config)
     try:
         items = client.list_customers(search=search, limit=limit, offset=offset)
     except Exception as e:
@@ -675,23 +700,25 @@ def list_customers(
         ("Name", lambda c: " ".join(p for p in (c.get("firstName"), c.get("lastName")) if p)),
         ("Email", "email"),
         ("Phone", "phone"),
-    ], "customer", output_json)
+    ], "customer", output_json, ldif=_customer_sink(config) if ldif else None)
 
 
 @customer_app.command("get")
 def get_customer(
     customer_id: str = typer.Argument(..., help="Customer id."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ldif: bool = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """Show a single customer."""
-    client = _client()
+    config = read_config(find_config())
+    client = _make_client(config)
     try:
         item = client.get_customer(customer_id)
     except Exception as e:
         typer.echo(f"Error fetching customer {customer_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this customer")
-    emit_record(item, output_json)
+    emit_record(item, output_json, ldif=_customer_sink(config) if ldif else None)
 
 
 @customer_app.command("create")

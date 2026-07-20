@@ -14,9 +14,12 @@ from crude_common.config import (
     find_config,
     read_config,
     resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
     s,
 )
-from crude_common.output import emit_list
+from crude_common.ldif import LdifSink, PersonMap, parse_naive_utc
+from crude_common.output import emit_list, emit_record
 from crude_common.statestore import atomic_write
 
 app = typer.Typer(help="crude-skal — Skål Australia member portal.")
@@ -92,6 +95,48 @@ def _make_client(config: dict):
     return client
 
 
+# How a Skal member maps onto inetOrgPerson for LDIF export. The list carries a
+# display name only, so its cn comes from `name`; the detail record adds the
+# split names, phones and mobile. Odoo stamps create_date/write_date as naive
+# UTC and returns False for empty fields, both handled by the LDIF core.
+_MEMBER_TS = dict(
+    id_key="id",
+    created="create_date",
+    modified="write_date",
+    parse_dt=parse_naive_utc,
+)
+
+MEMBER_LIST_PM = PersonMap(
+    attrs={
+        "cn": "name",
+        "mail": "work_email",
+        "o": "principal_work_company",
+        "title": "principal_work_position",
+    },
+    **_MEMBER_TS,
+)
+
+MEMBER_DETAIL_PM = PersonMap(
+    attrs={
+        "givenName": "first_name",
+        "sn": "last_name",
+        "cn": "name",
+        "mail": "work_email",
+        "telephoneNumber": "work_phone",
+        "mobile": "work_mobile",
+        "o": "principal_work_company",
+        "title": "principal_work_position",
+    },
+    **_MEMBER_TS,
+)
+
+
+def _member_sink(config: dict, pm: PersonMap) -> LdifSink:
+    skal_cfg = resolve_account(config, "skal", account())
+    return LdifSink(pm, "skal",
+                    resolve_timezone(config, skal_cfg), resolve_base_dn(config))
+
+
 def _fmt_m2o(value) -> str:
     """Format an Odoo many2one field (returned as [id, name]) to a string."""
     if isinstance(value, (list, tuple)) and len(value) == 2:
@@ -148,6 +193,7 @@ def list_(
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ldif: bool = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """List current Australian members.
 
@@ -189,13 +235,15 @@ def list_(
         ("City", "work_city"),
         ("Club", lambda it: _fmt_m2o(it.get("entity_id"))),
         ("State", "state"),
-    ], "member", output_json)
+    ], "member", output_json,
+        ldif=_member_sink(config, MEMBER_LIST_PM) if ldif else None)
 
 
 @member_app.command("get")
 def get(
     member_id: int = typer.Argument(..., help="Member Odoo integer ID (e.g. 184914)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
+    ldif: bool = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """Show details of a single member."""
     config_path = find_config()
@@ -207,6 +255,10 @@ def get(
     except Exception as e:
         typer.echo(f"Error fetching member {member_id}: {e}", err=True)
         raise typer.Exit(1)
+
+    if ldif:
+        emit_record(item, output_json, ldif=_member_sink(config, MEMBER_DETAIL_PM))
+        return
 
     if output_json:
         typer.echo(json.dumps(item, indent=2))
