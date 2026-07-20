@@ -858,8 +858,7 @@ GUEST_ATTENDING = {0: "Yes", 1: "No", 2: "Maybe"}
 
 
 def _ejson_ms(key: str):
-    """A getter unwrapping a guest's EJSON epoch-ms stamp ({"$date": ms}) to the
-    raw millisecond value, which parse_epoch_ms then turns into a datetime."""
+    """Unwrap a guest's EJSON epoch-ms stamp ({"$date": ms}) for parse_epoch_ms."""
     def get(record):
         value = record.get(key)
         if isinstance(value, dict):

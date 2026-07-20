@@ -111,7 +111,9 @@ def _resource(spec) -> typer.Typer:
 
     # People-shaped resources (customers, employees) carry a PersonMap and get a
     # --ldif flag on list/get; every other resource has neither the flag nor
-    # any change to its signature.
+    # any change to its signature. Each branch needs its own command definition
+    # because Typer reads a command's options from its function signature, so
+    # the flag cannot be added conditionally to one signature.
     def _list_body(filter_, expand, limit, all_, output_json, ldif):
         try:
             items = _client().resources.list(
