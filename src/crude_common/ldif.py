@@ -191,6 +191,6 @@ def emit_ldif(items, pm: PersonMap, site: str, tz, base_dn: str) -> None:
             if rendered:
                 lines.append(_attr_line(attr, rendered))
 
-        # A blank line after every entry, the last included, keeps plain
+        # A blank line after every entry, including the last, keeps plain
         # concatenation of several crude runs a valid single LDIF stream.
         sys.stdout.write("\n".join(lines) + "\n\n")

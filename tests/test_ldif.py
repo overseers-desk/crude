@@ -130,7 +130,7 @@ def test_custom_parse_dt(capsys):
 
 def test_concatenation_purity(capsys):
     # Two runs joined by plain shell concatenation form one valid stream,
-    # so every entry, the last included, is followed by a blank line.
+    # so every entry, including the last, is followed by a blank line.
     items = [{"id": i, "first": "A", "last": f"B{i}"} for i in (1, 2)]
     out = run(items, capsys=capsys).out
     assert out.endswith("\n\n")
