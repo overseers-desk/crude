@@ -1,3 +1,12 @@
+crude (1.4.2) unstable; urgency=medium
+
+  * People commands across all sites gain --ldif: LDIF (inetOrgPerson)
+    output whose streams concatenate into one loadable file, with
+    timestamps rendered in the configured timezone.
+  * New optional config keys: top-level timezone and base_dn.
+
+ -- Weiwu Zhang <a@colourful.land>  Tue, 21 Jul 2026 08:34:00 +1000
+
 crude (1.4.1) unstable; urgency=medium
 
   * crude-sonas: add event export for the full enquiry corpus.
