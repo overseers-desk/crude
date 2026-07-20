@@ -22,8 +22,12 @@ from crude_common.config import (
     find_config,
     read_config,
     resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
     s,
 )
+from crude_common.ldif import LdifSink, PersonMap, parse_epoch_ms
+from crude_common.output import emit_list
 from crude_sonas.client import (
     EPOCH_1900_MS,
     EPOCH_2100_MS,
@@ -853,10 +857,49 @@ def event_cancel(
 GUEST_ATTENDING = {0: "Yes", 1: "No", 2: "Maybe"}
 
 
+def _ejson_ms(key: str):
+    """A getter unwrapping a guest's EJSON epoch-ms stamp ({"$date": ms}) to the
+    raw millisecond value, which parse_epoch_ms then turns into a datetime."""
+    def get(record):
+        value = record.get(key)
+        if isinstance(value, dict):
+            return value.get("$date")
+        return value
+    return get
+
+
+# Named-guest records map onto inetOrgPerson for LDIF export. Guests carry a
+# firstname/lastname pair and a Mongo _id; createdAt/updatedAt are EJSON
+# epoch-ms stamps when present and are left unset otherwise.
+_GUEST_PERSON_MAP = PersonMap(
+    attrs={
+        "givenName": "firstname",
+        "sn": "lastname",
+    },
+    id_key="_id",
+    created=_ejson_ms("createdAt"),
+    modified=_ejson_ms("updatedAt"),
+    parse_dt=parse_epoch_ms,
+)
+
+
+def _guest_sink(config: dict) -> LdifSink:
+    """Build the LdifSink for the guest people command from the config."""
+    site_cfg = resolve_account(config, "sonas", account())
+    return LdifSink(
+        pm=_GUEST_PERSON_MAP,
+        site="sonas",
+        tz=resolve_timezone(config, site_cfg),
+        base_dn=resolve_base_dn(config),
+    )
+
+
 @guest_app.command("list")
 def guest_list(
     event_id: str = typer.Argument(..., help="Event document id."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+    ldif: bool = typer.Option(
+        False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """List an event's named guests (guests publication).
 
@@ -864,7 +907,8 @@ def guest_list(
     120 guests (currentMain, see `guest set-numbers`) while naming only the
     couple here.
     """
-    client = _client()
+    config = read_config(find_config())
+    client = _make_client(config)
     _require_event(client, event_id)
     try:
         guests = client.read_pub("guests", [event_id], collection="guests")
@@ -874,6 +918,9 @@ def guest_list(
     finally:
         client.close()
     guests = asof.current_state(guests, "guests")
+    if ldif:
+        emit_list(guests, [], "guest", output_json, ldif=_guest_sink(config))
+        return
     if not output_json:
         for g in guests:
             g["attendingStatus"] = GUEST_ATTENDING.get(

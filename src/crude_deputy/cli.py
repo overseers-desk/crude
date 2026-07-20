@@ -22,9 +22,12 @@ from crude_common.config import (
     find_config,
     read_config,
     resolve_account,
+    resolve_base_dn,
+    resolve_timezone,
     s,
 )
-from crude_common.output import emit_record
+from crude_common.ldif import LdifSink, PersonMap
+from crude_common.output import emit_list, emit_record
 
 app = typer.Typer(help="crude-deputy — Deputy rostering, timesheets, leave, employees.")
 employee_app = typer.Typer(help="Deputy employees.")
@@ -102,8 +105,39 @@ def _render_rows(rows: list, columns: Optional[List[str]] = None) -> None:
     console.print(table)
 
 
-def _emit(items, output_json: bool, columns: Optional[List[str]] = None) -> None:
-    """Render a list result: raw JSON, or a table plus a count line."""
+# Employee records map onto inetOrgPerson for LDIF export. DisplayName is the
+# common name, FirstName/LastName the given/surname; the Created/Modified audit
+# fields carry ISO-8601 timestamps with a numeric offset, parsed by the default
+# ISO parser.
+_EMPLOYEE_PERSON_MAP = PersonMap(
+    attrs={
+        "cn": "DisplayName",
+        "givenName": "FirstName",
+        "sn": "LastName",
+    },
+    id_key="Id",
+    created="Created",
+    modified="Modified",
+)
+
+
+def _person_sink(config: dict) -> LdifSink:
+    """Build the LdifSink for the employee people commands from the config."""
+    site_cfg = resolve_account(config, "deputy", account())
+    return LdifSink(
+        pm=_EMPLOYEE_PERSON_MAP,
+        site="deputy",
+        tz=resolve_timezone(config, site_cfg),
+        base_dn=resolve_base_dn(config),
+    )
+
+
+def _emit(items, output_json: bool, columns: Optional[List[str]] = None,
+          ldif: Optional[LdifSink] = None) -> None:
+    """Render a list result: LDIF, raw JSON, or a table plus a count line."""
+    if ldif is not None:
+        emit_list(items, [], "row", output_json, ldif=ldif)
+        return
     if output_json:
         typer.echo(json.dumps(items, indent=2))
         return
@@ -209,8 +243,10 @@ def me(output_json: bool = typer.Option(False, "--json", help="Print raw JSON.")
 # ----------------------------------------------------------------------
 
 
-def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, what):
-    client = _make_client(read_config(find_config()))
+def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, what,
+                  ldif: bool = False):
+    config = read_config(find_config())
+    client = _make_client(config)
     try:
         if fetch_all:
             items = client.paginate_query(obj, search=search, sort=sort)
@@ -224,18 +260,20 @@ def _curated_list(obj, search, sort, fetch_all, limit, columns, output_json, wha
     # audit fields, never the business Date: a roster dated next week but
     # entered before the cutoff is correctly visible.
     items = asof.bound_records(items, "Created", "Modified", what=what)
-    _emit(items, output_json, columns=columns)
+    _emit(items, output_json, columns=columns,
+          ldif=_person_sink(config) if ldif else None)
 
 
-def _curated_get(obj, id, output_json, what):
-    client = _make_client(read_config(find_config()))
+def _curated_get(obj, id, output_json, what, ldif: bool = False):
+    config = read_config(find_config())
+    client = _make_client(config)
     try:
         item = client.get_resource(obj, id)
     except Exception as e:
         typer.echo(f"Error fetching {what} {id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "Created", "Modified", what=what)
-    emit_record(item, output_json)
+    emit_record(item, output_json, ldif=_person_sink(config) if ldif else None)
 
 
 @employee_app.command("list")
@@ -243,11 +281,14 @@ def employee_list(
     limit: int = typer.Option(50, "--limit", help="Maximum number of results."),
     fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+    ldif: bool = typer.Option(
+        False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """List employees."""
     _curated_list(
         "Employee", None, None, fetch_all, limit,
         ["Id", "DisplayName", "FirstName", "LastName", "Active"], output_json, "employees",
+        ldif=ldif,
     )
 
 
@@ -255,9 +296,11 @@ def employee_list(
 def employee_get(
     id: str = typer.Argument(..., help="Employee Id."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+    ldif: bool = typer.Option(
+        False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
     """Show a single employee."""
-    _curated_get("Employee", id, output_json, "employee")
+    _curated_get("Employee", id, output_json, "employee", ldif=ldif)
 
 
 @roster_app.command("list")
