@@ -6,8 +6,8 @@ S256 code_challenge to the authorize endpoint, and the token endpoint is called
 with the client_id and verifier, no client_secret. The refresh token rotates on
 every refresh (single-use) and dies after 60 days idle, and there is no password
 to silently re-login, so the rotating token is persisted to a durable,
-account-keyed JSON side file in the config dir, written atomically under an flock,
-and left intact on a failed refresh. Expiry is stored as epoch seconds, never a
+account-keyed JSON side file under the XDG state dir, written atomically under an
+flock, and left intact on a failed refresh. Expiry is stored as epoch seconds, never a
 naive datetime.
 """
 
