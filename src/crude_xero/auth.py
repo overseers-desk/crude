@@ -1,9 +1,14 @@
 """Xero OAuth2 flow and durable token store.
 
-crude-xero is a public client (a command-line tool holds no server secret), so it
-authorizes with PKCE: each consent mints a one-shot code_verifier and sends its
-S256 code_challenge to the authorize endpoint, and the token endpoint is called
-with the client_id and verifier, no client_secret. The refresh token rotates on
+Two Xero app types are supported, selected by whether config sets a
+client_secret. Without one, crude-xero is a public client (a command-line tool
+holds no server secret) and authorizes with PKCE: each consent mints a one-shot
+code_verifier and sends its S256 code_challenge to the authorize endpoint, and
+the token endpoint is called with the client_id and verifier. With one, the
+consent runs the confidential web-app flow, the token endpoint authenticated
+over HTTP Basic: this is how crude rides a Web-app registration's existing
+organisation connection, which Xero's cap on uncertified-app connections can
+make the only seat available (see docs/xero.md). The refresh token rotates on
 every refresh (single-use) and dies after 60 days idle, and there is no password
 to silently re-login, so the rotating token is persisted to a durable,
 account-keyed JSON side file under the XDG state dir, written atomically under an
@@ -61,18 +66,23 @@ def pkce_challenge(verifier) -> str:
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
-def build_authorize_url(client_id, redirect_uri, scopes, state, code_challenge) -> str:
-    """The Xero consent URL: response_type=code plus the PKCE S256 challenge."""
-    query = urlencode({
+def build_authorize_url(client_id, redirect_uri, scopes, state, code_challenge=None) -> str:
+    """The Xero consent URL: response_type=code, plus the S256 challenge when PKCE.
+
+    A confidential web-app consent (config sets client_secret) sends no
+    challenge; the token exchange authenticates with the secret instead.
+    """
+    params = {
         "response_type": "code",
         "client_id": client_id,
         "redirect_uri": redirect_uri,
         "scope": _scope_str(scopes),
         "state": state,
-        "code_challenge": code_challenge,
-        "code_challenge_method": "S256",
-    })
-    return f"{AUTHORIZE_URL}?{query}"
+    }
+    if code_challenge is not None:
+        params["code_challenge"] = code_challenge
+        params["code_challenge_method"] = "S256"
+    return f"{AUTHORIZE_URL}?{urlencode(params)}"
 
 
 # ----------------------------------------------------------------------
@@ -80,9 +90,14 @@ def build_authorize_url(client_id, redirect_uri, scopes, state, code_challenge) 
 # ----------------------------------------------------------------------
 
 
-def _token_request(data) -> dict:
-    """POST to the token endpoint (client_id in the body, no secret), surfacing invalid_grant."""
-    r = requests.post(TOKEN_URL, data=data,
+def _token_request(data, client_id=None, client_secret=None) -> dict:
+    """POST to the token endpoint, surfacing invalid_grant.
+
+    PKCE sends the client_id in the body; a confidential web app authenticates
+    with client_id/client_secret over HTTP Basic instead.
+    """
+    basic = (client_id, client_secret) if client_secret else None
+    r = requests.post(TOKEN_URL, data=data, auth=basic,
                       headers={"Accept": "application/json"})
     if not r.ok:
         try:
@@ -102,24 +117,30 @@ def _token_request(data) -> dict:
     return r.json()
 
 
-def exchange_code(client_id, code, redirect_uri, code_verifier) -> dict:
-    """Exchange an authorization code for a token set, proving the PKCE verifier."""
-    return _token_request({
+def exchange_code(client_id, code, redirect_uri, code_verifier=None,
+                  client_secret=None) -> dict:
+    """Exchange an authorization code for a token set.
+
+    Proof of the consent is the PKCE verifier for a public client, the HTTP
+    Basic secret for a confidential web app; exactly one is passed.
+    """
+    data = {
         "grant_type": "authorization_code",
-        "client_id": client_id,
         "code": code,
         "redirect_uri": redirect_uri,
-        "code_verifier": code_verifier,
-    })
+    }
+    if client_secret is None:
+        data["client_id"] = client_id
+        data["code_verifier"] = code_verifier
+    return _token_request(data, client_id=client_id, client_secret=client_secret)
 
 
-def refresh_token_grant(client_id, refresh_token) -> dict:
+def refresh_token_grant(client_id, refresh_token, client_secret=None) -> dict:
     """Exchange a refresh token for a rotated token set."""
-    return _token_request({
-        "grant_type": "refresh_token",
-        "client_id": client_id,
-        "refresh_token": refresh_token,
-    })
+    data = {"grant_type": "refresh_token", "refresh_token": refresh_token}
+    if client_secret is None:
+        data["client_id"] = client_id
+    return _token_request(data, client_id=client_id, client_secret=client_secret)
 
 
 def list_connections(access_token) -> list:
@@ -137,13 +158,14 @@ def list_connections(access_token) -> list:
 # ----------------------------------------------------------------------
 
 
-def loopback_authorize(client_id, redirect_uri, scopes, *,
+def loopback_authorize(client_id, redirect_uri, scopes, *, client_secret=None,
                        open_browser=True, timeout=300) -> dict:
     """Run the loopback consent flow and return a token set.
 
     Parses host/port from the redirect_uri (must be http://localhost:PORT/...),
     serves one callback request, validates the returned state against the one
-    sent, and exchanges the captured code with its PKCE verifier.
+    sent, and exchanges the captured code: with a PKCE verifier for a public
+    client, with the secret for a confidential web app.
     """
     parsed = urlparse(redirect_uri)
     if parsed.scheme != "http" or parsed.hostname not in ("localhost", "127.0.0.1"):
@@ -154,8 +176,9 @@ def loopback_authorize(client_id, redirect_uri, scopes, *,
     host = parsed.hostname
     port = parsed.port or 80
     state = generate_state()
-    verifier = generate_pkce_verifier()
-    url = build_authorize_url(client_id, redirect_uri, scopes, state, pkce_challenge(verifier))
+    verifier = None if client_secret else generate_pkce_verifier()
+    challenge = pkce_challenge(verifier) if verifier else None
+    url = build_authorize_url(client_id, redirect_uri, scopes, state, challenge)
 
     captured: dict = {}
 
@@ -197,17 +220,19 @@ def loopback_authorize(client_id, redirect_uri, scopes, *,
     code = captured.get("code")
     if not code:
         raise XeroAuthError("Callback carried no authorization code.")
-    return exchange_code(client_id, code, redirect_uri, verifier)
+    return exchange_code(client_id, code, redirect_uri, verifier,
+                         client_secret=client_secret)
 
 
-def manual_authorize(client_id, redirect_uri, scopes) -> dict:
+def manual_authorize(client_id, redirect_uri, scopes, *, client_secret=None) -> dict:
     """Paste-based consent for a headless box: print the URL, read the redirect back.
 
     Accepts either the full pasted redirect URL (state validated) or a bare code.
     """
     state = generate_state()
-    verifier = generate_pkce_verifier()
-    url = build_authorize_url(client_id, redirect_uri, scopes, state, pkce_challenge(verifier))
+    verifier = None if client_secret else generate_pkce_verifier()
+    challenge = pkce_challenge(verifier) if verifier else None
+    url = build_authorize_url(client_id, redirect_uri, scopes, state, challenge)
     print("Open this URL in a browser, authorize, then paste the redirect URL "
           "(or the bare code) back here:")
     print(url)
@@ -224,7 +249,8 @@ def manual_authorize(client_id, redirect_uri, scopes) -> dict:
         raise XeroAuthError("State mismatch on the pasted redirect (possible CSRF); aborting.")
     if not code:
         raise XeroAuthError("No authorization code found in the pasted value.")
-    return exchange_code(client_id, code, redirect_uri, verifier)
+    return exchange_code(client_id, code, redirect_uri, verifier,
+                         client_secret=client_secret)
 
 
 # ----------------------------------------------------------------------

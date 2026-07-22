@@ -62,8 +62,9 @@ def test_refresh_success_persists_rotated_tokens(token_dir, monkeypatch):
                    "expires_at": time.time() - 10, "scope": "openid"})
     grant_args = {}
 
-    def fake_grant(client_id, refresh_token):
-        grant_args.update(client_id=client_id, refresh_token=refresh_token)
+    def fake_grant(client_id, refresh_token, client_secret=None):
+        grant_args.update(client_id=client_id, refresh_token=refresh_token,
+                          client_secret=client_secret)
         return {"access_token": "new-acc", "refresh_token": "new-ref",
                 "expires_in": 1800, "scope": "openid accounting"}
 
@@ -224,3 +225,58 @@ def test_pkce_challenge_is_unpadded_s256_of_verifier():
         hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
     assert auth.pkce_challenge(verifier) == expected
     assert "=" not in auth.pkce_challenge(verifier)
+
+
+# ----------------------------------------------------------------------
+# Confidential web-app flow — config client_secret selects it
+# ----------------------------------------------------------------------
+
+
+def test_authorize_url_without_challenge_omits_pkce_params():
+    url = auth.build_authorize_url("CID", "http://localhost/cb", "openid", "S")
+    q = parse_qs(urlparse(url).query)
+    assert "code_challenge" not in q
+    assert "code_challenge_method" not in q
+
+
+def test_exchange_code_with_secret_uses_basic_auth_and_no_verifier(monkeypatch):
+    seen = {}
+
+    def fake_post(url, data=None, auth=None, headers=None):
+        seen.update(data=data, auth=auth)
+        return SimpleNamespace(ok=True, content=b"{}", json=lambda: {"access_token": "a"})
+
+    monkeypatch.setattr(auth.requests, "post", fake_post)
+    auth.exchange_code("CID", "CODE", "http://localhost/cb", client_secret="SEC")
+    assert seen["auth"] == ("CID", "SEC")
+    assert "code_verifier" not in seen["data"]
+    assert "client_id" not in seen["data"]  # carried by Basic auth instead
+
+
+def test_refresh_grant_with_secret_uses_basic_auth(monkeypatch):
+    seen = {}
+
+    def fake_post(url, data=None, auth=None, headers=None):
+        seen.update(data=data, auth=auth)
+        return SimpleNamespace(ok=True, content=b"{}", json=lambda: {"access_token": "a"})
+
+    monkeypatch.setattr(auth.requests, "post", fake_post)
+    auth.refresh_token_grant("CID", "REF", client_secret="SEC")
+    assert seen["auth"] == ("CID", "SEC")
+    assert seen["data"] == {"grant_type": "refresh_token", "refresh_token": "REF"}
+
+
+def test_session_refresh_passes_configured_secret(token_dir, monkeypatch):
+    xs = XeroSession("acct", "client-id",
+                     {"access_token": "old", "refresh_token": "old-ref",
+                      "expires_at": time.time() - 10},
+                     client_secret="SEC")
+    grant_args = {}
+
+    def fake_grant(client_id, refresh_token, client_secret=None):
+        grant_args.update(client_secret=client_secret)
+        return {"access_token": "new", "refresh_token": "new-ref", "expires_in": 1800}
+
+    monkeypatch.setattr(auth, "refresh_token_grant", fake_grant)
+    xs._refresh()
+    assert grant_args["client_secret"] == "SEC"

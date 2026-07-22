@@ -235,7 +235,7 @@ Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay
 
 ## crude-xero (xero.com)
 
-Xero accounting over the official OAuth2 APIs. Credentials in `[xero]` (`client_id`, `redirect_uri` = a localhost loopback, `scopes`); tokens cache in `~/.config/crude/xero_token.json` and refresh automatically. One Xero login can reach several organisations (tenants); pick one with `--tenant/-t <name|id>` (distinct from `--account`, which picks the connection). Writes need write scopes enabled on the Xero app, then a fresh `crude-xero auth`.
+Xero accounting over the official OAuth2 APIs. Credentials in `[xero]` (`client_id`, `redirect_uri` = a localhost loopback, `scopes`, plus `client_secret` only when riding a Web-app registration); tokens cache in `~/.config/crude/xero_token.json` and refresh automatically. One Xero login can reach several organisations (tenants); pick one with `--tenant/-t <name|id>` (distinct from `--account`, which picks the connection). Writes need write scopes enabled on the Xero app, then a fresh `crude-xero auth`.
 
     crude-xero auth [--manual] [--no-browser]      # one-time browser consent
     crude-xero tenants                              # list reachable organisations

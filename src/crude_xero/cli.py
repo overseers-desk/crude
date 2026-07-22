@@ -136,7 +136,8 @@ def _build_session(xero: dict) -> XeroSession:
     if not tokens or not tokens.get("refresh_token"):
         typer.echo("No Xero tokens; run `crude-xero auth`.", err=True)
         raise typer.Exit(1)
-    return XeroSession(account(), client_id, tokens)
+    return XeroSession(account(), client_id, tokens,
+                       client_secret=xero.get("client_secret"))
 
 
 def _resolve_tenant(xero_section: dict, session: XeroSession, requested: Optional[str]) -> str:
@@ -274,12 +275,15 @@ def auth(
         typer.echo(f"No [xero] scopes set; requesting the default grant:\n  {scopes}")
     if not xero.get("redirect_uri"):
         typer.echo(f"No [xero] redirect_uri set; using {redirect_uri} (register it on the app).")
+    client_secret = xero.get("client_secret")
     try:
         if manual:
-            grant = manual_authorize(client_id, redirect_uri, scopes)
+            grant = manual_authorize(client_id, redirect_uri, scopes,
+                                     client_secret=client_secret)
         else:
             grant = loopback_authorize(
-                client_id, redirect_uri, scopes, open_browser=not no_browser
+                client_id, redirect_uri, scopes, client_secret=client_secret,
+                open_browser=not no_browser
             )
     except Exception as e:
         typer.echo(f"Error: auth failed: {e}", err=True)

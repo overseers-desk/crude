@@ -74,9 +74,11 @@ def _extract_list(data):
 
 
 class XeroSession:
-    def __init__(self, account, client_id, tokens: dict, tenant_id=None):
+    def __init__(self, account, client_id, tokens: dict, tenant_id=None,
+                 client_secret=None):
         self.account = account
         self.client_id = client_id
+        self.client_secret = client_secret
         self.tokens = tokens
         self.tenant_id = tenant_id
         self.session = requests.Session()
@@ -108,7 +110,8 @@ class XeroSession:
             refresh_token = current.get("refresh_token")
             if not refresh_token:
                 raise XeroAuthError("No refresh token available; run `crude-xero auth`.")
-            data = auth.refresh_token_grant(self.client_id, refresh_token)
+            data = auth.refresh_token_grant(self.client_id, refresh_token,
+                                            client_secret=self.client_secret)
             now = time.time()
             new_tokens = {
                 "access_token": data["access_token"],
