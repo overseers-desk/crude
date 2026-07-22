@@ -410,7 +410,7 @@ def test_skal_unbound_leaves_domain_and_fields_alone(monkeypatch):
 def _xero_session():
     from crude_xero.client import XeroSession
 
-    return XeroSession("acct", "cid", "secret",
+    return XeroSession("acct", "cid",
                        {"access_token": "T", "refresh_token": "R",
                         "expires_at": time.time() + 9999})
 

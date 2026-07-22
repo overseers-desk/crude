@@ -209,7 +209,7 @@ def test_sonas_tabular_read(crude_config):
 @pytest.mark.live
 def test_xero_reads_organisation(crude_config):
     xero = crude_config.get("xero", {})
-    if not (xero.get("client_id") and xero.get("client_secret")):
+    if not xero.get("client_id"):
         pytest.skip("no [xero] credentials in config")
     from crude_xero.cli import _make_client
 
@@ -224,7 +224,7 @@ def test_xero_lists_accounts(crude_config):
     # Accounts sit under accounting.settings(.read); also exercises the paging
     # walk's stop on an unpaged collection (Accounts ignores the page param).
     xero = crude_config.get("xero", {})
-    if not (xero.get("client_id") and xero.get("client_secret")):
+    if not xero.get("client_id"):
         pytest.skip("no [xero] credentials in config")
     from crude_xero.cli import _make_client
 
@@ -238,12 +238,12 @@ def test_xero_lists_accounts(crude_config):
 def _xero_payroll_or_skip(crude_config):
     """A Xero client for a payroll read, skipping when creds or scope are absent.
 
-    The Payroll product needs both [xero] credentials and a granted `payroll.*`
+    The Payroll product needs the [xero] client_id and a granted `payroll.*`
     scope; without the scope the read returns 401/403, which is a skip (nothing
     to test here), not a failure.
     """
     xero = crude_config.get("xero", {})
-    if not (xero.get("client_id") and xero.get("client_secret")):
+    if not xero.get("client_id"):
         pytest.skip("no [xero] credentials in config")
     from crude_xero.cli import _make_client
 

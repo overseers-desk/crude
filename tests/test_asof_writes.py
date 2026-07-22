@@ -191,7 +191,7 @@ def test_rezdy_write_passes_when_unbound(unbound, monkeypatch):
 def _xero_session():
     from crude_xero.client import XeroSession
 
-    return XeroSession("acct", "cid", "secret",
+    return XeroSession("acct", "cid",
                        {"access_token": "T", "refresh_token": "R",
                         "expires_at": time.time() + 9999})
 

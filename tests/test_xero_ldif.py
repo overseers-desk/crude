@@ -27,7 +27,7 @@ runner = CliRunner()
 CONFIG = {
     "timezone": "Australia/Brisbane",
     "base_dn": "ou=people,dc=example,dc=com",
-    "xero": {"client_id": "c", "client_secret": "s"},
+    "xero": {"client_id": "c"},
 }
 
 # 1709284500000 ms == 2024-03-01T09:15:00Z == 2024-03-01T19:15:00+10:00 (Brisbane).

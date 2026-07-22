@@ -36,7 +36,7 @@ def token_dir(tmp_path, monkeypatch):
 
 
 def _session(tokens, account="acct"):
-    return XeroSession(account, "client-id", "client-secret", tokens)
+    return XeroSession(account, "client-id", tokens)
 
 
 # ----------------------------------------------------------------------
@@ -62,9 +62,8 @@ def test_refresh_success_persists_rotated_tokens(token_dir, monkeypatch):
                    "expires_at": time.time() - 10, "scope": "openid"})
     grant_args = {}
 
-    def fake_grant(client_id, client_secret, refresh_token):
-        grant_args.update(client_id=client_id, client_secret=client_secret,
-                          refresh_token=refresh_token)
+    def fake_grant(client_id, refresh_token):
+        grant_args.update(client_id=client_id, refresh_token=refresh_token)
         return {"access_token": "new-acc", "refresh_token": "new-ref",
                 "expires_in": 1800, "scope": "openid accounting"}
 
@@ -128,7 +127,7 @@ def test_refresh_token_grant_invalid_grant_raises(monkeypatch):
     monkeypatch.setattr(auth.requests, "post", lambda *a, **k: resp)
 
     with pytest.raises(XeroAuthError) as exc:
-        auth.refresh_token_grant("client-id", "client-secret", "dead-ref")
+        auth.refresh_token_grant("client-id", "dead-ref")
     assert "invalid_grant" in str(exc.value)
 
 
@@ -192,7 +191,7 @@ def test_save_tokens_is_0600_and_round_trips(token_dir):
 def test_build_authorize_url_carries_oauth_params():
     url = auth.build_authorize_url(
         "CID", "http://localhost:8976/callback",
-        ["openid", "accounting.transactions"], "STATE-XYZ")
+        ["openid", "accounting.transactions"], "STATE-XYZ", "CHALLENGE")
     assert url.startswith(auth.AUTHORIZE_URL + "?")
     q = parse_qs(urlparse(url).query)
     assert q["response_type"] == ["code"]
@@ -200,10 +199,12 @@ def test_build_authorize_url_carries_oauth_params():
     assert q["redirect_uri"] == ["http://localhost:8976/callback"]
     assert q["scope"] == ["openid accounting.transactions"]  # list joined with spaces
     assert q["state"] == ["STATE-XYZ"]
+    assert q["code_challenge"] == ["CHALLENGE"]
+    assert q["code_challenge_method"] == ["S256"]
 
 
 def test_build_authorize_url_accepts_prejoined_scope_string():
-    url = auth.build_authorize_url("CID", "http://localhost/cb", "openid email", "S")
+    url = auth.build_authorize_url("CID", "http://localhost/cb", "openid email", "S", "CH")
     q = parse_qs(urlparse(url).query)
     assert q["scope"] == ["openid email"]
 
@@ -212,3 +213,14 @@ def test_generate_state_is_nonempty_and_unique():
     s1, s2 = auth.generate_state(), auth.generate_state()
     assert s1 and s2
     assert s1 != s2
+
+
+def test_pkce_challenge_is_unpadded_s256_of_verifier():
+    import base64
+    import hashlib
+    verifier = auth.generate_pkce_verifier()
+    assert 43 <= len(verifier) <= 128
+    expected = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+    assert auth.pkce_challenge(verifier) == expected
+    assert "=" not in auth.pkce_challenge(verifier)

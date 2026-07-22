@@ -118,16 +118,15 @@ def _build_session(xero: dict) -> XeroSession:
     call ``/connections`` before any tenant is chosen.
     """
     client_id = xero.get("client_id")
-    client_secret = xero.get("client_secret")
-    if not (client_id and client_secret):
+    if not client_id:
         which = f"[xero.{account()}]" if account() else "[xero]"
-        typer.echo(f"Error: {which} must set client_id and client_secret.", err=True)
+        typer.echo(f"Error: {which} must set client_id.", err=True)
         raise typer.Exit(1)
     tokens = load_tokens(account(), xero)
     if not tokens or not tokens.get("refresh_token"):
         typer.echo("No Xero tokens; run `crude-xero auth`.", err=True)
         raise typer.Exit(1)
-    return XeroSession(account(), client_id, client_secret, tokens)
+    return XeroSession(account(), client_id, tokens)
 
 
 def _resolve_tenant(xero_section: dict, session: XeroSession, requested: Optional[str]) -> str:
@@ -255,10 +254,9 @@ def auth(
     config = read_config(find_config())
     xero = resolve_account(config, "xero", account())
     client_id = xero.get("client_id")
-    client_secret = xero.get("client_secret")
-    if not (client_id and client_secret):
+    if not client_id:
         which = f"[xero.{account()}]" if account() else "[xero]"
-        typer.echo(f"Error: {which} must set client_id and client_secret.", err=True)
+        typer.echo(f"Error: {which} must set client_id.", err=True)
         raise typer.Exit(1)
     redirect_uri = xero.get("redirect_uri") or DEFAULT_REDIRECT_URI
     scopes = xero.get("scopes") or DEFAULT_SCOPES
@@ -268,10 +266,10 @@ def auth(
         typer.echo(f"No [xero] redirect_uri set; using {redirect_uri} (register it on the app).")
     try:
         if manual:
-            grant = manual_authorize(client_id, client_secret, redirect_uri, scopes)
+            grant = manual_authorize(client_id, redirect_uri, scopes)
         else:
             grant = loopback_authorize(
-                client_id, client_secret, redirect_uri, scopes, open_browser=not no_browser
+                client_id, redirect_uri, scopes, open_browser=not no_browser
             )
     except Exception as e:
         typer.echo(f"Error: auth failed: {e}", err=True)

@@ -43,7 +43,7 @@ class _FakeResp:
 def _session(tenant_id="TENANT-1"):
     """A session with a far-future token, so _ensure_token never refreshes."""
     return XeroSession(
-        "acct", "client-id", "client-secret",
+        "acct", "client-id",
         {"access_token": "ACCESS-1", "expires_at": time.time() + 9999},
         tenant_id=tenant_id,
     )
