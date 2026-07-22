@@ -1,3 +1,14 @@
+crude (1.5.0) unstable; urgency=medium
+
+  * crude-xero: PKCE auth for Mobile-or-desktop Xero apps (client_id only);
+    a config client_secret selects the confidential Web-app flow instead.
+  * crude-xero: default consent uses Xero's granular scopes, the only kind
+    apps created on or after 2 March 2026 can consent.
+  * crude-xero: journal commands explain the Advanced-tier gate instead of
+    failing with a bare 403 when the token lacks accounting.journals.read.
+
+ -- Weiwu Zhang <a@colourful.land>  Wed, 22 Jul 2026 22:05:00 +1000
+
 crude (1.4.2) unstable; urgency=medium
 
   * People commands across all sites gain --ldif: LDIF (inetOrgPerson)
