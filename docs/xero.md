@@ -38,13 +38,15 @@ crude-xero auth --manual       # paste-based flow for a headless box (no local w
 
 `auth` runs the OAuth2 authorization-code flow: it opens the Xero consent page, serves one request on the redirect URI's loopback port, validates the returned CSRF `state`, and exchanges the code for a token set, which it persists and then prints the connected organisations. `--manual` instead prints the URL and reads back the pasted redirect URL (or bare code), validating `state` when present — for a box with no browser or no reachable loopback.
 
-**Xero developer-portal prerequisites** (developer.xero.com → My Apps → this app), the user's to set up once:
+**Xero developer-portal prerequisites** (developer.xero.com → My Apps → this app), the user's to set up once. Every crude installation registers its own Xero app: there is no shared `client_id` to ship, because Xero caps an uncertified app at 25 organisation connections in total and an organisation at two uncertified apps, so a communal registration would jam almost immediately. Registering an app is free and takes a few minutes:
 
 - The natural app type for a CLI is a **Mobile or desktop app** (the PKCE public-client type; it issues a `client_id` and no client secret; leave config `client_secret` unset). The alternative is riding an existing **Web app** registration with its `client_id` and `client_secret`; setting `client_secret` in config selects that confidential flow. The web-app route matters because Xero caps how many uncertified apps an organisation may connect (two, and certified apps and Custom Connections do not count): an organisation already at the cap can refuse a new app's consent entirely, while a consent through an already-connected app's credentials lands on its existing seat.
 - Add the `redirect_uri` as an allowed redirect URI on the app.
 - Enable the OAuth scopes the binary requests. Reads work under read scopes; **writes require the write scopes enabled on the app, then a fresh `crude-xero auth`** to obtain a token carrying them. When a call is refused for want of a scope (a 403, or a 401 that survives a token refresh), the error names the scopes the token actually carries and tells you to add the missing one to `scopes` and re-run `crude-xero auth`; re-auth alone does not widen a grant.
 
 Refresh is automatic: the transport refreshes when the access token is within 60 seconds of expiry or on a 401, and persists the rotated token set. The refresh token rotates on every refresh and dies after 60 days idle; if Xero refuses the grant (`invalid_grant`, expired or revoked) the binary errors telling you to run `crude-xero auth` again, and a failed refresh never overwrites the stored token.
+
+Config `scopes` is read in exactly one place: `auth`, when building the consent URL. A stored token carries the scopes granted at its consent, a refresh preserves that grant unchanged, and no scope setting affects an already-authorized installation until its next `auth`. A re-consent rebuilds the grant from config, which matters in one case: a pre-cutoff app relying on the granular default rather than an explicit `scopes` line loses `accounting.journals.read` on re-consent, since the default omits it (Section 5); the journal commands then name exactly that gap.
 
 ## 3. Transport
 
