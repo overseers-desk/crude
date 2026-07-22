@@ -469,6 +469,7 @@ def test_xero_journals_post_filter_created_exactly(bound, monkeypatch):
         {"JournalNumber": 2, "CreatedDateUTC": "/Date(1789999999000+0000)/"},
     ]
     api = _xero_accounting(monkeypatch, {"Journals": rows}, {})
+    api.session.tokens["scope"] = "accounting.journals.read"
     items = api.list_journals()
     assert [j["JournalNumber"] for j in items] == [1]
 

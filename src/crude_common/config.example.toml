@@ -32,7 +32,7 @@ password_hash = "sha256-hex-of-your-password"  # printf '%s' 'PASSWORD' | sha256
 [xero]
 client_id = "your-xero-app-client-id"
 redirect_uri = "http://localhost:8910/callback"  # must match a redirect URI registered on the Xero app
-# scopes = "offline_access accounting.transactions accounting.contacts accounting.settings"  # the consent set; .read suffixes for read-only
+# scopes = "offline_access accounting.invoices accounting.payments accounting.contacts accounting.settings"  # the consent set; .read suffixes for read-only
 # default_tenant = "..."  # optional; pin one organisation when the login reaches several (else use --tenant)
 # Run `crude-xero auth` once to grant access; tokens cache in ~/.local/state/crude/xero_token.json and refresh automatically.
 

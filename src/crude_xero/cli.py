@@ -48,18 +48,28 @@ from crude_xero.client import XeroClient, XeroError, XeroSession
 # config (the port is derived from the URI).
 DEFAULT_REDIRECT_URI = "http://localhost:8910/callback"
 
-# A sensible accounting+payroll read+write grant when config sets no `scopes`.
-# offline_access is required for refresh tokens; journals/reports/budgets are
-# read-only scopes. The BankFeeds (`bankfeeds`) and Finance (`finance.*`) scopes
-# are deliberately absent: those products are access-gated, so requesting their
-# scopes in the default consent returns invalid_scope and breaks `crude-xero
-# auth`. The user adds them to config `scopes` once Xero grants access (see
-# docs/xero.md).
+# A sensible accounting+payroll read+write grant when config sets no `scopes`,
+# in the granular scope model (the only one apps created on or after 2 March
+# 2026 can consent; earlier apps accept these too). offline_access is required
+# for refresh tokens. The accounting.invoices scope carries credit notes,
+# quotes, purchase orders, repeating invoices, linked transactions, and items;
+# accounting.payments carries batch payments, overpayments, and prepayments;
+# accounting.banktransactions carries bank transfers. Scopes deliberately
+# absent, because requesting one the app cannot consent returns invalid_scope
+# and breaks `crude-xero auth`: accounting.journals.read (Journals endpoint,
+# sold only on Xero's Advanced tier), accounting.classicexpenses (receipts, a
+# deprecated endpoint closed to new apps), BankFeeds (`bankfeeds`) and Finance
+# (`finance.*`) (access-gated). The user adds any of them to config `scopes`
+# once Xero grants access (see docs/xero.md).
 DEFAULT_SCOPES = (
     "openid profile email offline_access "
-    "accounting.transactions accounting.contacts accounting.settings "
-    "accounting.attachments accounting.journals.read accounting.reports.read "
-    "accounting.budgets.read "
+    "accounting.invoices accounting.banktransactions accounting.payments "
+    "accounting.manualjournals accounting.contacts accounting.settings "
+    "accounting.attachments accounting.budgets.read "
+    "accounting.reports.aged.read accounting.reports.balancesheet.read "
+    "accounting.reports.banksummary.read accounting.reports.budgetsummary.read "
+    "accounting.reports.executivesummary.read accounting.reports.profitandloss.read "
+    "accounting.reports.trialbalance.read accounting.reports.taxreports.read "
     "files assets projects "
     "payroll.employees payroll.payruns payroll.payslip "
     "payroll.timesheets payroll.settings"

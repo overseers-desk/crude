@@ -445,3 +445,61 @@ def test_write_config_failure_does_not_corrupt_existing(tmp_path, monkeypatch):
     assert read_config(path) == {"xero": {"client_id": "ORIGINAL"}}
     # ...and the failed temp file was cleaned up.
     assert [p.name for p in tmp_path.iterdir()] == ["config.toml"]
+
+
+# ----------------------------------------------------------------------
+# Journals scope gate — fail before the request when the token lacks the scope
+# ----------------------------------------------------------------------
+
+
+def test_list_journals_without_scope_fails_before_any_request(monkeypatch):
+    xs = _session()
+    xs.tokens["scope"] = "openid accounting.invoices accounting.contacts"
+    calls, fake = _recorder(_FakeResp({"Journals": []}))
+    monkeypatch.setattr(xs.session, "request", fake)
+    api = AccountingAPI(xs)
+    with pytest.raises(XeroError) as exc:
+        api.list_journals()
+    assert "accounting.journals.read" in str(exc.value)
+    assert "Advanced tier" in str(exc.value)
+    assert calls == []  # gated before any HTTP
+
+
+def test_get_journal_without_scope_fails_before_any_request(monkeypatch):
+    xs = _session()
+    xs.tokens["scope"] = ""
+    calls, fake = _recorder(_FakeResp({"Journals": []}))
+    monkeypatch.setattr(xs.session, "request", fake)
+    api = AccountingAPI(xs)
+    with pytest.raises(XeroError):
+        api.get_journal("J-1")
+    assert calls == []
+
+
+def test_journals_with_scope_issue_the_request(monkeypatch):
+    xs = _session()
+    xs.tokens["scope"] = "offline_access accounting.journals.read"
+    calls, fake = _recorder(_FakeResp({"Journals": [{"JournalNumber": 1}]}))
+    monkeypatch.setattr(xs.session, "request", fake)
+    api = AccountingAPI(xs)
+    items = api.list_journals()
+    assert [j["JournalNumber"] for j in items] == [1]
+    assert len(calls) == 1
+
+
+# ----------------------------------------------------------------------
+# DEFAULT_SCOPES — the granular scope model
+# ----------------------------------------------------------------------
+
+
+def test_default_scopes_are_granular():
+    from crude_xero.cli import DEFAULT_SCOPES
+
+    scopes = DEFAULT_SCOPES.split()
+    assert "accounting.invoices" in scopes
+    assert "accounting.reports.trialbalance.read" in scopes
+    # The pre-granular broad scopes: no app created on or after 2 March 2026
+    # can consent them, so the default must not request them.
+    assert "accounting.transactions" not in scopes
+    assert "accounting.reports.read" not in scopes
+    assert "accounting.journals.read" not in scopes

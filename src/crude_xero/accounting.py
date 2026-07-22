@@ -429,6 +429,26 @@ class AccountingAPI:
     # Journals (read-only; paged by offset = last JournalNumber, not page)
     # ------------------------------------------------------------------
 
+    def _require_journals_scope(self):
+        """Fail before the request when the token cannot reach the Journals endpoint.
+
+        The endpoint needs accounting.journals.read, which apps created on or
+        after 2 March 2026 can only obtain on Xero's Advanced tier (paid,
+        Xero-approved); apps created before that date keep the scope until
+        13 September 2027. A token without it would draw a 403 whose generic
+        advice (re-auth with the scope added) cannot work on a gated app, so
+        name the gate instead.
+        """
+        granted = (self.session.tokens.get("scope") or "").split()
+        if "accounting.journals.read" not in granted:
+            raise XeroError(
+                "Journals need the accounting.journals.read scope, which apps created "
+                "on or after 2 March 2026 can only obtain on Xero's Advanced tier "
+                "(paid, Xero-approved). An app created before that date keeps the "
+                "scope until 13 September 2027: add it to [xero] scopes in "
+                "config.toml and run `crude-xero auth`."
+            )
+
     def list_journals(self, offset=None, all_pages=False, limit=None):
         """Page journals via the trailing JournalNumber offset (not the page param).
 
@@ -436,6 +456,7 @@ class AccountingAPI:
         limit caps the total records (paging as needed, then truncating).
         """
         from crude_xero.client import PAGE_SIZE
+        self._require_journals_scope()
         results = []
         cursor = offset
         while True:
@@ -457,6 +478,7 @@ class AccountingAPI:
         return asof.bound_records(results, "CreatedDateUTC", what="journal")
 
     def get_journal(self, guid):
+        self._require_journals_scope()
         return self._get_one("Journals", guid)
 
     # ------------------------------------------------------------------
