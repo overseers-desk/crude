@@ -13,14 +13,13 @@ One `[xero]` block in `~/.config/crude/config.toml`:
 ```toml
 [xero]
 client_id     = "your-xero-app-client-id"        # developer.xero.com > My Apps > this app
-client_secret = "your-xero-app-client-secret"
 redirect_uri  = "http://localhost:8910/callback" # a localhost loopback, registered on the app
 # scopes is optional; unset requests the default accounting read+write grant (see below).
 # scopes = "openid profile email offline_access accounting.transactions accounting.contacts ..."
 # default_tenant = "..."  # tenant name or id to use when several organisations are reachable
 ```
 
-`client_id` and `client_secret` are required. `redirect_uri` must be a `http://localhost:PORT/path` (or `127.0.0.1`) loopback that is also registered as an allowed redirect URI on the Xero app; the loopback server's port is derived from it. When `redirect_uri` is unset the binary falls back to `http://localhost:8910/callback`. When `scopes` is unset it requests a default grant of `openid profile email offline_access accounting.transactions accounting.contacts accounting.settings accounting.attachments accounting.journals.read accounting.reports.read accounting.budgets.read files assets projects payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings`: the read+write Accounting scopes plus read-only journals/reports/budgets, and the read+write Files, Assets, Projects, and Payroll AU scopes (read is implied by each write scope). The BankFeeds and Finance scopes are deliberately left out of the default, because those products are access-gated and requesting their scopes before Xero grants access returns `invalid_scope` and breaks `crude-xero auth` (see Section 5). `default_tenant` pins one organisation; it is written by `crude-xero tenant use` and read at tenant resolution.
+`client_id` is required (PKCE needs no client secret). `redirect_uri` must be a `http://localhost:PORT/path` (or `127.0.0.1`) loopback that is also registered as an allowed redirect URI on the Xero app; the loopback server's port is derived from it. When `redirect_uri` is unset the binary falls back to `http://localhost:8910/callback`. When `scopes` is unset it requests a default grant of `openid profile email offline_access accounting.transactions accounting.contacts accounting.settings accounting.attachments accounting.journals.read accounting.reports.read accounting.budgets.read files assets projects payroll.employees payroll.payruns payroll.payslip payroll.timesheets payroll.settings`: the read+write Accounting scopes plus read-only journals/reports/budgets, and the read+write Files, Assets, Projects, and Payroll AU scopes (read is implied by each write scope). The BankFeeds and Finance scopes are deliberately left out of the default, because those products are access-gated and requesting their scopes before Xero grants access returns `invalid_scope` and breaks `crude-xero auth` (see Section 5). `default_tenant` pins one organisation; it is written by `crude-xero tenant use` and read at tenant resolution.
 
 **Tokens live in a durable side file, not in config.** Xero rotates the refresh token on every refresh (single-use), access tokens last 30 minutes, and there is no stored password to silently re-login, so the rotating token is kept in `$XDG_STATE_HOME/crude/xero_token.json` (default `~/.local/state/crude/xero_token.json`; or `xero_token_<account>.json` for a named account), written atomically (temp file + `fsync` + `os.replace`, mode `0600`) under an `flock`, seeded once from the `[xero]` config tokens if present. A rotating OAuth token is XDG *state*: it persists across restarts, but is not config (it is program-managed, not user-authored) and not cache (losing it costs a browser re-consent). Any `access_token`/`refresh_token`/`timestamp` left in the `[xero]` config block is read **once** as a migration seed, written into the side file, then ignored; the side file is authoritative thereafter. A naive (non-timezone-aware) seed `timestamp` is treated as already-expired, forcing a refresh while keeping the refresh token.
 
@@ -40,6 +39,7 @@ crude-xero auth --manual       # paste-based flow for a headless box (no local w
 
 **Xero developer-portal prerequisites** (developer.xero.com → My Apps → this app), the user's to set up once:
 
+- Create the app as a **Mobile or desktop app** (the PKCE public-client type; it issues a `client_id` and no client secret).
 - Add the `redirect_uri` as an allowed redirect URI on the app.
 - Enable the OAuth scopes the binary requests. Reads work under read scopes; **writes require the write scopes enabled on the app, then a fresh `crude-xero auth`** to obtain a token carrying them. When a call is refused for want of a scope (a 403, or a 401 that survives a token refresh), the error names the scopes the token actually carries and tells you to add the missing one to `scopes` and re-run `crude-xero auth`; re-auth alone does not widen a grant.
 
@@ -47,7 +47,7 @@ Refresh is automatic: the transport refreshes when the access token is within 60
 
 ## 3. Transport
 
-Every request carries an `Authorization: Bearer <access_token>` header and, except for `/connections`, an `xero-tenant-id` header naming the resolved organisation. The token endpoint authenticates the app over HTTP Basic with `client_id`/`client_secret` (confidential web app, not PKCE).
+Every request carries an `Authorization: Bearer <access_token>` header and, except for `/connections`, an `xero-tenant-id` header naming the resolved organisation. The token endpoint identifies the app by its `client_id` in the request body and proves the exchange with the PKCE code verifier (public client, no client secret).
 
 The seven product base paths, all under `https://api.xero.com/`:
 
