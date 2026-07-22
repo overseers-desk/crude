@@ -1,4 +1,4 @@
-crude (1.5.0) unstable; urgency=medium
+crude (1.4.3) unstable; urgency=medium
 
   * crude-xero: PKCE auth for Mobile-or-desktop Xero apps (client_id only);
     a config client_secret selects the confidential Web-app flow instead.

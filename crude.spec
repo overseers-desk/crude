@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.5.0
+Version:        1.4.3
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -89,7 +89,7 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
-* Wed Jul 22 2026 Weiwu Zhang <a@colourful.land> - 1.5.0-1
+* Wed Jul 22 2026 Weiwu Zhang <a@colourful.land> - 1.4.3-1
 - crude-xero: PKCE auth for Mobile-or-desktop Xero apps (client_id only);
   a config client_secret selects the confidential Web-app flow instead.
 - crude-xero: default consent uses Xero's granular scopes, the only kind
