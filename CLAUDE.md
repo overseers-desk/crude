@@ -13,6 +13,8 @@ without it re-derives those models wrongly.
 The per-site layout rules that must hold are in [`INVARIANTS.md`](INVARIANTS.md);
 a change that breaks one is a design change, the owner's to make.
 
+@INVARIANTS.md
+
 The example config lives at `src/crude_common/config.example.toml` (shipped as
 package data); `crude config-sample` prints it. Packaging lives in `debian/`
 (`.deb`) and `crude.spec` (`.rpm`). The Homebrew formula lives in the dedicated
