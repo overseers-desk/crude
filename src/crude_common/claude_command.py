@@ -145,6 +145,7 @@ Deputy's Resource API is uniform across ~60 objects, so any object is reachable 
 Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_hash` = the SHA-256 hex of the password; optional `fingerprint`, `tenant`). Sonas has no public API; crude speaks its Meteor DDP backend directly. The first login from a new machine triggers a one-time device-verification email; open the link once to trust the device (full setup and the protocol are in the crude repo docs/sonas.md).
 
     crude-sonas event list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--status <name|number>]
+    crude-sonas event leads --source <name|categoryId> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--status <name|number>] [--list] [--json]   # count enquiries by lead source, by enquiry date
     crude-sonas event get <eventId>
     crude-sonas event create-enquiry --venue <venueId> --email <email> --firstname <name> --lastname <name> [--telephone] [--type <n>] [--date-desired <text>] [--data '<json>']
     crude-sonas event rename <eventId> --name <name>

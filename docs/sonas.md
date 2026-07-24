@@ -444,12 +444,23 @@ Calendar plumbing: `tenantUpdateCalendars({modifier})`,
 ### 6.3 Leads & enquiry pipeline (T1/T3)
 
 Enquiry option lists (enquiry source, "heard about us", reason-not-booked) are
-tag-partitioned entries in the shared `Categories` collection, loaded via the
-`initial` pub; CRUD via `categoryAddTag({categoryTag, name})`,
+tag-partitioned entries in the shared `Categories` collection, read via the
+`categories(tenantId)` pub **[live]** (collection `categories`; the
+`CategoriesList` tabular table's generic data pub does *not* deliver these
+docs, so `SonasClient.read_categories` uses this pub). CRUD via
+`categoryAddTag({categoryTag, name})`,
 `categoryUpdateTag({categoryId, newName})`, `categoryDeleteTag({categoryId})`,
 `categoryRestoreTag({categoryId})`, `categoryMergeTag({srcId, destId})`,
 `categoryCheckTagUsage({categoryId})` (read). `categoryTag` ∈ `enquiry_source`,
 `heard_about_us`, `reason_not_booked`, `other_venues`.
+
+Leads by source: `event leads` counts enquiries whose `enquiryData.sourceId` is
+a given `enquiry_source` category (resolved from its name), by enquiry date
+(`enquiryData.date`, not the wedding date). It drives the `EventList` tabular
+`recordsFiltered` (§5) with the selector `{enquiryData.sourceId, enquiryData.date}`,
+so it reaches the date-less fresh enquiries `event list` cannot (§6.1). This is
+the read-only substitute for the unexposed `reportGenerate` `SalesFunnel`/
+`EventMarketing` reports below.
 
 Web-intake forms: `createTenantExternalForm`, `updateTenantExternalForm({formId, doc})`,
 `cloneTenantExternalForm({formId})`, `deleteTenantExternalForm({formId})`.

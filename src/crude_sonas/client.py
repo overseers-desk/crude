@@ -411,24 +411,37 @@ class SonasClient:
                 return ev
         raise RuntimeError(f"event {event_id} not found")
 
-    def iter_all_event_ids(self, statuses=range(8)) -> list:
-        """Every event id whose status is in ``statuses`` — including the
-        date-less enquiries that ``eventsByDateRange`` (and thus ``event list``)
-        cannot see.
+    def read_categories(self) -> list:
+        """The tenant's Categories — the option lists behind enquiry source,
+        "heard about us", reason-not-booked, and more (docs/sonas.md §6.3).
+
+        Served by the ``categories(tenantId)`` publication into the
+        ``categories`` collection. The ``CategoriesList`` aldeed:tabular table's
+        generic data pub does not deliver these docs, so this pub is the read
+        path for category names and ids."""
+        self._ensure()
+        return self.read_pub("categories", [self.tenant], collection="categories")
+
+    def event_ids_matching(self, selector: dict) -> tuple:
+        """Every event id matching ``selector`` (a Mongo query), plus the
+        server's ``recordsFiltered`` count — including the date-less enquiries
+        that ``eventsByDateRange`` (and thus ``event list``) cannot see.
 
         Drives the ``EventList`` aldeed:tabular table's first step,
-        ``tabular_getInfo``, with an explicit ``{status:{$in:[...]}}`` selector.
-        That selector overrides the table's default "upcoming" filter
-        (docs/sonas.md §6.1), so the published ``tabular_records`` doc carries the
-        ids of every matching event and the filtered count. Pages by that count
-        until all ids are collected. Read-only: a subscription, never a method
-        call — so it is safe on the export path.
+        ``tabular_getInfo``, with ``selector`` in place of the table's default
+        "upcoming" filter (docs/sonas.md §6.1), so the published
+        ``tabular_records`` doc carries the ids of every matching event and the
+        filtered count. Pages by that count until all ids are collected.
+        Read-only: a subscription, never a method call.
+
+        Returns ``(ids, records_filtered)``; ``records_filtered`` is the server's
+        count for ``selector`` (``len(ids)`` when the server sends none).
         """
         self._ensure()
         store = self.conn["store"]
-        selector = {"status": {"$in": list(statuses)}}
         ids: list = []
         seen: set = set()
+        records_filtered = None
         # The server caps a page at 100 ids regardless of the requested size,
         # so advance ``skip`` by the batch actually returned and stop only when
         # the records are exhausted or ``recordsFiltered`` is reached. Breaking
@@ -444,6 +457,8 @@ class SonasClient:
             ddp_unsub(self.conn, sid)
             batch = rec.get("ids") or []
             total = rec.get("recordsFiltered")
+            if total is not None:
+                records_filtered = total
             if not batch:
                 break
             for i in batch:
@@ -453,6 +468,13 @@ class SonasClient:
             skip += len(batch)
             if total is not None and len(ids) >= total:
                 break
+        return ids, records_filtered if records_filtered is not None else len(ids)
+
+    def iter_all_event_ids(self, statuses=range(8)) -> list:
+        """Every event id whose status is in ``statuses`` (the export path's
+        enumeration). A thin wrapper over ``event_ids_matching`` with a
+        ``{status: {$in: [...]}}`` selector."""
+        ids, _ = self.event_ids_matching({"status": {"$in": list(statuses)}})
         return ids
 
     # -- method calls (writes, and the few read-methods) ----------------

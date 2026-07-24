@@ -646,6 +646,119 @@ def event_export(
         typer.echo(f"{len(failures)} event(s) failed; see stderr above.", err=True)
 
 
+def _enquiry_sources(client) -> list:
+    """The tenant's ``enquiry_source`` option list: category docs tagged
+    ``enquiry_source`` (docs/sonas.md §6.3), read via the ``categories`` pub."""
+    return [c for c in client.read_categories() if c.get("tag") == "enquiry_source"]
+
+
+def _resolve_enquiry_source_id(client, source: str) -> str:
+    """Resolve a ``--source`` to its category id: an exact id match, else a
+    case-insensitive name match among the ``enquiry_source`` categories. Errors
+    (listing the available sources) on no match or an ambiguous name."""
+    sources = _enquiry_sources(client)
+    for c in sources:
+        if c.get("_id") == source:
+            return source
+    matches = [c for c in sources if (c.get("name") or "").lower() == source.lower()]
+    if len(matches) == 1:
+        return matches[0]["_id"]
+    names = ", ".join(sorted(s(c.get("name")) for c in sources)) or "(none)"
+    if not matches:
+        typer.echo(f"Error: no enquiry source named {source!r}. Available: {names}.", err=True)
+    else:
+        typer.echo(f"Error: {source!r} matches {len(matches)} sources; use the id. "
+                   f"Available: {names}.", err=True)
+    raise typer.Exit(1)
+
+
+@event_app.command("leads")
+def event_leads(
+    source: str = typer.Option(
+        ..., "--source", help="Lead source: an enquiry_source name (e.g. \"Easy "
+        "Weddings\", case-insensitive) or its category id."),
+    from_: Optional[str] = typer.Option(
+        None, "--from", help="Enquiry made on or after this date (YYYY-MM-DD). "
+        "This is the enquiry date, not the wedding date."),
+    to: Optional[str] = typer.Option(
+        None, "--to", help="Enquiry made on or before this date (YYYY-MM-DD). "
+        "This is the enquiry date, not the wedding date."),
+    status: List[str] = typer.Option(
+        None, "--status", help="Statuses to include (name or number); repeatable. "
+        "Default: all (a converted lead still counts as one from its source)."),
+    show_list: bool = typer.Option(
+        False, "--list", help="Also print the matched leads, not just the count."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    """Count leads from a source, by enquiry date.
+
+    A lead is an enquiry tagged with a lead source. This counts every event
+    whose ``enquiryData.sourceId`` is the given source and whose enquiry date
+    (``enquiryData.date``) falls in [--from, --to]. Unlike `event list`, it
+    reaches the date-less fresh enquiries too (via the EventList tabular read).
+    """
+    client = _client()
+    try:
+        source_id = _resolve_enquiry_source_id(client, source)
+        selector = {"enquiryData.sourceId": source_id}
+        if status:
+            selector["status"] = {"$in": [_parse_status(v) for v in status]}
+        date_range = {}
+        if from_:
+            date_range["$gte"] = to_ejson_date(from_)
+        if to:
+            date_range["$lt"] = to_ejson_date_end(to)
+        if date_range:
+            selector["enquiryData.date"] = date_range
+        ids, count = client.event_ids_matching(selector)
+        leads = []
+        if show_list or output_json:
+            leads = [_lead_row(client, event_id) for event_id in ids]
+    except Exception as e:
+        typer.echo(f"Error counting leads: {e}", err=True)
+        raise typer.Exit(1)
+    finally:
+        client.close()
+    if output_json:
+        typer.echo(json.dumps(
+            {"source": source, "source_id": source_id, "from": from_, "to": to,
+             "count": count, "leads": leads}, indent=2))
+        return
+    if show_list:
+        _emit(leads, output_json=False, columns=[
+            ("Id", "event_id"), ("Enquired", "enquiry_date"), ("Wedding", "wedding_date"),
+            ("Status", "status"), ("Couple", "couple"),
+        ], what="lead")
+    else:
+        typer.echo(f"{count} lead(s) from {source}"
+                   + (f" enquired {from_ or '…'}–{to or '…'}" if (from_ or to) else "")
+                   + ".")
+
+
+def _lead_row(client, event_id: str) -> dict:
+    """One lead's display row: identity and the enquiry vs wedding dates. The
+    event doc (status, wedding date, couple) comes from eventBasicInfo, the
+    per-event read ``_require_event`` uses; the enquiry date is taken from its
+    ``enquiryData``, falling back to the ``enquiryData`` pub when that field is
+    not projected."""
+    basic = client.read_pub("eventBasicInfo", [event_id])
+    ev = next((d for d in basic if d.get("_collection") == "events"), {})
+    enq_date = (ev.get("enquiryData") or {}).get("date")
+    if enq_date is None:
+        for d in client.read_pub("enquiryData", [event_id]):
+            cand = (d.get("enquiryData") or {}).get("date") if isinstance(d, dict) else None
+            if cand is not None:
+                enq_date = cand
+                break
+    return {
+        "event_id": event_id,
+        "enquiry_date": date_str(enq_date) if enq_date else "",
+        "wedding_date": date_str(ev.get("date")) if ev.get("date") else "",
+        "status": EVENT_STATUS.get(ev.get("status"), s(ev.get("status"))),
+        "couple": _couple(ev),
+    }
+
+
 def _now_ejson() -> dict:
     import time as _time
     return {"$date": int(_time.time() * 1000)}
