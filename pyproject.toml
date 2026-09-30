@@ -35,6 +35,7 @@ crude-airwallex = "crude_airwallex.cli:app"
 crude-clover = "crude_clover.cli:app"
 crude-facebook = "crude_facebook.cli:app"
 crude-mautic = "crude_mautic.cli:app"
+crude-wise = "crude_wise.cli:app"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

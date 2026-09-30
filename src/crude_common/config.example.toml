@@ -59,6 +59,14 @@ password = "your-mautic-password"
 # API Settings, turn on the API and then "Enable HTTP basic auth"; the second setting
 # only appears once the first is on.
 
+[wise]
+api_token = "your-wise-api-token"  # Your Account > Connect and manage apps > API tokens; paste it as issued
+# profile_id = 12345678   # optional; else the account's one business profile is used
+# private_key = "~/.config/crude/wise-sca.pem"  # optional; signs the SCA challenge that `transaction list`
+#                         # (the statement) meets on profiles registered outside US/AU/NZ/SG/CA/MY.
+#                         # Upload the matching public key on the same API tokens page.
+# environment = "sandbox" # optional; api.wise-sandbox.com instead of api.wise.com
+
 # Multiple accounts on one site
 # -----------------------------
 # The bare [site] section above is the "default" account. Hold a second account on
