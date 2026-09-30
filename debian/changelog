@@ -1,3 +1,12 @@
+crude (1.6.0) unstable; urgency=medium
+
+  * crude-wise: a Wise Business backend for balances, the balance statement,
+    transfers, recipients and the activity feed, shipped in the .deb and the
+    .rpm. The statement's SCA challenge is signed through openssl with the
+    account's key when private_key is configured.
+
+ -- Weiwu Zhang <a@colourful.land>  Wed, 30 Sep 2026 20:00:00 +1000
+
 crude (1.5.0) unstable; urgency=medium
 
   * crude-sonas: `event leads` counts enquiries by lead source and enquiry

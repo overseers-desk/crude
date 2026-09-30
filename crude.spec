@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.5.0
+Version:        1.6.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -28,8 +28,9 @@ availability, and bookings), crude-deputy (Deputy workforce management),
 crude-sonas (Sonas wedding-venue software), crude-xero (Xero accounting),
 crude-airwallex (Airwallex global payments and transactions), crude-clover
 (Clover POS orders and catalog), crude-facebook (Facebook Pages:
-posts, insights, comments), and crude-mautic (a self-hosted Mautic
-instance: marketing forms, submissions, contacts, campaigns).
+posts, insights, comments), crude-mautic (a self-hosted Mautic
+instance: marketing forms, submissions, contacts, campaigns), and
+crude-wise (Wise Business balances, statement, transfers, recipients).
 The crude command
 lists them and carries the shared --version and install-claude-command flags.
 
@@ -64,7 +65,8 @@ for spec in \
     crude-airwallex:crude_airwallex.cli \
     crude-clover:crude_clover.cli \
     crude-facebook:crude_facebook.cli \
-    crude-mautic:crude_mautic.cli; do
+    crude-mautic:crude_mautic.cli \
+    crude-wise:crude_wise.cli; do
     name=${spec%%:*}
     module=${spec##*:}
     cat > %{buildroot}/usr/bin/${name} << ENTRY
@@ -89,10 +91,16 @@ done
 /usr/bin/crude-clover
 /usr/bin/crude-facebook
 /usr/bin/crude-mautic
+/usr/bin/crude-wise
 /usr/lib/python*/site-packages/crude_*/
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Wed Sep 30 2026 Weiwu Zhang <a@colourful.land> - 1.6.0-1
+- crude-wise: a Wise Business backend for balances, the balance statement,
+  transfers, recipients and the activity feed. The statement's SCA challenge
+  is signed through openssl with the account's key when private_key is set.
+
 * Thu Aug 20 2026 Weiwu Zhang <a@colourful.land> - 1.5.0-1
 - crude-sonas: `event leads` counts enquiries by lead source and enquiry date.
 - crude-mautic: a Mautic backend for forms, submissions, contacts, segments and
