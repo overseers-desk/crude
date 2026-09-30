@@ -18,6 +18,7 @@ The clients ship as their own console binaries:
 - `crude-clover`: AP Clover POS orders, catalog, and Square-shape CSV export (REST, static bearer token).
 - `crude-facebook`: Facebook Page posts, insights, and comments over the Graph API (REST, Page or System User token).
 - `crude-mautic`: a self-hosted Mautic instance: website forms and their submissions, contacts, segments, campaigns (REST, HTTP basic auth).
+- `crude-wise`: Wise Business balances, the balance statement, transfers, recipients, and the activity feed (REST, personal API token).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -52,11 +53,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, `crude_clover`, `crude_facebook`, `crude_mautic`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, `crude_clover`, `crude_facebook`, `crude_mautic`, `crude_wise`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering every site) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering every site) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 
@@ -192,6 +193,21 @@ crude-mautic email list
 ```
 
 A form is addressed by its numeric id or by the alias its page markup carries. One Mautic form often serves several website pages, each marking its own traffic with a hidden field, so counting one page's submissions means filtering a shared form rather than reading a form of its own: `--group-by topic` counts every page's slice at once, and `--where topic=...` narrows to one. Submitted answers are HTML-unescaped before matching or grouping, so an answer stored two ways (`NDIS &amp; Disability` beside `NDIS & Disability`) counts once. `--field` picks which answer columns the table shows. Contacts take Mautic's own `--search` syntax, an email address or `segment:alias`. The client reads; it does not create or edit Mautic records.
+
+## Wise usage (`crude-wise`)
+
+Wise authenticates with a personal API token, set as `api_token` in the `[wise]` section; there is no login step. Create it in the Wise web UI under Your Account > Connect and manage apps > API tokens and paste it as issued: the token travels as an opaque bearer string, so the UUID tokens Wise issues today and the JWT tokens it is migrating to both work unchanged. Every profile-scoped read acts on the account's business profile; `profile_id` in the section pins one when the token reaches several. `crude-wise status` confirms the token and names the profile in use.
+
+```
+crude-wise status
+crude-wise balance list
+crude-wise transaction list --currency AUD --from 2026-09-01
+crude-wise transfer list --from 2026-01-01 --limit 10
+crude-wise recipient list
+crude-wise activity list --from 2026-09-01
+```
+
+`transaction list` is the balance statement, the ledger behind one balance over a window of at most 469 days. Wise puts the statement behind strong customer authentication for profiles registered outside the US, Australia, New Zealand, Singapore, Canada and Malaysia: the call answers 403 with a one-time token, and crude resends it signed when `private_key` names an RSA private key whose public half is uploaded on the account's API tokens page (Manage public keys). Generate the pair with `openssl genrsa -out ~/.config/crude/wise-sca.pem 2048` and `openssl rsa -in ~/.config/crude/wise-sca.pem -pubout -out wise-sca.pub`, upload `wise-sca.pub`, and set `private_key` to the `.pem` path; signing runs through the `openssl` binary, so the key never enters the process. Without the key the command reports these steps; the other reads need no key. The client reads; it does not create transfers or recipients.
 
 ## Further reference
 

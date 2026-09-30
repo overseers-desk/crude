@@ -187,6 +187,7 @@ body is best-effort current state, disclosed as such. The per-backend boundary
 | Sonas | — (DDP) | `createdAt`-family per collection; export bundles | event doc bodies | — |
 | Facebook | posts `until` | posts, comments by `created_time` | `page get` | insights, scheduled posts |
 | Mautic | — | every list, by `dateAdded` (submissions by `dateSubmitted`) | `email` reads (send counts); `dateModified`>bound | — |
+| Wise | statement `intervalEnd`; transfers `createdDateEnd`; activities `until` | statement `date`; transfers `created`; activities `createdOn` | profiles, recipients (no stamps); `updatedAt`/`updatedOn`>bound | `balance list` |
 | ATDW | — | — | listings; `updatedOn`>bound | — |
 | Skål | Odoo domain `create_date<=` | — | `write_date`>bound | — |
 | all | — | — | — | **every write verb** |

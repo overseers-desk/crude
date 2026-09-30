@@ -39,13 +39,13 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), wise.com (Wise Business balances, statements, transfers, recipients), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`, `[wise]`). Add `--json` to any read command for machine-readable output.
 
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
@@ -315,6 +315,20 @@ Marketing automation: website forms and their submissions, contacts, segments, c
     crude-mautic email list ; email get <id>     # list carries sent and read counts
 
 A form is addressed by numeric id or by the alias its page markup carries. One Mautic form commonly serves several website pages that mark their traffic with a hidden field, so counting a single page's submissions means filtering a shared form: `--where topic="Stallholder EOI"` narrows to that page's slice, and `--group-by topic` counts every slice at once. Answers are HTML-unescaped before matching, so a value stored two ways counts once. `--search` on contacts takes Mautic's own syntax (an email, or `segment:alias`). This client reads; it does not create or edit Mautic records.
+
+## crude-wise (wise.com)
+
+Wise Business over the documented REST API. A personal API token in `[wise]` (`api_token`, issued under Your Account > Connect and manage apps > API tokens and pasted as issued, UUID or JWT); no login step. Reads act on the account's business profile (`profile_id` pins one). `transaction list` is the balance statement, SCA-protected for profiles registered outside US/AU/NZ/SG/CA/MY: it needs `private_key` (an RSA key whose public half is uploaded on the API tokens page) and without one reports the setup. The client reads only.
+
+    crude-wise status                                   # token check; the profile in use and currencies held
+    crude-wise profile list ; profile get [<id>]
+    crude-wise balance list
+    crude-wise transaction list (--currency <ccy> | --balance <id>) --from YYYY-MM-DD [--to] [--type COMPACT|FLAT] [--limit]
+    crude-wise transfer list [--status] [--from] [--to] [--limit] ; transfer get <id>
+    crude-wise recipient list [--currency] [--limit] ; recipient get <id>
+    crude-wise activity list [--from] [--to] [--status] [--limit]
+
+A second Wise account sits as `[wise.<name>]`, selected with `--account <name>`. Statement windows span at most 469 days. Activity amounts are display strings (`1,220 AUD`); the statement's are numbers.
 """
 
 
