@@ -180,10 +180,14 @@ def test_statement_403_without_a_key_names_the_setup(monkeypatch):
     assert len(calls) == 1
 
 
-def test_rejected_signature_is_reported_once(monkeypatch):
+@pytest.mark.parametrize("second", [
+    _Resp(403, headers={"x-2fa-approval-result": "REJECTED"}),   # Wise's answer to a bad signature
+    _sca_403(),                                                   # a fresh challenge instead
+])
+def test_rejected_signature_is_reported_once(monkeypatch, second):
     sess = _session(profile_id=11, private_key="k.pem")
     monkeypatch.setattr(client, "sign_ott", lambda ott, path: "SIG")
-    calls = _drive(monkeypatch, sess, [_sca_403(), _sca_403()])
+    calls = _drive(monkeypatch, sess, [_sca_403(), second])
     with pytest.raises(WiseError) as exc:
         sess.statement(5, "AUD", start="s", end="e")
     assert "public key" in str(exc.value)

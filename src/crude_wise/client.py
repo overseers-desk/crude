@@ -141,8 +141,17 @@ class WiseSession(HttpSession):
                 status=401,
             )
         ott = r.headers.get("x-2fa-approval")
-        if r.status_code == 403 and ott and r.headers.get("x-2fa-approval-result", "").upper() == "REJECTED":
-            raise WiseError("strong customer authentication required", status=403, ott=ott)
+        if r.status_code == 403 and r.headers.get("x-2fa-approval-result", "").upper() == "REJECTED":
+            if ott:
+                raise WiseError("strong customer authentication required", status=403, ott=ott)
+            # REJECTED with no token is the answer to a signed retry Wise could
+            # not verify.
+            raise WiseError(
+                "Wise rejected the signed SCA challenge (HTTP 403): check that the "
+                f"public key matching private_key ({self.private_key}) is uploaded on "
+                "the account's API tokens page.",
+                status=403,
+            )
         body = _error_body(r)
         errors = body.get("errors") or []
         first = errors[0] if errors and isinstance(errors[0], dict) else {}
