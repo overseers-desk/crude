@@ -2,10 +2,7 @@
 
 The credential is a personal API token from the ``[wise]`` config section, sent
 as a static bearer, so there is no login step: the root wires the shared
---version/--account/install surface and builds a WiseSession per invocation. The
-resource groups (``profile``, ``balance``, ``transaction``, ``transfer``,
-``recipient``, ``activity``) and the ``status`` command attach directly on the
-root, giving the ``crude-wise <resource> <verb>`` grammar.
+--version/--account/install surface and builds a WiseSession per invocation.
 """
 
 from __future__ import annotations

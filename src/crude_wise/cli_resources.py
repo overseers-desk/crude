@@ -1,10 +1,9 @@
 """Wise resources for crude-wise: profiles, balances, the statement, transfers,
 recipients, activities.
 
-Explicit command groups mounted on the root (the grammar is ``crude-wise
-<resource> <verb>``). The read surface is what a business owner asks of the
-account from a terminal: what is held, what moved and when, who was paid, and
-the ledger behind a balance for the bookkeeper.
+The read surface is what a business owner asks of the account from a terminal:
+what is held, what moved and when, who was paid, and the ledger behind a balance
+for the bookkeeper.
 
 ``transaction list`` is the balance statement: Wise's only numeric ledger, keyed
 by balance and bounded to a window of at most 469 days. ``activity list`` is the

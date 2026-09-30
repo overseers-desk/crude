@@ -91,8 +91,8 @@ def select_profile(profiles: list, which: str) -> dict:
     """The profile to act on when config names none: the one business profile.
 
     A personal token belongs to a business account, which carries its business
-    profile beside the holder's (hidden) personal one. Several business profiles
-    need ``profile_id`` in config; the error lists them.
+    profile beside the holder's personal one. Several business profiles need
+    ``profile_id`` in config; the error lists them.
     """
     business = [p for p in profiles if p.get("type") == "BUSINESS"]
     if len(business) == 1:
@@ -277,9 +277,9 @@ class WiseSession(HttpSession):
 
     def collect(self, walker, *, params=None, limit=None, created=None, modified=None,
                 what="record") -> list:
-        """A bounded list read over one of the walkers above.
+        """A bounded list read over one of the ``iter_*`` methods above.
 
-        The walkers' server-side date filters are clamped by the caller under
+        Their server-side date filters are clamped by the caller under
         WORLD_AS_OF; this applies the exact post-filter on top and, under a bound,
         walks the whole set before trimming to `limit` so rows dropped for being
         too new do not eat into what the caller asked for.
