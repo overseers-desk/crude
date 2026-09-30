@@ -611,3 +611,88 @@ def test_mautic_lists_segments_under_their_older_name(crude_config):
     assert isinstance(segments, list)
     if segments:
         assert segments[0]["alias"]
+
+
+# ---------------------------------------------------------------------------
+# crude-wise (Wise Business)
+#
+# Reads only, driven through the real CLI with a CliRunner; skipped when [wise]
+# holds no token. The statement runs only when private_key is configured: without
+# a key Wise's SCA answers 403 by design on a profile outside the exempt regions,
+# which is the documented state, not rot.
+# ---------------------------------------------------------------------------
+
+_wise_runner = _CliRunner()
+
+
+def _wise_or_skip(crude_config):
+    if not crude_config.get("wise", {}).get("api_token"):
+        pytest.skip("no [wise] credentials in config")
+
+
+def _wise_json(args):
+    """Invoke a crude-wise command with --json; fail (not skip) on a non-zero exit."""
+    from crude_wise.cli import app
+
+    r = _wise_runner.invoke(app, args + ["--json"])
+    assert r.exit_code == 0, f"{' '.join(args)} -> exit {r.exit_code}\n{r.output}"
+    return _json.loads(r.output)
+
+
+@pytest.mark.live
+def test_wise_token_reaches_a_profile(crude_config):
+    _wise_or_skip(crude_config)
+    me = _wise_json(["status"])
+    assert me["profile_id"]
+    assert me["type"] in ("BUSINESS", "PERSONAL")
+
+
+@pytest.mark.live
+def test_wise_lists_balances(crude_config):
+    _wise_or_skip(crude_config)
+    items = _wise_json(["balance", "list"])
+    assert isinstance(items, list)
+    if items:
+        assert items[0]["currency"]
+
+
+@pytest.mark.live
+def test_wise_lists_one_transfer(crude_config):
+    _wise_or_skip(crude_config)
+    items = _wise_json(["transfer", "list", "--limit", "1"])
+    assert isinstance(items, list)
+    if items:
+        assert items[0]["id"]
+
+
+@pytest.mark.live
+def test_wise_lists_one_recipient(crude_config):
+    _wise_or_skip(crude_config)
+    items = _wise_json(["recipient", "list", "--limit", "1"])
+    assert isinstance(items, list)
+    if items:
+        assert items[0]["id"]
+
+
+@pytest.mark.live
+def test_wise_lists_one_activity(crude_config):
+    _wise_or_skip(crude_config)
+    items = _wise_json(["activity", "list", "--limit", "1"])
+    assert isinstance(items, list)
+    if items:
+        assert items[0]["createdOn"]
+
+
+@pytest.mark.live
+def test_wise_reads_the_statement_when_a_signing_key_is_configured(crude_config):
+    _wise_or_skip(crude_config)
+    if not crude_config.get("wise", {}).get("private_key"):
+        pytest.skip("no [wise] private_key: the statement is SCA-protected on this profile")
+    from datetime import date, timedelta
+
+    bals = _wise_json(["balance", "list"])
+    if not bals:
+        pytest.skip("no balances on the profile")
+    since = (date.today() - timedelta(days=30)).isoformat()
+    rows = _wise_json(["transaction", "list", "--currency", bals[0]["currency"], "--from", since])
+    assert isinstance(rows, list)

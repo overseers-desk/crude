@@ -811,3 +811,82 @@ def test_atdw_listings_flagged_never_dropped(bound, monkeypatch, capsys):
     assert [l["id"] for l in out] == ["L1", "L2"]              # nothing dropped
     assert asof.MARKER_KEY not in out[0]
     assert out[1][asof.MARKER_KEY] == asof.MUTATED             # touched-after flagged
+
+
+# ----------------------------------------------------------------------
+# Wise: createdDateEnd / until clamped server-side; created/createdOn post-filter;
+# a current balance refuses
+# ----------------------------------------------------------------------
+
+
+def _wise_session():
+    from crude_wise.client import WiseSession
+
+    return WiseSession("tok", profile_id=11)
+
+
+def test_wise_transfers_clamped_and_filtered(bound, monkeypatch, capsys):
+    from crude_wise import cli_resources
+
+    sess = _wise_session()
+    seen = {}
+    rows = [{"id": 1, "created": BEFORE}, {"id": 2, "created": AFTER}]
+
+    def fake(method, url, **kw):
+        seen.update(params=kw.get("params"))
+        return _FakeResp(body=rows)
+
+    monkeypatch.setattr(sess.session, "request", fake)
+    monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    cli_resources.transfer_list(status=None, from_=None, to="2026-07-13", limit=25,
+                                output_json=True)
+    assert seen["params"]["createdDateEnd"] == BOUND_Z          # user's later date clamped
+    out = capsys.readouterr()
+    assert '"id": 1' in out.out and '"id": 2' not in out.out   # created-after dropped
+    assert "WORLD_AS_OF" in out.err
+
+
+def test_wise_activities_until_clamped_and_mutated_flagged(bound, monkeypatch, capsys):
+    from crude_wise import cli_resources
+
+    sess = _wise_session()
+    seen = {}
+    rows = [
+        {"id": "a", "createdOn": BEFORE, "updatedOn": AFTER},   # touched post-cutoff
+        {"id": "b", "createdOn": AFTER},
+    ]
+
+    def fake(method, url, **kw):
+        seen.update(params=kw.get("params"))
+        return _FakeResp(body={"activities": rows, "cursor": None})
+
+    monkeypatch.setattr(sess.session, "request", fake)
+    monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    cli_resources.activity_list(status=None, from_=None, to=None, limit=25, output_json=True)
+    assert seen["params"]["until"] == BOUND_Z                  # bound injected server-side
+    out = capsys.readouterr().out
+    assert '"id": "a"' in out and '"id": "b"' not in out
+    assert asof.MUTATED in out
+
+
+def test_wise_balance_list_refuses_under_bound(bound, monkeypatch):
+    import typer
+
+    from crude_wise import cli_resources
+
+    monkeypatch.setattr(cli_resources, "_session",
+                        lambda: pytest.fail("refused read built a session"))
+    with pytest.raises(typer.Exit):
+        cli_resources.balance_list(output_json=False)
+
+
+def test_wise_statement_window_after_cutoff_refuses(bound, monkeypatch):
+    import typer
+
+    from crude_wise import cli_resources
+
+    monkeypatch.setattr(cli_resources, "_session",
+                        lambda: pytest.fail("refused window built a session"))
+    with pytest.raises(typer.Exit):
+        cli_resources.transaction_list(currency="AUD", balance_id=None, from_="2026-07-13",
+                                       to=None, kind="COMPACT", limit=None, output_json=False)
