@@ -9,6 +9,8 @@ the same discipline as tests/test_sonas_dates.py.
 import os
 import time
 
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from crude_common.localtime import format_local, parse_iso_utc, to_utc_iso
@@ -74,9 +76,19 @@ def test_format_local_passes_through_non_timestamps():
     assert format_local(42) == "42"
 
 
-def test_to_utc_iso_passes_through_a_full_timestamp():
-    # A value already carrying a time (length != 10) is returned unchanged.
+def test_to_utc_iso_keeps_a_time_typed_in_utc():
     assert to_utc_iso("2026-06-18T05:00:00Z") == "2026-06-18T05:00:00Z"
+
+
+def test_to_utc_iso_reads_a_typed_time_in_the_zone(brisbane_tz):
+    kolkata = ZoneInfo("Asia/Kolkata")
+    # With no zone passed, the machine's: 09:00 in Brisbane is 23:00 UTC the day before.
+    assert to_utc_iso("2026-09-01T09:00:00") == "2026-08-31T23:00:00Z"
+    assert to_utc_iso("2026-09-01 09:00", tz=kolkata) == "2026-09-01T03:30:00Z"
+    # A time is the instant itself as an upper bound; only a date reaches to the next midnight.
+    assert to_utc_iso("2026-09-01T09:00:00", end=True) == "2026-08-31T23:00:00Z"
+    assert to_utc_iso("2026-09-01T09:00:00+02:00", tz=kolkata) == "2026-09-01T07:00:00Z"
+    assert to_utc_iso("yesterday") == "yesterday"
 
 
 def test_parse_iso_utc_returns_aware_utc():

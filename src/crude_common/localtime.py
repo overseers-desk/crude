@@ -65,18 +65,23 @@ def format_local(value, *, fmt: str = "%Y-%m-%d %H:%M", tz=None) -> str:
 
 
 def to_utc_iso(local_date: str, *, end: bool = False, tz=None) -> str:
-    """Map a typed local YYYY-MM-DD into an ISO-8601 UTC instant string.
+    """Map a typed local date or time into an ISO-8601 UTC instant string.
 
-    The date is read as local midnight (the start of that day in `tz`, or in the
-    machine's zone when tz is None), converted to UTC, and rendered
+    A YYYY-MM-DD date is read as local midnight (the start of that day in `tz`, or
+    in the machine's zone when tz is None), converted to UTC, and rendered
     'YYYY-MM-DDTHH:MM:SSZ'. With end=True it is the start of the *next* local day,
     an exclusive upper bound, so a half-open [from, to) query covers every instant
-    on the to-date regardless of zone. A value already carrying a time (length !=
-    10) is returned unchanged, so a caller may pass a full timestamp verbatim.
+    on the to-date regardless of zone. A value carrying a time is that instant
+    whatever `end` is, read in the same zone unless it carries Z or an offset; a
+    value that is neither is returned unchanged.
     """
-    if not isinstance(local_date, str) or len(local_date) != 10:
+    if not isinstance(local_date, str):
         return local_date
-    dt = datetime.strptime(local_date, "%Y-%m-%d")
+    text = local_date.strip()
+    if len(text) != 10:
+        instant = parse_iso_utc(text, assume=tz) if "T" in text or " " in text else None
+        return local_date if instant is None else instant.strftime("%Y-%m-%dT%H:%M:%SZ")
+    dt = datetime.strptime(text, "%Y-%m-%d")
     if end:
         dt = dt + timedelta(days=1)
     aware_local = dt.astimezone() if tz is None else dt.replace(tzinfo=tz)
