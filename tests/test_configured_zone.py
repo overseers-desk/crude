@@ -114,3 +114,19 @@ def test_wise_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch):
     _on_disk(monkeypatch, {})
     assert wise._window("2026-06-01", "2026-06-01")[0] == "2026-05-31T18:30:00Z"
     assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-02 19:30"
+
+
+# ----------------------------------------------------------------------
+# Clover
+# ----------------------------------------------------------------------
+
+
+def test_clover_shows_a_record_time_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_clover import resources
+
+    column = resources.ms_local("createdTime")
+    _on_disk(monkeypatch, BRISBANE)
+    assert column({"createdTime": BNE_MIDNIGHT_MS}) == "2026-10-03 00:00"
+    _on_disk(monkeypatch, {})
+    assert column({"createdTime": BNE_MIDNIGHT_MS}) == "2026-10-02 19:30"
+    assert column({}) == ""

@@ -20,6 +20,7 @@ from datetime import datetime
 from itertools import islice
 
 from crude_clover.client import PAGE
+from crude_common.config import site_timezone
 from crude_common.ldif import PersonMap, parse_epoch_ms
 
 # ``created`` names the record's creation-time field (epoch ms) where one
@@ -45,10 +46,13 @@ def cents(field):
 
 
 def ms_local(field):
-    """A column rendering an epoch-ms field in the machine's local time."""
+    """A column rendering an epoch-ms field in the timezone the config names,
+    or in the machine's when it names none."""
     def fmt(r):
         v = r.get(field)
-        return datetime.fromtimestamp(v / 1000).strftime("%Y-%m-%d %H:%M") if v else ""
+        if not v:
+            return ""
+        return datetime.fromtimestamp(v / 1000, site_timezone("clover")).strftime("%Y-%m-%d %H:%M")
     return fmt
 
 
