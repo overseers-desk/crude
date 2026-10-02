@@ -5,7 +5,7 @@ reads typed --from/--to dates in local time too. This is the dominant wire-forma
 conversion, so it lives here for reuse rather than in any one binary. crude_sonas
 works in EJSON epoch-ms ({"$date": ms}) and keeps helpers of its own; crude_rezdy
 converts its own typed bounds, an upper one to the day's last second because
-Rezdy's ranges include both ends, and uses parse_iso_utc alone from here.
+Rezdy's ranges include both ends.
 
 Local time is the zone a caller passes as `tz`, which a site CLI takes from its
 config. With tz None it is the machine's zone, read from the process environment

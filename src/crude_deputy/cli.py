@@ -75,10 +75,12 @@ def _make_client(config: dict):
 
 def _clock(value):
     """A shift's start or end, which Deputy stores as Unix seconds, as a time in
-    the timezone the config names, or in the machine's when it names none. A
-    value that is no number is shown as it is."""
+    the timezone the config names, or in the machine's when it names none. An
+    unset one is blank, and a value that is no number is shown as it is."""
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return value
+    if not value:
+        return ""
     return datetime.fromtimestamp(value, site_timezone("deputy")).strftime("%Y-%m-%d %H:%M")
 
 

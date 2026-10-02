@@ -50,13 +50,13 @@ def _client():
     return _impl()
 
 
-# Epoch-millisecond fields a Clover record carries at its top level.
-_STAMPS = ("createdTime", "clientCreatedTime", "modifiedTime", "timestamp")
+# The epoch-ms fields seen at the top level of Clover's records.
+_STAMPS = ("createdTime", "clientCreatedTime", "modifiedTime", "timestamp", "customerSince")
 
 
 def _show(rec, output_json: bool, ldif: Optional[LdifSink] = None) -> None:
-    """Print one record: raw for --json and LDIF, and for the table with its
-    timestamps as the lists show them."""
+    """Print one record: raw for --json and LDIF, otherwise with its timestamps as
+    the lists show them."""
     if not output_json and ldif is None and isinstance(rec, dict):
         rec = {k: ms_local(k)(rec) if k in _STAMPS else v for k, v in rec.items()}
     emit_record(rec, output_json, ldif=ldif)
@@ -284,7 +284,7 @@ def _g_get(
         rec = asof.check_record(rec, "createdTime", "modifiedTime", what=segment)
     else:
         rec = asof.current_state(rec, f"this {segment} record")
-    emit_record(rec, output_json)
+    _show(rec, output_json)
 
 
 @resource_app.command("info")

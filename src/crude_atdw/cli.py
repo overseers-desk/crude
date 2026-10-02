@@ -232,7 +232,7 @@ def get(
         if value is None:
             value = ""
         if key in ("publishedOn", "updatedOn"):
-            value = format_local(value or None, tz=site_timezone("atdw"))
+            value = format_local(value, tz=site_timezone("atdw"))
         if isinstance(value, (dict, list)):
             value = json.dumps(value, indent=2)
         value_str = str(value)

@@ -100,7 +100,8 @@ def _client():
 
 
 def _account_timezone(config: dict) -> ZoneInfo:
-    """The selected rezdy account's timezone, for reading typed dates and times."""
+    """The selected rezdy account's timezone: typed dates and times are read in
+    it, and times are shown in it."""
     return _parse_timezone(resolve_account(config, "rezdy", account()))
 
 
@@ -146,8 +147,17 @@ def _second_before(instant: Optional[str]) -> Optional[str]:
     return (parse_iso_utc(instant) - timedelta(seconds=1)).strftime(_UTC_FMT)
 
 
-# The UTC instants a booking carries at its top level.
-_BOOKING_STAMPS = ("dateCreated", "dateConfirmed", "datePaid", "dateReconciled", "dateUpdated")
+# The UTC instants a product, a booking or a voucher carries at its top level.
+_STAMPS = ("dateCreated", "dateConfirmed", "datePaid", "dateReconciled", "dateUpdated",
+           "issueDate", "expiryDate")
+
+
+def _show(item, output_json: bool, ldif: Optional[LdifSink] = None) -> None:
+    """Print one record: raw for --json and LDIF, otherwise with its timestamps
+    in the account's timezone."""
+    if not output_json and ldif is None:
+        item = localize(item, _STAMPS, tz=_account_timezone(read_config(find_config())))
+    emit_record(item, output_json, ldif=ldif)
 
 
 def _local_day(stamp, tz: ZoneInfo) -> str:
@@ -230,7 +240,7 @@ def get_product(
         typer.echo(f"Error fetching product {product_code}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this product")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @product_app.command("create")
@@ -651,9 +661,7 @@ def get_booking(
         typer.echo(f"Error fetching booking {order_number}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "dateCreated", "dateUpdated", what="booking")
-    if not output_json:
-        item = localize(item, _BOOKING_STAMPS, tz=_account_timezone(read_config(find_config())))
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @booking_app.command("quote")
@@ -787,7 +795,7 @@ def get_customer(
         typer.echo(f"Error fetching customer {customer_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this customer")
-    emit_record(item, output_json, ldif=_customer_sink(config) if ldif else None)
+    _show(item, output_json, ldif=_customer_sink(config) if ldif else None)
 
 
 @customer_app.command("create")
@@ -855,7 +863,7 @@ def get_extra(
         typer.echo(f"Error fetching extra {extra_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this extra")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @extra_app.command("create")
@@ -940,7 +948,7 @@ def get_pickup_list(
         typer.echo(f"Error fetching pickup list {pickup_list_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this pickup list")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @pickup_app.command("create")
@@ -1029,7 +1037,7 @@ def get_category(
         typer.echo(f"Error fetching category {category_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this category")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @category_app.command("products")
@@ -1121,7 +1129,7 @@ def get_rate(
         typer.echo(f"Error fetching rate {rate_id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this rate")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @rate_app.command("add-product")
@@ -1287,7 +1295,7 @@ def order_checkin_status(
         typer.echo(f"Error fetching order check-in: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this check-in state")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @manifest_app.command("order-set")
@@ -1337,7 +1345,7 @@ def session_checkin_status(
         typer.echo(f"Error fetching session check-in: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this check-in state")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @manifest_app.command("session-set")
@@ -1417,10 +1425,7 @@ def get_voucher(
         typer.echo(f"Error fetching voucher {voucher_code}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "issueDate", what="voucher")
-    if not output_json:
-        item = localize(item, ("issueDate", "expiryDate"),
-                        tz=_account_timezone(read_config(find_config())))
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @company_app.command("get")
@@ -1436,7 +1441,7 @@ def get_company(
         typer.echo(f"Error fetching company {alias}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this company record")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @company_app.command("find")
@@ -1452,7 +1457,7 @@ def find_company(
         typer.echo(f"Error finding company '{name}': {e}", err=True)
         raise typer.Exit(1)
     item = asof.current_state(item, "this company record")
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 if __name__ == "__main__":
