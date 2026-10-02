@@ -16,10 +16,11 @@ from typing import Optional
 
 import typer
 
+from crude_common.config import s, site_timezone
 from crude_common.output import emit_list
 from crude_common.writeio import do_write
 from crude_xero.accounting import ATTACHMENT_ENDPOINTS, HISTORY_ENDPOINTS
-from crude_xero.cli_accounting import _client, _emit_bytes
+from crude_xero.cli_accounting import _client, _emit_bytes, _parse_xero_dt
 
 
 def _check_endpoint(on: str, mapping: dict) -> None:
@@ -28,6 +29,15 @@ def _check_endpoint(on: str, mapping: dict) -> None:
         valid = ", ".join(sorted(mapping))
         typer.echo(f"Error: '--on {on}' is not valid; choose one of: {valid}.", err=True)
         raise typer.Exit(1)
+
+
+def _history_time(record: dict) -> str:
+    """When a history record was made, in the timezone the config names (the
+    machine's when it names none); the value as Xero sent it if it does not parse."""
+    instant = _parse_xero_dt(record.get("DateUTC"))
+    if instant is None:
+        return s(record.get("DateUTC"))
+    return instant.astimezone(site_timezone("xero")).strftime("%Y-%m-%d %H:%M")
 
 
 def register(app: typer.Typer) -> None:
@@ -104,7 +114,7 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(1)
         emit_list(
             items,
-            [("Date", "DateUTC"), ("User", "User"), ("Details", "Details")],
+            [("Date", _history_time), ("User", "User"), ("Details", "Details")],
             "history record", output_json,
         )
 

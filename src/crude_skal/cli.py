@@ -17,8 +17,10 @@ from crude_common.config import (
     resolve_base_dn,
     resolve_timezone,
     s,
+    site_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap, parse_naive_utc
+from crude_common.localtime import format_local
 from crude_common.output import emit_list, emit_record
 from crude_common.statestore import atomic_write
 
@@ -351,7 +353,9 @@ def list_events(
     emit_list(items, [
         ("ID", "id"),
         ("Name", "name"),
-        ("Date Begin", "date_begin"),
+        # Odoo sends the start as a UTC time with no offset, and False when unset.
+        ("Date Begin", lambda e: format_local(e.get("date_begin") or None,
+                                              tz=site_timezone("skal"))),
         ("Location", "location"),
         ("State", "state"),
     ], "event", output_json, header_style="bold yellow")

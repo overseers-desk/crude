@@ -385,3 +385,34 @@ def test_atdw_listing_view_shows_its_stamps_in_the_configured_zone(kolkata_machi
     assert "2026-10-03 00:00" in table.output
     raw = runner.invoke(cli.app, ["listing", "get", "L1", "--json"])
     assert "2026-10-02T14:00:00.605Z" in raw.output
+
+
+def test_xero_history_shows_when_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_xero import cli, cli_crosscutting
+
+    records = [{"DateUTC": f"/Date({BNE_MIDNIGHT_MS}+0000)/", "User": "A", "Details": "Paid"},
+               {"DateUTC": BNE_MIDNIGHT_UTC, "User": "B", "Details": "Approved"},
+               {"DateUTC": None, "User": "C", "Details": "Created"}]
+    stub = SimpleNamespace(accounting=SimpleNamespace(list_history=lambda on, id_: records))
+    monkeypatch.setattr(cli_crosscutting, "_client", lambda: stub)
+    _on_disk(monkeypatch, BRISBANE)
+    table = runner.invoke(cli.app, ["history", "list", "--on", "invoice", "--id", "X"])
+    assert table.exit_code == 0, table.output
+    assert table.output.count("2026-10-03 00:00") == 2
+    assert "/Date(" not in table.output
+
+
+def test_skal_event_start_is_shown_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_skal import cli
+
+    events = [{"id": 1, "name": "Dinner", "date_begin": "2026-10-02 14:00:00"},
+              {"id": 2, "name": "Undated", "date_begin": False}]
+    client = SimpleNamespace(list_events=lambda limit=20: events)
+    monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(cli, "read_config", lambda _p: {})
+    monkeypatch.setattr(cli, "_make_client", lambda _c: client)
+    _on_disk(monkeypatch, BRISBANE)
+    table = runner.invoke(cli.app, ["event", "list"])
+    assert table.exit_code == 0, table.output
+    assert "2026-10-03 00:00" in table.output
+    assert "False" not in table.output
