@@ -3,7 +3,8 @@
 Each test puts the machine in one zone (Kolkata, UTC+5:30) and the config in
 another (Brisbane, UTC+10), then checks that a typed date and a shown time
 follow the config. With no zone in the config the machine's applies, except to
-a Sonas clock time, which stays UTC.
+a Sonas clock time, which stays UTC, and to Clover's --tz, which falls back to
+Australia/Brisbane.
 """
 
 import os
@@ -166,10 +167,15 @@ def test_clover_record_view_shows_its_times_as_the_list_does(kolkata_machine, mo
 def test_clover_tz_option_defaults_to_the_configured_zone(monkeypatch):
     from crude_clover import resources
 
+    monkeypatch.setattr(resources, "config_path", lambda: "config.toml")
     _on_disk(monkeypatch, {"timezone": "Asia/Kolkata"})
     assert resources.tz_name(None) == "Asia/Kolkata"
     assert resources.tz_name("UTC") == "UTC"
     _on_disk(monkeypatch, {})
+    assert resources.tz_name(None) == "Australia/Brisbane"
+    # With no config file at all (flatten works offline), the config is not read.
+    monkeypatch.setattr(resources, "config_path", lambda: None)
+    monkeypatch.setattr(config, "read_config", lambda _p: 1 / 0)
     assert resources.tz_name(None) == "Australia/Brisbane"
 
 

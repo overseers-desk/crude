@@ -16,6 +16,7 @@ from typing import List, Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.config import (
     account,
     configured_timezone,
@@ -28,7 +29,7 @@ from crude_common.ldif import LdifSink, PersonMap
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.accounting import REPORT_NAMES
 from crude_xero.client import PAGE_SIZE
-from crude_xero.render import emit_list, emit_record, parse_xero_dt
+from crude_xero.render import emit_list, emit_record
 
 LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
 
@@ -44,7 +45,7 @@ def _contact_phone(contact: dict):
 
 
 # Xero contacts as inetOrgPerson. Created is not exposed by the Contacts API, so
-# only the modified stamp is mapped; UpdatedDateUTC is parsed by parse_xero_dt.
+# only the modified stamp is mapped.
 CONTACT_PM = PersonMap(
     attrs={
         "cn": "Name",
@@ -55,7 +56,7 @@ CONTACT_PM = PersonMap(
     },
     id_key="ContactID",
     modified="UpdatedDateUTC",
-    parse_dt=parse_xero_dt,
+    parse_dt=asof.parse_stamp,
 )
 
 

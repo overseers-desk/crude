@@ -20,6 +20,7 @@ from typing import Optional
 
 import typer
 
+from crude_common import asof
 from crude_common.config import (
     account,
     configured_timezone,
@@ -31,13 +32,13 @@ from crude_common.config import (
 from crude_common.ldif import LdifSink, PersonMap
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.client import PAGE_SIZE
-from crude_xero.render import emit_list, emit_record, parse_xero_dt
+from crude_xero.render import emit_list, emit_record
 
 LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
 
 # Xero Payroll AU employees as inetOrgPerson. The records carry UpdatedDateUTC
-# (the WORLD_AS_OF bound rides it), reported as Xero's /Date(ms)/ or ISO form,
-# so the modified stamp is mapped; no created stamp is exposed, so it is unset.
+# (the WORLD_AS_OF bound rides it), so the modified stamp is mapped; no created
+# stamp is exposed, so it is unset.
 EMPLOYEE_PM = PersonMap(
     attrs={
         "givenName": "FirstName",
@@ -45,7 +46,7 @@ EMPLOYEE_PM = PersonMap(
     },
     id_key="EmployeeID",
     modified="UpdatedDateUTC",
-    parse_dt=parse_xero_dt,
+    parse_dt=asof.parse_stamp,
 )
 
 

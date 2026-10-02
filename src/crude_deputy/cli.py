@@ -89,8 +89,8 @@ _MIDNIGHT = re.compile(r"(\d{4}-\d{2}-\d{2})T00:00:00[+-]\d{2}:\d{2}")
 
 
 def _day(value):
-    """A business date, which Deputy stores as that day's midnight with the
-    install's offset, as the day. Any other value is shown as it is."""
+    """A business date, which Deputy sends as that day's midnight in the
+    install's own timezone, as the day."""
     m = _MIDNIGHT.fullmatch(value) if isinstance(value, str) else None
     return m.group(1) if m else value
 

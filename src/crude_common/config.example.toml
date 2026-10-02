@@ -4,7 +4,7 @@
 # timezone = "Australia/Brisbane"  # optional (IANA name): the zone typed dates are read in
 #                                  # and times are shown in, LDIF timestamps included; a
 #                                  # site section's own timezone key wins over it, and the
-#                                  # machine's zone is the fallback.
+#                                  # machine's zone is the fallback (Clover's --tz: Brisbane).
 # base_dn = "ou=people,dc=crude,dc=local"  # optional: the DN suffix for LDIF entries;
 #                                          # this default is used when unset.
 

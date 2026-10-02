@@ -20,7 +20,7 @@ from datetime import datetime
 from itertools import islice
 
 from crude_clover.client import PAGE
-from crude_common.config import site_timezone
+from crude_common.config import config_path, site_timezone
 from crude_common.ldif import PersonMap, parse_epoch_ms
 
 # ``created`` names the record's creation-time field (epoch ms) where one
@@ -38,20 +38,20 @@ def _spec(name, segment, columns, *, expand=None, writable=False, singleton=Fals
     return ResourceSpec(name, segment, columns, expand, writable, singleton, created, ldif)
 
 
+def tz_name(typed=None) -> str:
+    """The IANA zone name a --tz option works in."""
+    if typed:
+        return typed
+    # flatten runs with no config at all, so the config is only read when there is one.
+    zone = site_timezone("clover") if config_path() else None
+    return zone.key if zone is not None else "Australia/Brisbane"
+
+
 # --- column formatters -------------------------------------------------------
 
 def cents(field):
     """A column rendering a cents field as dollars."""
     return lambda r: f"{(r.get(field) or 0) / 100:.2f}"
-
-
-def tz_name(typed=None) -> str:
-    """The IANA zone a --tz option works in: the typed value, else the timezone
-    the config names, else Australia/Brisbane."""
-    if typed:
-        return typed
-    zone = site_timezone("clover")
-    return zone.key if zone is not None else "Australia/Brisbane"
 
 
 def ms_local(field):

@@ -31,8 +31,9 @@ def account() -> Optional[str]:
     return _account
 
 
-def find_config() -> Path:
-    """Locate config.toml: ~/.config/crude/ (XDG), then project root, then CWD."""
+def config_path() -> Optional[Path]:
+    """Where config.toml is: ~/.config/crude/ (XDG), then project root, then CWD;
+    None when it is nowhere."""
     xdg = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
     xdg_candidate = Path(xdg) / "crude" / "config.toml"
     if xdg_candidate.exists():
@@ -45,11 +46,19 @@ def find_config() -> Path:
     cwd_candidate = Path.cwd() / "config.toml"
     if cwd_candidate.exists():
         return cwd_candidate
-    typer.echo(
-        "Error: config.toml not found. Expected at ~/.config/crude/config.toml, project root, or CWD.",
-        err=True,
-    )
-    raise typer.Exit(1)
+    return None
+
+
+def find_config() -> Path:
+    """Locate config.toml, or exit naming the places searched."""
+    path = config_path()
+    if path is None:
+        typer.echo(
+            "Error: config.toml not found. Expected at ~/.config/crude/config.toml, project root, or CWD.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    return path
 
 
 def read_config(config_path: Path) -> dict:

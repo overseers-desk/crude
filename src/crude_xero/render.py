@@ -1,37 +1,15 @@
 """How the crude-xero CLI modules show the dates Xero sends.
 
-The Accounting and Payroll APIs send a date as /Date(ms)/, .NET's JSON form of
-the millisecond UTC epoch. A table or a record view shows it readably, and
---json and LDIF output keep what Xero sent. Kept here, not in a cli module, so
-the per-group cli_<group>.py modules can import it without an import cycle.
+Xero sends a date as /Date(ms)/, .NET's JSON form of the millisecond UTC epoch,
+and a timestamp as that or as ISO-8601. A table or a record view shows them
+readably, and --json and LDIF output keep what Xero sent. A module of its own,
+since every cli_<group>.py module prints through it.
 """
 
 from __future__ import annotations
 
-import re
-
-from crude_common import output
+from crude_common import asof, output
 from crude_common.config import site_timezone
-from crude_common.ldif import parse_epoch_ms
-from crude_common.localtime import parse_iso_utc
-
-# /Date(1672531200000+0000)/: the digits are the millisecond UTC epoch, the
-# trailing offset is presentation only.
-_DOTNET_DATE = re.compile(r"^/Date\((-?\d+)(?:[+-]\d{4})?\)/$")
-
-
-def parse_xero_dt(value):
-    """Parse a Xero timestamp that may arrive as /Date(ms)/ or as ISO-8601.
-
-    Different Accounting endpoints report UpdatedDateUTC in either form, so a
-    /Date(ms)/ value is unwrapped to its epoch milliseconds and anything else
-    falls through to the ISO parser.
-    """
-    if isinstance(value, str):
-        m = _DOTNET_DATE.match(value.strip())
-        if m:
-            return parse_epoch_ms(m.group(1))
-    return parse_iso_utc(value)
 
 
 def shown(key: str, value, *, offset: bool = False):
@@ -46,15 +24,17 @@ def shown(key: str, value, *, offset: bool = False):
     if not isinstance(value, str):
         return value
     if key.endswith("UTC"):
-        instant = parse_xero_dt(value)
+        instant = asof.parse_stamp(value)
         if instant is None:
             return value
         local = instant.astimezone(site_timezone("xero"))
         if offset:
             return local.isoformat(sep=" ", timespec="minutes")
         return local.strftime("%Y-%m-%d %H:%M")
-    m = _DOTNET_DATE.match(value.strip())
-    return parse_epoch_ms(m.group(1)).strftime("%Y-%m-%d") if m else value
+    if value.startswith("/Date("):
+        instant = asof.parse_stamp(value)
+        return instant.strftime("%Y-%m-%d") if instant else value
+    return value
 
 
 def emit_list(items, columns, what, output_json, **kwargs):
