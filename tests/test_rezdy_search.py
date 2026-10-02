@@ -48,13 +48,13 @@ def sent(monkeypatch, served):
 
 def test_booking_list_sends_the_agent_filters(sent):
     result = runner.invoke(cli.app, [
-        "booking", "list", "--source-channel", "REDBALLOON",
-        "--reseller-reference", "410072225", "--role", "supplier", "--json",
+        "booking", "list", "--source-channel", "MYAGENT",
+        "--reseller-reference", "AG-1001", "--role", "supplier", "--json",
     ])
     assert result.exit_code == 0
     params = sent[0]["params"]
-    assert params["sourceChannel"] == "REDBALLOON"
-    assert params["resellerReference"] == "410072225"
+    assert params["sourceChannel"] == "MYAGENT"
+    assert params["resellerReference"] == "AG-1001"
     assert params["role"] == "SUPPLIER"
 
 
@@ -83,10 +83,10 @@ def test_category_list_filters_by_name_and_visibility(sent):
 
 def test_resource_sessions_reads_a_bare_date_as_the_whole_local_day(sent):
     runner.invoke(cli.app, [
-        "resource", "sessions", "103494", "--from", "2026-10-05", "--to", "2026-10-05",
+        "resource", "sessions", "42", "--from", "2026-10-05", "--to", "2026-10-05",
         "--offset", "100", "--json",
     ])
-    assert sent[0]["url"].endswith("/v1/resources/103494/sessions")
+    assert sent[0]["url"].endswith("/v1/resources/42/sessions")
     params = sent[0]["params"]
     assert params["startTimeLocal"] == "2026-10-05 00:00:00"
     assert params["endTimeLocal"] == "2026-10-05 23:59:59"
