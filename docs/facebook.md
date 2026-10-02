@@ -83,6 +83,11 @@ crude-facebook page insights [--metric ...] [--period day]
 Add `--json` to any read for the raw Graph object. Writes prompt before mutating
 unless `--yes`.
 
+Post and comment times are shown in the config's `timezone`. `--schedule` takes a
+Unix time or an ISO 8601 time, and an ISO time typed with no offset is read in that
+zone. With no `timezone` in the config, times show in the machine's zone and a
+`--schedule` value reaches Graph as typed.
+
 ## What the API allows
 
 ### Read

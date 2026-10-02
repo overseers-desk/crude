@@ -25,23 +25,31 @@ from typing import List, Optional
 import typer
 
 from crude_common import asof
-from crude_common.config import s
+from crude_common.config import s, site_timezone
+from crude_common.localtime import format_local
 from crude_common.output import emit_list, emit_record
 from crude_mautic.client import MauticError, rows, unescape_results
 
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
 _LIMIT = typer.Option(25, "--limit", help="Maximum records to fetch.")
 
+
+def _when(field: str):
+    """A column showing a Mautic timestamp in the timezone the config names,
+    or in the machine's when it names none."""
+    return lambda rec: format_local(rec.get(field), tz=site_timezone("mautic"))
+
+
 _FORM_COLS = [
     ("ID", "id"), ("Alias", "alias"), ("Name", "name"),
-    ("Published", "isPublished"), ("Added", "dateAdded"),
+    ("Published", "isPublished"), ("Added", _when("dateAdded")),
 ]
 _SEGMENT_COLS = [
     ("ID", "id"), ("Alias", "alias"), ("Name", "name"), ("Public", "isGlobal"),
 ]
 _CAMPAIGN_COLS = [
     ("ID", "id"), ("Name", "name"), ("Published", "isPublished"),
-    ("Added", "dateAdded"),
+    ("Added", _when("dateAdded")),
 ]
 _EMAIL_COLS = [
     ("ID", "id"), ("Name", "name"), ("Subject", "subject"),
@@ -101,7 +109,7 @@ def form_get(
     summary = {
         "id": rec.get("id"), "alias": rec.get("alias"), "name": rec.get("name"),
         "description": rec.get("description"), "published": rec.get("isPublished"),
-        "added": rec.get("dateAdded"), "fields": len(fields),
+        "added": _when("dateAdded")(rec), "fields": len(fields),
     }
     emit_record(summary, False)
     field_rows = list(fields.values()) if isinstance(fields, dict) else list(fields)
@@ -160,7 +168,7 @@ def form_submissions(
     # --json ignores the columns, so they are only built for the table.
     columns = []
     if not output_json:
-        columns = [("ID", "id"), ("Submitted", "dateSubmitted")]
+        columns = [("ID", "id"), ("Submitted", _when("dateSubmitted"))]
         columns += [(a, (lambda k: lambda i: (i.get("results") or {}).get(k))(a))
                     for a in field or _answer_fields(items)]
     emit_list(items, columns, "submission", output_json)
@@ -207,7 +215,7 @@ _CONTACT_COLS = [
     ("First", lambda c: _contact_field(c, "firstname")),
     ("Last", lambda c: _contact_field(c, "lastname")),
     ("Points", "points"),
-    ("Added", "dateAdded"),
+    ("Added", _when("dateAdded")),
 ]
 
 
@@ -247,8 +255,11 @@ def contact_get(
         return
     allf = ((rec.get("fields") or {}).get("all")) or {}
     summary = {"id": rec.get("id"), "points": rec.get("points"),
-               "added": rec.get("dateAdded"), "last_active": rec.get("lastActive")}
-    summary.update({k: v for k, v in allf.items() if v not in (None, "")})
+               "added": _when("dateAdded")(rec), "last_active": _when("lastActive")(rec)}
+    # fields.all repeats last_active as a contact field, in the form Mautic stores
+    # it; the summary's own line, in the timezone shown everywhere else, stands.
+    summary.update({k: v for k, v in allf.items()
+                    if v not in (None, "") and k not in summary})
     emit_record(summary, False)
 
 

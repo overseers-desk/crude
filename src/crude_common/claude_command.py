@@ -307,7 +307,7 @@ Facebook Page posts, insights, and comments over the Graph API. A bearer token i
     crude-facebook comment list <post-id> ; comment reply <object-id> -m <s> ; comment hide|unhide|delete <comment-id>
     crude-facebook page get ; page insights [--metric ...] [--period day]
 
-Add `--json` to any read for the raw Graph object. Writes prompt unless `--yes`. Insight metric names shift between Graph versions (`impressions` is gone in favour of `views`, `page_fans` in favour of `page_follows`), so the insight commands take `--metric` to override the defaults. Constraints worth knowing: a Facebook post edit changes only the message and only on posts this app created, and the Page events edge is not reachable (Meta restricts it to Marketing Partners). On the venue's own Page the full surface runs without Meta App Review. Instagram is a separate product on Meta's roadmap and is not in this binary.
+Add `--json` to any read for the raw Graph object. Writes prompt unless `--yes`. `--schedule` takes a Unix time or an ISO 8601 time; an ISO time with no offset is read in the config's `timezone` when it names one, and otherwise reaches Graph as typed. Insight metric names shift between Graph versions (`impressions` is gone in favour of `views`, `page_fans` in favour of `page_follows`), so the insight commands take `--metric` to override the defaults. Constraints worth knowing: a Facebook post edit changes only the message and only on posts this app created, and the Page events edge is not reachable (Meta restricts it to Marketing Partners). On the venue's own Page the full surface runs without Meta App Review. Instagram is a separate product on Meta's roadmap and is not in this binary.
 
 ## crude-mautic (self-hosted Mautic)
 

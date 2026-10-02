@@ -141,6 +141,9 @@ class _StubSession:
 def stubbed(monkeypatch):
     sess = _StubSession()
     monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    # The Submitted column asks the config on disk for its timezone.
+    monkeypatch.setattr("crude_common.config.find_config", lambda: "config.toml")
+    monkeypatch.setattr("crude_common.config.read_config", lambda _p: {})
     return sess
 
 

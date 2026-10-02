@@ -182,3 +182,56 @@ def test_site_timezone_reads_the_config_once_per_site(monkeypatch):
         config.site_timezone("wise")
     config.site_timezone("clover")
     assert len(reads) == 2
+
+
+# ----------------------------------------------------------------------
+# Mautic and Facebook
+# ----------------------------------------------------------------------
+
+
+def test_mautic_shows_a_timestamp_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_mautic import cli_resources as mautic
+
+    added = mautic._when("dateAdded")
+    _on_disk(monkeypatch, BRISBANE)
+    assert added({"dateAdded": "2026-10-02T14:00:00+00:00"}) == "2026-10-03 00:00"
+    _on_disk(monkeypatch, {})
+    assert added({"dateAdded": "2026-10-02T14:00:00+00:00"}) == "2026-10-02 19:30"
+    assert added({}) == ""
+
+
+def test_mautic_contact_shows_last_active_once_in_the_configured_zone(
+        kolkata_machine, monkeypatch):
+    from crude_mautic import cli, cli_resources
+
+    contact = {
+        "id": 7, "points": 0,
+        "dateAdded": "2026-10-01T02:00:00+00:00", "lastActive": "2026-10-02T14:00:00+00:00",
+        # Mautic repeats last_active among the contact's own fields, as stored.
+        "fields": {"all": {"id": 7, "email": "a@example.com",
+                           "last_active": "2026-10-02 14:00:00"}},
+    }
+    sess = SimpleNamespace(one=lambda _path, _entity: contact)
+    monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    _on_disk(monkeypatch, BRISBANE)
+    result = runner.invoke(cli.app, ["contact", "get", "7"])
+    assert result.exit_code == 0, result.output
+    assert "2026-10-03 00:00" in result.output      # last active, Brisbane
+    assert "2026-10-01 12:00" in result.output      # added, Brisbane
+    assert "14:00:00" not in result.output
+    assert "a@example.com" in result.output
+
+
+def test_facebook_shows_and_schedules_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_facebook import cli_resources as facebook
+
+    nine_am_brisbane = str(int(datetime(2026, 10, 4, 23, tzinfo=timezone.utc).timestamp()))
+    _on_disk(monkeypatch, BRISBANE)
+    assert facebook._when("created_time")({"created_time": "2026-10-02T14:00:00+0000"}) == (
+        "2026-10-03 00:00")
+    assert facebook._schedule_time("2026-10-05T09:00") == nine_am_brisbane
+    assert facebook._schedule_time("2026-10-05T01:00:00+02:00") == nine_am_brisbane
+    assert facebook._schedule_time("1791154800") == "1791154800"
+    _on_disk(monkeypatch, {})
+    # No zone in the config: the value reaches Graph exactly as typed.
+    assert facebook._schedule_time("2026-10-05T09:00") == "2026-10-05T09:00"

@@ -15,6 +15,8 @@ from typing import Optional
 import typer
 
 from crude_common import asof
+from crude_common.config import site_timezone
+from crude_common.localtime import format_local, parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write
 from crude_facebook.client import (
@@ -28,13 +30,34 @@ from crude_facebook.client import (
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
 _YES = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt.")
 
+
+def _when(field: str):
+    """A column showing a Graph timestamp in the timezone the config names,
+    or in the machine's when it names none."""
+    return lambda rec: format_local(rec.get(field), tz=site_timezone("facebook"))
+
+
+def _schedule_time(value: str) -> str:
+    """The --schedule value as Graph is sent it.
+
+    With a timezone in the config, an ISO time is read in that zone unless it
+    carries an offset, and goes out as Unix seconds. A Unix time, a value that
+    is no ISO time, or any value when the config names no zone goes as typed.
+    """
+    tz = site_timezone("facebook")
+    if tz is None or value.isdigit():
+        return value
+    instant = parse_iso_utc(value, assume=tz)
+    return value if instant is None else str(int(instant.timestamp()))
+
+
 _POST_COLS = [
-    ("ID", "id"), ("Posted", "created_time"), ("Message", "message"),
+    ("ID", "id"), ("Posted", _when("created_time")), ("Message", "message"),
     ("Permalink", "permalink_url"),
 ]
 _COMMENT_COLS = [
     ("ID", "id"), ("From", lambda c: (c.get("from") or {}).get("name")),
-    ("Message", "message"), ("Posted", "created_time"),
+    ("Message", "message"), ("Posted", _when("created_time")),
     ("Likes", "like_count"), ("Hidden", "is_hidden"),
 ]
 _INSIGHT_COLS = [("Metric", "metric"), ("Value", "value"), ("Title", "title")]
@@ -107,6 +130,8 @@ def post_get(
         typer.echo(f"Error fetching post {post_id}: {e}", err=True)
         raise typer.Exit(1)
     rec = asof.check_record(rec, "created_time", what="post")
+    if not output_json and rec.get("created_time"):
+        rec = {**rec, "created_time": _when("created_time")(rec)}
     emit_record(rec, output_json)
 
 
@@ -140,8 +165,9 @@ def post_create(
         None, "--photo-url", help="A public image URL to post as a photo."),
     schedule: Optional[str] = typer.Option(
         None, "--schedule",
-        help="Unix time or ISO 8601; schedules the post (10 min to ~75 days ahead) "
-             "instead of publishing now."),
+        help="Unix time or ISO 8601 (with no offset, read in the config's timezone when "
+             "it names one); schedules the post (10 min to ~75 days ahead) instead of "
+             "publishing now."),
     yes: bool = _YES,
     output_json: bool = _JSON,
 ):
@@ -158,7 +184,7 @@ def post_create(
             params["link"] = link
         if schedule:
             params["published"] = "false"
-            params["scheduled_publish_time"] = schedule
+            params["scheduled_publish_time"] = _schedule_time(schedule)
         if photo_url:
             params["url"] = photo_url
             return sess.post(f"/{sess.page_id}/photos", params=params)
