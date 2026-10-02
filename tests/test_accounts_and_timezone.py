@@ -76,9 +76,10 @@ def test_bound_keeps_an_instant_and_converts_an_offset():
     tz = ZoneInfo("Australia/Brisbane")
     assert _bound_utc("2026-05-02T10:00:00Z", tz, end=False) == "2026-05-02T10:00:00Z"
     assert _bound_utc("2026-05-03T07:23:28+10:00", tz, end=False) == "2026-05-02T21:23:28Z"
-    # A time carrying neither Z nor an offset is UTC, T or space separated.
-    assert _bound_utc("2026-05-02T10:00:00", tz, end=False) == "2026-05-02T10:00:00Z"
-    assert _bound_utc("2026-05-02 10:00:00", tz, end=False) == "2026-05-02T10:00:00Z"
+    # A time carrying neither Z nor an offset is account-local, T or space
+    # separated: 10:00 in Brisbane is midnight UTC.
+    assert _bound_utc("2026-05-02T10:00:00", tz, end=False) == "2026-05-02T00:00:00Z"
+    assert _bound_utc("2026-05-02 10:00:00", tz, end=False) == "2026-05-02T00:00:00Z"
 
 
 def test_bound_rejects_a_value_that_is_no_date(capsys):

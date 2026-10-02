@@ -115,7 +115,7 @@ Product **terms** (`--terms`) and **custom booking questions** are product field
 
 `booking cancellations` filters by when the cancellation occurred (dateUpdated), not the session date. Use --from/--to with YYYY-MM-DD dates.
 --updated-from / --updated-to on `booking list` apply the same filter to any status.
-Every date typed on `booking list` and `booking cancellations` is the account's operational day (the required `timezone`), converted to the UTC instants Rezdy compares against, so a boundary date is not off by one; a value with a time is an instant, UTC unless it carries an offset.
+Every date typed on `booking list` and `booking cancellations` is the account's operational day (the required `timezone`), converted to the UTC instants Rezdy compares against, so a boundary date is not off by one; a time typed without an offset is account-local too.
 The lower update bound is applied by Rezdy and the upper one on the pages fetched, so add --all when --updated-to (or the cancellations --to) is used alone; --all fetches all pages (default limit is otherwise applied). A never-updated booking is in no update window.
 `booking list --search` is a slow prefix match on customer names and payment or voucher codes. Rezdy has deprecated finding an order number or an agent code through it: use `booking get <orderno>` for an order and `--source-channel <agent code>` for an agent's bookings. `--product` repeats for several products.
 `resource sessions --from/--to` is a local-time window (a bare date is the whole day); Rezdy returns the sessions that both start and end inside it, at most 100 a page.

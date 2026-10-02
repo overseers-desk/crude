@@ -1,6 +1,7 @@
 """Typer CLI for the Rezdy Supplier API: crude-rezdy."""
 
 import json
+import re
 import sys
 from datetime import date, datetime, time, timedelta, timezone as _utc
 from typing import Callable, List, Optional
@@ -105,18 +106,19 @@ def _account_timezone(config: dict) -> ZoneInfo:
 
 
 _UTC_FMT = "%Y-%m-%dT%H:%M:%SZ"
+_TRAILING_OFFSET = re.compile(r"[+-]\d{2}:?\d{2}$")
 
 
 def _bound_utc(value: Optional[str], tz: ZoneInfo, *, end: bool,
                flag: str = "--from") -> Optional[str]:
-    """Read a typed bound; return a UTC ...Z instant.
+    """Read a typed bound as the account's operational time; return a UTC ...Z instant.
 
     A bare YYYY-MM-DD is the start of that day in the account's zone, or for an
-    upper bound its last second. Rezdy reads a bare date as midnight UTC, so
-    sending the typed day raw would drop the morning of a local day east of UTC.
-    A value carrying a time is an instant: Z or an offset is honoured, and a time
-    with neither is UTC, as Rezdy reads it. The ...Z form also compares
-    correctly, as a string, against Rezdy's own ...Z stamps.
+    upper bound its last second. A time with no offset, T or space separated, is
+    account-local too; one carrying Z or an offset is that instant. Rezdy reads a
+    bare date as midnight UTC, so sending the typed day raw would drop the
+    morning of a local day east of UTC. The ...Z form also compares correctly,
+    as a string, against Rezdy's own ...Z stamps.
     """
     if not value:
         return None
@@ -125,15 +127,19 @@ def _bound_utc(value: Optional[str], tz: ZoneInfo, *, end: bool,
         if len(text) == 10:
             local = datetime.combine(date.fromisoformat(text),
                                      time(23, 59, 59) if end else time(0, 0, 0), tzinfo=tz)
-            return local.astimezone(_utc.utc).strftime(_UTC_FMT)
-        instant = parse_iso_utc(text.replace(" ", "T", 1))
-        if instant is None:
-            raise ValueError(text)
+        else:
+            text = text.replace(" ", "T", 1)
+            if text[-1] in "Zz" or _TRAILING_OFFSET.search(text):
+                instant = parse_iso_utc(text)
+                if instant is None:
+                    raise ValueError(text)
+                return instant.strftime(_UTC_FMT)
+            local = datetime.fromisoformat(text).replace(tzinfo=tz)
     except ValueError:
         typer.echo(f"Error: {flag} '{value}' is neither a date (YYYY-MM-DD) nor an "
                    f"ISO 8601 time.", err=True)
         raise typer.Exit(1)
-    return instant.strftime(_UTC_FMT)
+    return local.astimezone(_utc.utc).strftime(_UTC_FMT)
 
 
 def _second_before(instant: Optional[str]) -> Optional[str]:
@@ -453,9 +459,9 @@ def list_bookings(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by order status (e.g. CONFIRMED, CANCELLED)."),
     search: Optional[str] = typer.Option(None, "--search", help="Prefix search on a customer name or a payment/voucher code. Slow: prefer the other filters. An order number is `booking get`; an agent code is --source-channel."),
     product: Optional[List[str]] = typer.Option(None, "--product", help="Filter by product code; repeat for several."),
-    from_: Optional[str] = typer.Option(None, "--from", help="Tour starts on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Tour starts on or after this day or time (account-local unless it carries an offset)."),
     to: Optional[str] = typer.Option(None, "--to", help="Tour starts on or before this day or time (a bare date covers the whole day)."),
-    created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this day or time (account-local unless it carries an offset)."),
     created_to: Optional[str] = typer.Option(None, "--created-to", help="Created on or before this day or time (a bare date covers the whole day)."),
     updated_from: Optional[str] = typer.Option(None, "--updated-from", help="Last updated on or after this day or time; never-updated bookings are left out."),
     updated_to: Optional[str] = typer.Option(None, "--updated-to", help="Last updated on or before this day or time (filtered client-side: add --all to search every page)."),
@@ -470,8 +476,7 @@ def list_bookings(
     """List bookings.
 
     Dates are the account's operational day, so --from 2026-05-25 --to 2026-05-25
-    lists that day's tours. A value with a time is an instant, UTC unless it
-    carries an offset.
+    lists that day's tours; a time without an offset is account-local as well.
     Use --updated-from / --updated-to to filter by when the booking was last
     modified (e.g. when it was cancelled).
     """
@@ -562,7 +567,7 @@ def list_bookings(
 
 @booking_app.command("cancellations")
 def list_cancellations(
-    from_: Optional[str] = typer.Option(None, "--from", help="Cancelled on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Cancelled on or after this day or time (account-local unless it carries an offset)."),
     to: Optional[str] = typer.Option(None, "--to", help="Cancelled on or before this day or time (a bare date covers the whole day)."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results (ignored when --all is set)."),
     fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages automatically."),
