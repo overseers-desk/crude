@@ -362,10 +362,12 @@ def test_deputy_shows_shift_times_in_the_configured_zone(kolkata_machine, monkey
     listed = runner.invoke(cli.app, ["roster", "list"])
     assert listed.exit_code == 0, listed.output
     assert "2026-10-03 08:00" in listed.output and "2026-10-03 15:30" in listed.output
+    # The business date is shown as the day, without the midnight and offset Deputy adds.
+    assert "T00:00:00" not in listed.output
     one = runner.invoke(cli.app, ["roster", "get", "1"])
-    assert "2026-10-03 08:00" in one.output
+    assert "2026-10-03 08:00" in one.output and "T00:00:00" not in one.output
     raw = runner.invoke(cli.app, ["roster", "get", "1", "--json"])
-    assert str(start) in raw.output
+    assert str(start) in raw.output and "2026-10-03T00:00:00+10:00" in raw.output
 
 
 # ----------------------------------------------------------------------
