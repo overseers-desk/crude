@@ -9,6 +9,7 @@ was written. ``--json`` on any command prints the complete raw structure.
 
 import json
 import sys
+from datetime import datetime
 from typing import List, Optional
 
 import typer
@@ -25,6 +26,7 @@ from crude_common.config import (
     resolve_base_dn,
     resolve_timezone,
     s,
+    site_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
@@ -71,6 +73,26 @@ def _make_client(config: dict):
 # ----------------------------------------------------------------------
 
 
+def _clock(value):
+    """A shift's start or end, which Deputy stores as Unix seconds, as a time in
+    the timezone the config names, or in the machine's when it names none. A
+    value that is no number is shown as it is."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    return datetime.fromtimestamp(value, site_timezone("deputy")).strftime("%Y-%m-%d %H:%M")
+
+
+# Fields a table or a record view shows converted, on whatever object carries them.
+_SHOWN_AS = {"StartTime": _clock, "EndTime": _clock}
+
+
+def _show(item, output_json: bool, ldif: Optional[LdifSink] = None) -> None:
+    """Print one record: raw for --json and LDIF, converted for the table."""
+    if not output_json and ldif is None and isinstance(item, dict):
+        item = {k: _SHOWN_AS[k](v) if k in _SHOWN_AS else v for k, v in item.items()}
+    emit_record(item, output_json, ldif=ldif)
+
+
 def _render_rows(rows: list, columns: Optional[List[str]] = None) -> None:
     """Print a list of records as a table.
 
@@ -95,6 +117,8 @@ def _render_rows(rows: list, columns: Optional[List[str]] = None) -> None:
         cells = []
         for col in columns:
             value = row.get(col)
+            if col in _SHOWN_AS:
+                value = _SHOWN_AS[col](value)
             cell = "(object)" if isinstance(value, dict) else (
                 f"{len(value)} item(s)" if isinstance(value, list) else s(value)
             )
@@ -273,7 +297,7 @@ def _curated_get(obj, id, output_json, what, ldif: bool = False):
         typer.echo(f"Error fetching {what} {id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "Created", "Modified", what=what)
-    emit_record(item, output_json, ldif=_person_sink(config) if ldif else None)
+    _show(item, output_json, ldif=_person_sink(config) if ldif else None)
 
 
 @employee_app.command("list")
@@ -464,7 +488,7 @@ def resource_get(
         typer.echo(f"Error fetching {obj} {id}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "Created", "Modified", what=obj)
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @resource_app.command("query")
@@ -542,7 +566,7 @@ def resource_create(
     except Exception as e:
         typer.echo(f"Error creating {obj}: {e}", err=True)
         raise typer.Exit(1)
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @resource_app.command("update")
@@ -561,7 +585,7 @@ def resource_update(
     except Exception as e:
         typer.echo(f"Error updating {obj} {id}: {e}", err=True)
         raise typer.Exit(1)
-    emit_record(item, output_json)
+    _show(item, output_json)
 
 
 @resource_app.command("delete")

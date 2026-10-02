@@ -302,3 +302,34 @@ def test_rezdy_voucher_dates_are_the_account_days(kolkata_machine, rezdy, monkey
     assert "2026-10-03 00:00" in listed.output and "2026-10-04 23:59" in listed.output
     one = runner.invoke(cli.app, ["voucher", "get", "V1"])
     assert "2026-10-03 00:00" in one.output and "2026-10-04 23:59" in one.output
+
+
+# ----------------------------------------------------------------------
+# Deputy shift times
+# ----------------------------------------------------------------------
+
+
+def test_deputy_shows_shift_times_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from rich.console import Console
+
+    from crude_deputy import cli
+
+    # 08:00 to 15:30 on 3 October in Brisbane, as the Unix seconds Deputy stores.
+    start = int(datetime(2026, 10, 2, 22, tzinfo=timezone.utc).timestamp())
+    shift = {"Id": 1, "Date": "2026-10-03T00:00:00+10:00", "StartTime": start,
+             "EndTime": start + 27000, "OperationalUnit": 4, "Employee": 73}
+    client = SimpleNamespace(query_resource=lambda *a, **kw: [shift],
+                             get_resource=lambda obj, id: shift)
+    monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(cli, "read_config", lambda _p: {})
+    monkeypatch.setattr(cli, "_make_client", lambda _c: client)
+    # Wide enough that the table truncates no cell.
+    monkeypatch.setattr(cli, "console", Console(width=200))
+    _on_disk(monkeypatch, BRISBANE)
+    listed = runner.invoke(cli.app, ["roster", "list"])
+    assert listed.exit_code == 0, listed.output
+    assert "2026-10-03 08:00" in listed.output and "2026-10-03 15:30" in listed.output
+    one = runner.invoke(cli.app, ["roster", "get", "1"])
+    assert "2026-10-03 08:00" in one.output
+    raw = runner.invoke(cli.app, ["roster", "get", "1", "--json"])
+    assert str(start) in raw.output
