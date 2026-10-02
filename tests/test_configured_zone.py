@@ -81,3 +81,33 @@ def test_airwallex_shows_times_in_the_configured_zone(kolkata_machine, monkeypat
     assert render.ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-03 00:00"
     shown = render.localize({"created_at": BNE_MIDNIGHT_UTC}, ("created_at",))
     assert shown["created_at"] == "2026-10-03 00:00"
+
+
+# ----------------------------------------------------------------------
+# Wise
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def wise(monkeypatch):
+    """crude_wise.cli_resources with its per-account zone cache emptied around the test."""
+    from crude_wise import cli_resources
+
+    cli_resources._zone_of.cache_clear()
+    yield cli_resources
+    cli_resources._zone_of.cache_clear()
+
+
+def test_wise_reads_a_typed_day_and_shows_times_in_the_configured_zone(
+        kolkata_machine, monkeypatch, wise):
+    _config(monkeypatch, wise, {"timezone": "Australia/Brisbane"})
+    # A past day, since the window's end is never later than now.
+    assert wise._window("2026-06-01", "2026-06-01") == (
+        "2026-05-31T14:00:00Z", "2026-06-01T14:00:00Z")
+    assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-03 00:00"
+
+
+def test_wise_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch, wise):
+    _config(monkeypatch, wise, {})
+    assert wise._window("2026-06-01", "2026-06-01")[0] == "2026-05-31T18:30:00Z"
+    assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-02 19:30"

@@ -10,19 +10,28 @@ by balance and bounded to a window of at most 469 days. ``activity list`` is the
 feed the Wise app shows on its home screen, every kind of event in one stream,
 with amounts as display strings rather than numbers.
 
-Timestamps arrive as ISO-8601 UTC and render in the machine's local zone; typed
-``--from``/``--to`` dates are read as local days and sent as UTC instants.
+Timestamps arrive as ISO-8601 UTC and render in the timezone the config names,
+the machine's when it names none; typed ``--from``/``--to`` dates are read as days
+in the same zone and sent as UTC instants.
 """
 
 from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
+from functools import lru_cache
 from typing import Optional
 
 import typer
 
 from crude_common import asof
+from crude_common.config import (
+    account,
+    configured_timezone,
+    find_config,
+    read_config,
+    resolve_account,
+)
 from crude_common.localtime import format_local, to_utc_iso
 from crude_common.output import emit_list, emit_record
 from crude_wise.client import WiseError
@@ -55,8 +64,20 @@ def _col(path: str):
     return lambda rec: _dig(rec, path)
 
 
+@lru_cache(maxsize=None)
+def _zone_of(name):
+    """The config's timezone for account `name`; cached, since a list asks per row."""
+    cfg = read_config(find_config())
+    return configured_timezone(cfg, resolve_account(cfg, "wise", name))
+
+
+def _zone():
+    """The timezone the config names for the selected account, or None for the machine's."""
+    return _zone_of(account())
+
+
 def _ts(path: str):
-    return lambda rec: format_local(_dig(rec, path))
+    return lambda rec: format_local(_dig(rec, path), tz=_zone())
 
 
 def _now_iso() -> str:
@@ -66,8 +87,8 @@ def _now_iso() -> str:
 def _window(from_, to):
     """(start, end) UTC instants for a typed local window; end never in the
     future, and clamped to the WORLD_AS_OF bound when one is set."""
-    start = to_utc_iso(from_) if from_ else None
-    end = to_utc_iso(to, end=True) if to else _now_iso()
+    start = to_utc_iso(from_, tz=_zone()) if from_ else None
+    end = to_utc_iso(to, end=True, tz=_zone()) if to else _now_iso()
     end = min(end, _now_iso())
     asof.check_window_start(start)
     return start, asof.clamp_upper_iso(end)
@@ -240,9 +261,9 @@ def transfer_list(
     output_json: bool = _JSON,
 ):
     sess = _session()
-    start = to_utc_iso(from_) if from_ else None
+    start = to_utc_iso(from_, tz=_zone()) if from_ else None
     asof.check_window_start(start)
-    end = asof.clamp_upper_iso(to_utc_iso(to, end=True) if to else None)
+    end = asof.clamp_upper_iso(to_utc_iso(to, end=True, tz=_zone()) if to else None)
     params = {"status": status, "createdDateStart": start, "createdDateEnd": end}
     params = {k: v for k, v in params.items() if v is not None}
     try:
@@ -312,9 +333,9 @@ def activity_list(
     output_json: bool = _JSON,
 ):
     sess = _session()
-    start = to_utc_iso(from_) if from_ else None
+    start = to_utc_iso(from_, tz=_zone()) if from_ else None
     asof.check_window_start(start)
-    end = asof.clamp_upper_iso(to_utc_iso(to, end=True) if to else None)
+    end = asof.clamp_upper_iso(to_utc_iso(to, end=True, tz=_zone()) if to else None)
     params = {"status": status, "since": start, "until": end}
     params = {k: v for k, v in params.items() if v is not None}
     try:
