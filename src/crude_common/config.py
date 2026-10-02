@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Optional
@@ -128,9 +127,9 @@ def configured_timezone(cfg: dict, site_cfg: dict):
     The `timezone` key holds an IANA zone name. An invalid name aborts with a
     clear message rather than silently falling back, because a wrong zone would
     corrupt every date read and every timestamp rendered. None leaves the
-    fallback to the caller: a typed date falls back to the machine's zone as it
-    stood on that date, which resolve_timezone's fixed current offset would get
-    wrong across a daylight-saving change.
+    fallback to the caller, whose datetime methods read the machine's zone as
+    it stood at each instant, where one fixed current offset would be wrong
+    across a daylight-saving change.
     """
     from zoneinfo import ZoneInfo
 
@@ -146,11 +145,6 @@ def configured_timezone(cfg: dict, site_cfg: dict):
             err=True,
         )
         raise typer.Exit(1)
-
-
-def resolve_timezone(cfg: dict, site_cfg: dict):
-    """Resolve the display timezone: site section, then top level, then machine."""
-    return configured_timezone(cfg, site_cfg) or datetime.now().astimezone().tzinfo
 
 
 @lru_cache(maxsize=None)

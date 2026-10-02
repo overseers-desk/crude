@@ -201,14 +201,37 @@ def test_configured_timezone_is_none_when_no_zone_is_named():
     ) == ZoneInfo("Australia/Brisbane")
 
 
-def test_resolve_timezone_precedence_and_failure():
-    from crude_common.config import resolve_base_dn, resolve_timezone
+def test_configured_timezone_rejects_an_unknown_name():
+    from crude_common.config import configured_timezone
 
-    assert resolve_timezone({"timezone": "UTC"},
-                            {"timezone": "Australia/Brisbane"}) == BNE
-    assert resolve_timezone({"timezone": "UTC"}, {}) == ZoneInfo("UTC")
-    assert resolve_timezone({}, {}) is not None  # machine zone fallback
     with pytest.raises(typer.Exit):
-        resolve_timezone({"timezone": "Mars/Olympus"}, {})
+        configured_timezone({"timezone": "Mars/Olympus"}, {})
+
+
+def test_resolve_base_dn_default_and_configured():
+    from crude_common.config import resolve_base_dn
+
     assert resolve_base_dn({}) == "ou=people,dc=crude,dc=local"
     assert resolve_base_dn({"base_dn": BASE}) == BASE
+
+
+def test_ldif_renders_in_the_machine_zone_as_it_stood_when_no_zone_is_named():
+    import os
+    import time
+
+    from crude_common.ldif import _render_dt
+
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Europe/Madrid"
+    time.tzset()
+    try:
+        pm = PersonMap(attrs={}, id_key="id")
+        # Madrid is +01:00 in January and +02:00 in July; one fixed offset gets one wrong.
+        assert _render_dt(pm, {"c": "2026-01-15T04:00:00Z"}, "c", None) == "2026-01-15T05:00:00+01:00"
+        assert _render_dt(pm, {"c": "2026-07-15T04:00:00Z"}, "c", None) == "2026-07-15T06:00:00+02:00"
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()

@@ -11,11 +11,11 @@ from rich.table import Table
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
+    configured_timezone,
     find_config,
     read_config,
     resolve_account,
     resolve_base_dn,
-    resolve_timezone,
     s,
     site_timezone,
 )
@@ -136,7 +136,7 @@ MEMBER_DETAIL_PM = PersonMap(
 def _member_sink(config: dict, pm: PersonMap) -> LdifSink:
     skal_cfg = resolve_account(config, "skal", account())
     return LdifSink(pm, "skal",
-                    resolve_timezone(config, skal_cfg), resolve_base_dn(config))
+                    configured_timezone(config, skal_cfg), resolve_base_dn(config))
 
 
 def _fmt_m2o(value) -> str:

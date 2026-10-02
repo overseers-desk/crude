@@ -18,11 +18,11 @@ import typer
 
 from crude_common.config import (
     account,
+    configured_timezone,
     find_config,
     read_config,
     resolve_account,
     resolve_base_dn,
-    resolve_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap
 from crude_common.writeio import do_write, merge_update, read_data
@@ -63,7 +63,7 @@ def _ldif_sink(person_map: PersonMap) -> LdifSink:
     """Build the per-invocation LDIF sink for the selected account and config."""
     cfg = read_config(find_config())
     site_cfg = resolve_account(cfg, "xero", account())
-    return LdifSink(person_map, "xero", resolve_timezone(cfg, site_cfg),
+    return LdifSink(person_map, "xero", configured_timezone(cfg, site_cfg),
                     resolve_base_dn(cfg))
 
 

@@ -8,9 +8,9 @@ sites' exports concatenate into one importable file. The contract:
   to stderr.
 - each entry is objectClass inetOrgPerson plus extensibleObject, the latter so
   the createdDateTime/modifiedDateTime attributes are legal.
-- timestamps are normalised to one caller-chosen timezone and rendered as
-  ISO-8601 with the numeric offset, so entries from sites reporting in
-  different native forms line up.
+- timestamps are rendered as ISO-8601 with the numeric offset in one zone, the
+  one the caller passes (None for the machine's, as it stood at each instant),
+  so entries from sites reporting in different native forms line up.
 
 A site describes its record shape with a PersonMap; emit_ldif does the rest.
 LdifSink bundles the per-invocation choices (map, site tag, timezone, base DN)

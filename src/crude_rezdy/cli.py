@@ -14,11 +14,11 @@ from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
+    configured_timezone,
     find_config,
     read_config,
     resolve_account,
     resolve_base_dn,
-    resolve_timezone,
     s,
 )
 from crude_common.ldif import LdifSink, PersonMap
@@ -752,7 +752,7 @@ CUSTOMER_PM = PersonMap(
 def _customer_sink(config: dict) -> LdifSink:
     rezdy_cfg = resolve_account(config, "rezdy", account())
     return LdifSink(CUSTOMER_PM, "rezdy",
-                    resolve_timezone(config, rezdy_cfg), resolve_base_dn(config))
+                    configured_timezone(config, rezdy_cfg), resolve_base_dn(config))
 
 
 @customer_app.command("list")

@@ -16,11 +16,11 @@ import typer
 from crude_common import asof
 from crude_common.config import (
     account,
+    configured_timezone,
     find_config,
     read_config,
     resolve_account,
     resolve_base_dn,
-    resolve_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
@@ -98,7 +98,7 @@ def _ldif_sink() -> LdifSink:
     cfg = read_config(find_config())
     site_cfg = resolve_account(cfg, "airwallex", account())
     return LdifSink(_PERSON_PM, "airwallex",
-                    resolve_timezone(cfg, site_cfg), resolve_base_dn(cfg))
+                    configured_timezone(cfg, site_cfg), resolve_base_dn(cfg))
 
 
 @beneficiary_app.command("list")

@@ -19,11 +19,11 @@ from crude_common import asof
 from crude_common.claude_command import register_claude_command
 from crude_common.config import (
     account,
+    configured_timezone,
     find_config,
     read_config,
     resolve_account,
     resolve_base_dn,
-    resolve_timezone,
     s,
     site_timezone,
 )
@@ -1007,7 +1007,7 @@ def _guest_sink(config: dict) -> LdifSink:
     return LdifSink(
         pm=_GUEST_PERSON_MAP,
         site="sonas",
-        tz=resolve_timezone(config, site_cfg),
+        tz=configured_timezone(config, site_cfg),
         base_dn=resolve_base_dn(config),
     )
 
