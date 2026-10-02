@@ -36,6 +36,8 @@ Each site reads its own section (`[atdw]`, `[skal]`) from the one file. The CLIs
 
 A site can carry more than one account. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one, selected with `--account/-a` (or `$CRUDE_ACCOUNT`) before the resource. One example is a Rezdy venue in Australia and another in Spain, each with its own key and timezone. See the `crude config-sample` output.
 
+A `timezone` key (an IANA name such as `Australia/Brisbane`) names the zone crude works in: the sites that take typed dates or convert timestamps read the dates in it and show the times in it, whatever the computer's own clock is set to. At the top level of the config it is the default for every site, and inside a site's section it wins for that site; with none set, the computer's zone is used. Rezdy requires the key in its own section, and the Clover order export takes its own `--tz`.
+
 ### Install
 
 Homebrew (macOS or Linux):

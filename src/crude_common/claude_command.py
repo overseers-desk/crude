@@ -47,6 +47,8 @@ allowed-tools: Bash
 
 crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`, `[wise]`). Add `--json` to any read command for machine-readable output.
 
+A `timezone` key in the config (an IANA name; top level for every site, or inside a site's section, where it wins) is the zone typed dates are read in and times are shown in; the machine's zone applies when none is set.
+
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
 
 If the `WORLD_AS_OF` environment variable is set (an ISO-8601 instant with timezone), every crude binary bounds its reads to that instant — records created after it are excluded, mutated-after records are flagged (`"_world_as_of"` in `--json`), now-valued reads (current balances, FX rates, live availability, insights) refuse — and **every write verb refuses**. An unparseable or timezone-naive value aborts the command. The per-backend boundary table is in the crude repo docs/manual.md.
