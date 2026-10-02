@@ -26,7 +26,7 @@ import typer
 
 from crude_common import asof
 from crude_common.config import s, site_timezone
-from crude_common.localtime import format_local
+from crude_common.localtime import format_local, localize
 from crude_common.output import emit_list, emit_record
 from crude_mautic.client import MauticError, rows, unescape_results
 
@@ -48,7 +48,7 @@ def _show(rec: dict, output_json: bool) -> None:
     """Print one record: untouched for --json, otherwise with its timestamps in
     the timezone the lists show."""
     if not output_json:
-        rec = {k: _when(k)(rec) if k in _STAMPS and v else v for k, v in rec.items()}
+        rec = localize(rec, _STAMPS, tz=site_timezone("mautic"))
     emit_record(rec, output_json)
 
 

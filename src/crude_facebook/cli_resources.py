@@ -16,7 +16,7 @@ import typer
 
 from crude_common import asof
 from crude_common.config import site_timezone
-from crude_common.localtime import format_local, parse_iso_utc
+from crude_common.localtime import format_local, localize, parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write
 from crude_facebook.client import (
@@ -126,8 +126,8 @@ def post_get(
         typer.echo(f"Error fetching post {post_id}: {e}", err=True)
         raise typer.Exit(1)
     rec = asof.check_record(rec, "created_time", what="post")
-    if not output_json and rec.get("created_time"):
-        rec = {**rec, "created_time": _when("created_time")(rec)}
+    if not output_json:
+        rec = localize(rec, ["created_time"], tz=site_timezone("facebook"))
     emit_record(rec, output_json)
 
 

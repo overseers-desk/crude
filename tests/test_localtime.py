@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from crude_common.localtime import format_local, parse_iso_utc, to_utc_iso
+from crude_common.localtime import format_local, localize, parse_iso_utc, to_utc_iso
 
 
 @pytest.fixture
@@ -135,3 +135,11 @@ def test_a_passed_zone_decides_whatever_the_machine_zone(kolkata_tz):
     assert to_utc_iso("2026-10-03") == "2026-10-02T18:30:00Z"
     assert format_local("2026-10-02T14:00:00Z") == "2026-10-02 19:30"
 
+
+
+def test_localize_renders_the_named_fields_and_leaves_the_rest(brisbane_tz):
+    record = {"id": 7, "created": "2026-06-17T14:00:00Z", "updated": None, "note": "2026-06-17"}
+    shown = localize(record, ["created", "updated", "closed"], tz=ZoneInfo("Asia/Kolkata"))
+    assert shown == {"id": 7, "created": "2026-06-17 19:30", "updated": None, "note": "2026-06-17"}
+    assert record["created"] == "2026-06-17T14:00:00Z"
+    assert localize(record, ["created"])["created"] == "2026-06-18 00:00"

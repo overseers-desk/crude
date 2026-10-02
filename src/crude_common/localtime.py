@@ -64,6 +64,19 @@ def format_local(value, *, fmt: str = "%Y-%m-%d %H:%M", tz=None) -> str:
     return dt.astimezone(tz).strftime(fmt)
 
 
+def localize(record, fields, *, tz=None):
+    """A copy of `record` for a record view: the ISO-8601 timestamps under
+    `fields` rendered as format_local renders them. A field that is absent or
+    None stays so."""
+    if not isinstance(record, dict):
+        return record
+    out = dict(record)
+    for field in fields:
+        if out.get(field) is not None:
+            out[field] = format_local(out[field], tz=tz)
+    return out
+
+
 def to_utc_iso(local_date: str, *, end: bool = False, tz=None) -> str:
     """Map a typed local date or time into an ISO-8601 UTC instant string.
 
