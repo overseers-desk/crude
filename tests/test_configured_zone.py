@@ -117,6 +117,22 @@ def test_wise_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch):
     assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-02 19:30"
 
 
+def test_wise_record_views_show_their_times_as_the_lists_do(kolkata_machine, monkeypatch):
+    from crude_wise import cli, cli_resources
+
+    transfer = {"id": 9, "status": "outgoing_payment_sent", "created": "2026-10-02 14:00:00"}
+    profile = {"id": 3, "type": "BUSINESS", "createdAt": BNE_MIDNIGHT_UTC, "updatedAt": None}
+    sess = SimpleNamespace(get=lambda _path: transfer, profile=lambda _id: profile)
+    monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    _on_disk(monkeypatch, BRISBANE)
+    for argv, raw in ((["transfer", "get", "9"], "14:00:00"),
+                      (["profile", "get", "3"], BNE_MIDNIGHT_UTC)):
+        table = runner.invoke(cli.app, argv)
+        assert table.exit_code == 0, table.output
+        assert "2026-10-03 00:00" in table.output and raw not in table.output
+        assert raw in runner.invoke(cli.app, argv + ["--json"]).output
+
+
 # ----------------------------------------------------------------------
 # Clover
 # ----------------------------------------------------------------------

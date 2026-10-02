@@ -25,7 +25,7 @@ import typer
 
 from crude_common import asof
 from crude_common.config import site_timezone
-from crude_common.localtime import format_local, to_utc_iso
+from crude_common.localtime import format_local, localize, to_utc_iso
 from crude_common.output import emit_list, emit_record
 from crude_wise.client import WiseError
 
@@ -159,6 +159,8 @@ def profile_get(
     except WiseError as e:
         _fail(f"profile {profile_id or ''}".strip(), e)
     rec = asof.check_record(rec, "createdAt", "updatedAt", what="profile")
+    if not output_json:
+        rec = localize(rec, ("createdAt", "updatedAt"), tz=_zone())
     emit_record(rec, output_json)
 
 
@@ -268,6 +270,8 @@ def transfer_get(transfer_id: int = typer.Argument(..., help="Transfer id."),
     except WiseError as e:
         _fail(f"transfer {transfer_id}", e)
     rec = asof.check_record(rec, "created", what="transfer")
+    if not output_json:
+        rec = localize(rec, ("created",), tz=_zone())
     emit_record(rec, output_json)
 
 
