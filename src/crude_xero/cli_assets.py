@@ -19,8 +19,8 @@ from typing import Optional
 
 import typer
 
-from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
+from crude_xero.render import emit_list, emit_record
 
 # The statuses the Assets API accepts on the (required) list filter.
 ASSET_STATUSES = ("DRAFT", "REGISTERED", "DISPOSED")

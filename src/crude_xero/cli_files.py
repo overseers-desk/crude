@@ -21,9 +21,9 @@ from typing import Optional
 
 import typer
 
-from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.cli_accounting import _emit_bytes, _list_hint
+from crude_xero.render import emit_list, emit_record
 
 # Shared columns for the two association list views (by file, by object).
 _ASSOC_COLUMNS = [("File", "FileId"), ("Object", "ObjectId"),

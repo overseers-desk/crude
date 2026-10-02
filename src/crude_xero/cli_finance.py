@@ -22,7 +22,7 @@ from typing import List, Optional
 
 import typer
 
-from crude_common.output import emit_record
+from crude_xero.render import emit_record
 
 # Friendly command name -> FinanceAPI method, for the two named-endpoint groups.
 FINANCIAL_STATEMENTS = {

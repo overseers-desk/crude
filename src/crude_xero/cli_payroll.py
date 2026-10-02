@@ -29,10 +29,9 @@ from crude_common.config import (
     resolve_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap
-from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
-from crude_xero.cli_accounting import _parse_xero_dt
 from crude_xero.client import PAGE_SIZE
+from crude_xero.render import emit_list, emit_record, parse_xero_dt
 
 LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
 
@@ -46,7 +45,7 @@ EMPLOYEE_PM = PersonMap(
     },
     id_key="EmployeeID",
     modified="UpdatedDateUTC",
-    parse_dt=_parse_xero_dt,
+    parse_dt=parse_xero_dt,
 )
 
 

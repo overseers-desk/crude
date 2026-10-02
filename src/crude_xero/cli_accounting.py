@@ -11,7 +11,6 @@ writes go through `do_write`/`merge_update`, with confirm-before-write.
 
 from __future__ import annotations
 
-import re
 import sys
 from typing import List, Optional
 
@@ -25,32 +24,13 @@ from crude_common.config import (
     resolve_base_dn,
     resolve_timezone,
 )
-from crude_common.ldif import LdifSink, PersonMap, parse_epoch_ms
-from crude_common.localtime import parse_iso_utc
-from crude_common.output import emit_list, emit_record
+from crude_common.ldif import LdifSink, PersonMap
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_xero.accounting import REPORT_NAMES
 from crude_xero.client import PAGE_SIZE
+from crude_xero.render import emit_list, emit_record, parse_xero_dt
 
 LDIF_HELP = "Output LDIF (inetOrgPerson) instead of a table."
-
-# The .NET JSON date Xero sometimes emits, /Date(1672531200000+0000)/: the digits
-# are the millisecond UTC epoch, the trailing offset is presentation only.
-_DOTNET_DATE = re.compile(r"^/Date\((-?\d+)(?:[+-]\d{4})?\)/$")
-
-
-def _parse_xero_dt(value):
-    """Parse a Xero timestamp that may arrive as /Date(ms)/ or as ISO-8601.
-
-    Different Accounting endpoints report UpdatedDateUTC in either form, so a
-    /Date(ms)/ value is unwrapped to its epoch milliseconds and anything else
-    falls through to the ISO parser.
-    """
-    if isinstance(value, str):
-        m = _DOTNET_DATE.match(value.strip())
-        if m:
-            return parse_epoch_ms(m.group(1))
-    return parse_iso_utc(value)
 
 
 def _contact_phone(contact: dict):
@@ -64,7 +44,7 @@ def _contact_phone(contact: dict):
 
 
 # Xero contacts as inetOrgPerson. Created is not exposed by the Contacts API, so
-# only the modified stamp is mapped; UpdatedDateUTC is parsed by _parse_xero_dt.
+# only the modified stamp is mapped; UpdatedDateUTC is parsed by parse_xero_dt.
 CONTACT_PM = PersonMap(
     attrs={
         "cn": "Name",
@@ -75,7 +55,7 @@ CONTACT_PM = PersonMap(
     },
     id_key="ContactID",
     modified="UpdatedDateUTC",
-    parse_dt=_parse_xero_dt,
+    parse_dt=parse_xero_dt,
 )
 
 

@@ -419,3 +419,22 @@ def test_skal_event_start_is_shown_in_the_configured_zone(kolkata_machine, monke
     assert table.exit_code == 0, table.output
     assert "2026-10-03 00:00" in table.output
     assert "False" not in table.output
+
+
+def test_xero_shows_dates_as_days_and_utc_stamps_in_the_configured_zone(
+        kolkata_machine, monkeypatch, capsys):
+    from crude_xero import render
+
+    _on_disk(monkeypatch, BRISBANE)
+    day = "/Date(1633564800000+0000)/"      # 7 October 2021, as Xero sends a date
+    stamp = f"/Date({BNE_MIDNIGHT_MS}+0000)/"
+    assert render.shown("Date", day) == "2021-10-07"
+    assert render.shown("UpdatedDateUTC", stamp) == "2026-10-03 00:00"
+    assert render.shown("DateString", "2021-10-07T00:00:00") == "2021-10-07T00:00:00"
+    assert render.shown("Total", 540.0) == 540.0
+    # A record view prints the key, which says UTC, so the time carries its offset.
+    render.emit_record({"DueDate": day, "UpdatedDateUTC": stamp}, False)
+    view = capsys.readouterr().out
+    assert "2021-10-07" in view and "2026-10-03 00:00+10:00" in view
+    render.emit_record({"DueDate": day}, True)
+    assert day in capsys.readouterr().out
