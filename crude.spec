@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.1
+Version:        1.6.2
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -96,6 +96,23 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Fri Oct 02 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.2-1
+- Single-record views show their timestamps in the config's timezone: every
+  crude-rezdy `get`, crude-clover `payments`, `refunds`, `credits` and
+  `cash-events` `get`, crude-wise `profile get` and `transfer get`, and the
+  crude-atdw listing's published and updated times. --json stays raw.
+- crude-xero: a date shows as the day in place of Xero's /Date(ms)/ form, and
+  a field named ...UTC as a time in the config's timezone.
+- crude-deputy: a shift's start and end show as times in the config's
+  timezone, and a business date as the day.
+- crude-rezdy: voucher issue and expiry instants in the account's timezone.
+- crude-skal: an event's start shows in the config's timezone.
+- crude-airwallex, crude-wise: a time typed on --from or --to is read in the
+  config's timezone.
+- crude-clover: --tz defaults to the config's timezone; the generic resource
+  list shows its timestamps as the registry lists do.
+- LDIF exports with no timezone in the config carry each record's own offset.
+
 * Fri Oct 02 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.1-1
 - A `timezone` key in the config names the zone crude works in: typed dates
   are read in it and times are shown in it. At the top level it covers every

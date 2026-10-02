@@ -1,3 +1,28 @@
+crude (1.6.2) unstable; urgency=medium
+
+  * Single-record views show their timestamps in the config's timezone:
+    every crude-rezdy `get`, crude-clover `payments`, `refunds`, `credits`
+    and `cash-events` `get`, crude-wise `profile get` and `transfer get`,
+    and the crude-atdw listing's published and updated times. --json stays
+    as the API sent it.
+  * crude-xero: a date shows as the day (2021-10-07) in place of Xero's
+    /Date(ms)/ form, and a field named ...UTC as a time in the config's
+    timezone; `history list` shows when each entry was made.
+  * crude-deputy: a shift's start and end (Unix seconds in the API) show as
+    times in the config's timezone, and a business date as the day.
+  * crude-rezdy: `voucher list` and `voucher get` show the issue and expiry
+    instants in the account's timezone.
+  * crude-skal: an event's start shows in the config's timezone.
+  * crude-airwallex, crude-wise: a time typed on --from or --to is read in
+    the config's timezone.
+  * crude-clover: --tz defaults to the config's timezone (else
+    Australia/Brisbane); the generic `resource list` shows its timestamps
+    as the registry lists do.
+  * LDIF exports with no timezone in the config carry each record's own
+    offset in the machine's zone, not the current one.
+
+ -- Rivermill Webmaster <pt7535886@gmail.com>  Fri, 02 Oct 2026 19:51:58 +1000
+
 crude (1.6.1) unstable; urgency=medium
 
   * A `timezone` key in the config (an IANA name) names the zone crude works
