@@ -8,6 +8,7 @@ the matched leads; --json emits the whole result.
 
 import json
 from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 import typer
@@ -17,6 +18,7 @@ from crude_sonas.client import to_ejson_date, to_ejson_date_end
 
 CONFIG = {"timezone": "Australia/Brisbane",
           "sonas": {"username": "u", "password_hash": "h"}}
+VENUE = ZoneInfo(CONFIG["timezone"])
 
 SOURCES = [
     {"_id": "SRC_EASY", "name": "Easy Weddings", "tag": "enquiry_source"},
@@ -70,6 +72,9 @@ def stub(monkeypatch):
                              read_pub=read_pub, close=lambda: None)
     monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
     monkeypatch.setattr(cli, "read_config", lambda path: CONFIG)
+    # The typed dates are read in the config's timezone, looked up in crude_common.
+    monkeypatch.setattr("crude_common.config.find_config", lambda: "config.toml")
+    monkeypatch.setattr("crude_common.config.read_config", lambda path: CONFIG)
     monkeypatch.setattr(cli, "_make_client", lambda config: client)
     return SimpleNamespace(client=client, captured=captured)
 
@@ -79,8 +84,9 @@ def test_leads_builds_source_and_date_selector(stub):
                     status=None, show_list=False, output_json=False)
     selector = stub.captured["selector"]
     assert selector["enquiryData.sourceId"] == "SRC_EASY"
-    assert selector["enquiryData.date"]["$gte"] == to_ejson_date("2026-01-01")
-    assert selector["enquiryData.date"]["$lt"] == to_ejson_date_end("2026-12-31")
+    # The days are the venue's, whatever zone the machine is in.
+    assert selector["enquiryData.date"]["$gte"] == to_ejson_date("2026-01-01", VENUE)
+    assert selector["enquiryData.date"]["$lt"] == to_ejson_date_end("2026-12-31", VENUE)
     assert "status" not in selector
 
 

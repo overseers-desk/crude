@@ -25,6 +25,7 @@ from crude_common.config import (
     resolve_base_dn,
     resolve_timezone,
     s,
+    site_timezone,
 )
 from crude_common.ldif import LdifSink, PersonMap, parse_epoch_ms
 from crude_common.output import emit_list
@@ -88,6 +89,12 @@ def _make_client(config: dict):
     return SonasClient(user, digest, fingerprint, tenant=sonas.get("tenant"))
 
 
+def _zone():
+    """The venue's timezone: the one the config names for the selected account,
+    or None for the machine's."""
+    return site_timezone("sonas")
+
+
 def _client():
     """Construct the client from the discovered config (the per-command path)."""
     return _make_client(read_config(find_config()))
@@ -122,7 +129,7 @@ def _render_events(events: list) -> None:
         table.add_row(
             s(ev.get("_id")),
             s(ev.get("reference")),
-            date_str(ev.get("date")),
+            date_str(ev.get("date"), _zone()),
             EVENT_STATUS.get(ev.get("status"), s(ev.get("status"))),
             EVENT_TYPE.get(ev.get("type"), s(ev.get("type"))),
             _couple(ev),
@@ -136,7 +143,7 @@ def _cell(value, max_len: int = 80) -> str:
     """Render one value for a table cell: EJSON dates as dates, containers
     summarised, scalars as text, truncated to ``max_len``."""
     if isinstance(value, dict) and "$date" in value:
-        cell = date_str(value)
+        cell = date_str(value, _zone())
     elif isinstance(value, dict):
         cell = "(object)"
     elif isinstance(value, list):
@@ -239,15 +246,15 @@ def _parse_status(value: str) -> int:
 def _range_params(from_: Optional[str], to: Optional[str]) -> list:
     """EJSON [from, to] params for the *ByDateRange pubs; default all time,
     the same wide range `event list` uses."""
-    return [to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS},
-            to_ejson_date_end(to) if to else {"$date": EPOCH_2100_MS}]
+    return [to_ejson_date(from_, _zone()) if from_ else {"$date": EPOCH_1900_MS},
+            to_ejson_date_end(to, _zone()) if to else {"$date": EPOCH_2100_MS}]
 
 
 def _dt_str(value) -> str:
-    """Render an EJSON datetime as YYYY-MM-DD HH:MM in local time; pass others through."""
+    """Render an EJSON datetime as YYYY-MM-DD HH:MM in the venue's zone; pass others through."""
     if isinstance(value, dict) and "$date" in value:
         from datetime import datetime
-        return datetime.fromtimestamp(value["$date"] / 1000).strftime("%Y-%m-%d %H:%M")
+        return datetime.fromtimestamp(value["$date"] / 1000, _zone()).strftime("%Y-%m-%d %H:%M")
     return s(value)
 
 
@@ -444,7 +451,7 @@ def event_list(
     """List events (weddings and other bookings)."""
     client = _make_client(read_config(find_config()))
     try:
-        events = client.list_events(from_, to)
+        events = client.list_events(from_, to, _zone())
     except Exception as e:
         typer.echo(f"Error listing events: {e}", err=True)
         raise typer.Exit(1)
@@ -578,7 +585,7 @@ def _index_row(bundle: dict) -> dict:
         "event_id": bundle["event_id"],
         "status": EVENT_STATUS.get(event.get("status"), s(event.get("status"))),
         "type": EVENT_TYPE.get(event.get("type"), s(event.get("type"))),
-        "date": date_str(event.get("date")) if event.get("date") else "",
+        "date": date_str(event.get("date"), _zone()) if event.get("date") else "",
         "name": _couple(event),
         "email": main_user.get("email") or main.get("email") or "",
         "messages": len(bundle.get("messages") or []),
@@ -705,9 +712,9 @@ def event_leads(
             selector["status"] = {"$in": [_parse_status(v) for v in status]}
         date_range = {}
         if from_:
-            date_range["$gte"] = to_ejson_date(from_)
+            date_range["$gte"] = to_ejson_date(from_, _zone())
         if to:
-            date_range["$lt"] = to_ejson_date_end(to)
+            date_range["$lt"] = to_ejson_date_end(to, _zone())
         if date_range:
             selector["enquiryData.date"] = date_range
         ids, count = client.event_ids_matching(selector)
@@ -752,8 +759,8 @@ def _lead_row(client, event_id: str) -> dict:
                 break
     return {
         "event_id": event_id,
-        "enquiry_date": date_str(enq_date) if enq_date else "",
-        "wedding_date": date_str(ev.get("date")) if ev.get("date") else "",
+        "enquiry_date": date_str(enq_date, _zone()) if enq_date else "",
+        "wedding_date": date_str(ev.get("date"), _zone()) if ev.get("date") else "",
         "status": EVENT_STATUS.get(ev.get("status"), s(ev.get("status"))),
         "couple": _couple(ev),
     }
@@ -845,11 +852,11 @@ def _date_change(method: str, event_id: str, date: str, end_date: Optional[str],
     areaIds is optional on the wire; when the event already holds areas, they are
     re-sent so the change keeps them reserved.
     """
-    arg = {"eventId": event_id, "date": to_ejson_date(date)}
+    arg = {"eventId": event_id, "date": to_ejson_date(date, _zone())}
     if end_date:
-        arg["eventEndDate"] = to_ejson_date(end_date)
+        arg["eventEndDate"] = to_ejson_date(end_date, _zone())
     if ceremony_date:
-        arg["ceremonyDate"] = to_ejson_date(ceremony_date)
+        arg["ceremonyDate"] = to_ejson_date(ceremony_date, _zone())
     client = _client()
     try:
         try:

@@ -130,3 +130,29 @@ def test_clover_shows_a_record_time_in_the_configured_zone(kolkata_machine, monk
     _on_disk(monkeypatch, {})
     assert column({"createdTime": BNE_MIDNIGHT_MS}) == "2026-10-02 19:30"
     assert column({}) == ""
+
+
+# ----------------------------------------------------------------------
+# Sonas
+# ----------------------------------------------------------------------
+
+
+def test_sonas_event_list_reads_and_shows_days_in_the_venue_zone(kolkata_machine, monkeypatch):
+    from crude_sonas import cli
+
+    _on_disk(monkeypatch, {"sonas": {"timezone": "Australia/Brisbane"}})
+    seen = {}
+
+    def list_events(from_, to, tz):
+        seen.update(from_=from_, to=to, tz=str(tz))
+        return [{"_id": "E1", "date": {"$date": BNE_MIDNIGHT_MS}}]
+
+    client = SimpleNamespace(list_events=list_events, close=lambda: None)
+    monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(cli, "read_config", lambda _p: {})
+    monkeypatch.setattr(cli, "_make_client", lambda _c: client)
+    result = runner.invoke(cli.app, ["event", "list", "--from", "2026-10-03", "--to", "2026-10-03"])
+    assert result.exit_code == 0
+    assert seen == {"from_": "2026-10-03", "to": "2026-10-03", "tz": "Australia/Brisbane"}
+    # Stored at Brisbane midnight on the 3rd; Kolkata's own clock would say the 2nd.
+    assert "2026-10-03" in result.output and "2026-10-02" not in result.output

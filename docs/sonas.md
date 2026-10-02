@@ -186,8 +186,10 @@ Lifecycle methods (write):
   `eventHoldDate({...same...})` **[live]**. Dates are EJSON; the server
   reinterprets the sent instant's calendar day in the **venue timezone** and
   stores venue-local day bounds (so UTC-midnight in, `date` = local 00:00,
-  `endDate` auto-set to local 23:59:59.999; `date_str` renders UTC and can show
-  the prior day). `areaIds` is `Match.Maybe([id])`: omitting it works; re-send
+  `endDate` auto-set to local 23:59:59.999). crude sends a typed date as
+  midnight in the venue's zone and `date_str` renders in the same zone, so a
+  day reads as stored on any machine; the zone is the `timezone` the config
+  names under `[sonas]`, else at the top level, else the machine's. `areaIds` is `Match.Maybe([id])`: omitting it works; re-send
   the event's current areas to keep them reserved. change-date keeps the
   status; hold-date sets DateOnHold.
 - `eventPreConfirm({eventId, data, transactions, welcomeTemplateId, termsAndConditions, paymentPlanId, timelineId, fileIds})`

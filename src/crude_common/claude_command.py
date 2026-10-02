@@ -229,6 +229,8 @@ Event status values: Enquiry, Confirmed, Cancelled, DateOnHold, Exhausted, Confi
 
 Named guests (guest list/add/update/delete) and the headcount (guest set-numbers, the currentMain counts shown by event list) are separate records: adding an attending guest auto-increments the matching count, deleting a guest does not decrement it, and set-numbers refuses to go below the named guestlist's total for a type.
 
+Dates typed on any crude-sonas command (`--from`/`--to`, `--date`) are days in the venue's timezone, and dates are shown in it: the config's `timezone` under `[sonas]`, else the top-level one, else the machine's zone.
+
 Timeline entries are absolute (--time, naive ISO counts as UTC) or relative to another entry (--after + --offset-minutes, negative = before); timeline update takes a full replacement entry, not a modifier; timeline import appends a tenant template's entries (template ids are the eventId-less docs in the timelines collection). Note and timeline --section take an EventSectionEnum slug (notes, general, timeline, bar, ...; the table is in the crude repo docs/sonas.md); note add defaults to notes.
 
 service-booking cancel keeps the booking as a Cancelled record (Sonas has no booking delete); edit replaces the whole option list. Option ids come from the service's catalog doc.

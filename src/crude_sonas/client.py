@@ -214,40 +214,49 @@ def _drain(conn, secs):
 # EJSON date helpers
 # ----------------------------------------------------------------------
 
-def to_ejson_date(yyyy_mm_dd: str) -> dict:
-    """Encode a typed YYYY-MM-DD as an EJSON date at local midnight.
+def _midnight_ms(yyyy_mm_dd: str, tz, days: int = 0) -> int:
+    """Epoch ms of midnight on a typed day (plus ``days``) in ``tz``, or in the
+    machine's zone when tz is None: a naive datetime's ``.timestamp()`` is
+    interpreted as machine-local time."""
+    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d") + timedelta(days=days)
+    if tz is not None:
+        dt = dt.replace(tzinfo=tz)
+    return int(dt.timestamp() * 1000)
+
+
+def to_ejson_date(yyyy_mm_dd: str, tz=None) -> dict:
+    """Encode a typed YYYY-MM-DD as an EJSON date at venue-local midnight.
 
     Sonas stores an event date as venue-local midnight, so a typed date is read in
-    the machine's local timezone (the venue's, for an operator on site), not UTC.
-    A naive datetime's ``.timestamp()`` is interpreted as local time.
+    the venue's zone, not UTC: ``tz``, the timezone the config names, or the
+    machine's when tz is None (the venue's own, for an operator on site).
     """
-    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d")
-    return {"$date": int(dt.timestamp() * 1000)}
+    return {"$date": _midnight_ms(yyyy_mm_dd, tz)}
 
 
-def to_ejson_date_end(yyyy_mm_dd: str) -> dict:
-    """EJSON exclusive upper bound for a date-range filter: local midnight of the
-    day after ``yyyy_mm_dd``.
+def to_ejson_date_end(yyyy_mm_dd: str, tz=None) -> dict:
+    """EJSON exclusive upper bound for a date-range filter: venue-local midnight
+    of the day after ``yyyy_mm_dd``.
 
     Sonas's *ByDateRange pubs match ``from <= date < to`` on the event's start
     date, so to include every event on the to-date the upper bound must be the
     next day's local midnight, not the to-date's own midnight.
     """
-    dt = datetime.strptime(yyyy_mm_dd, "%Y-%m-%d") + timedelta(days=1)
-    return {"$date": int(dt.timestamp() * 1000)}
+    return {"$date": _midnight_ms(yyyy_mm_dd, tz, days=1)}
 
 
-def date_str(value) -> str:
-    """Render an EJSON date ({"$date": ms}) as YYYY-MM-DD in local time.
+def date_str(value, tz=None) -> str:
+    """Render an EJSON date ({"$date": ms}) as YYYY-MM-DD in the venue's zone.
 
-    Rendered in the machine's local timezone (the venue's, on site) to match how
-    Sonas stores venue-local dates. A UTC render shows the prior calendar day for
-    any zone east of UTC — a Brisbane (+10) wedding stored as local midnight is
-    the previous day in UTC. Pass other values through.
+    ``tz`` is the timezone the config names, or None for the machine's (the
+    venue's, on site), to match how Sonas stores venue-local dates. Any zone
+    west of the venue shows the prior calendar day: a Brisbane (+10) wedding
+    stored as local midnight is the previous day in UTC. Pass other values
+    through.
     """
     if isinstance(value, dict) and "$date" in value:
         ms = value["$date"]
-        return datetime.fromtimestamp(ms / 1000).strftime("%Y-%m-%d")
+        return datetime.fromtimestamp(ms / 1000, tz).strftime("%Y-%m-%d")
     return "" if value is None else str(value)
 
 
@@ -398,11 +407,12 @@ class SonasClient:
         ddp_unsub(self.conn, sid)
         return rows, info
 
-    def list_events(self, from_: str = None, to: str = None) -> list:
-        """Events whose date falls in [from, to] (default all time). Returns docs
-        with the document id merged in under ``_id``."""
-        frm = to_ejson_date(from_) if from_ else {"$date": EPOCH_1900_MS}
-        to_d = to_ejson_date_end(to) if to else {"$date": EPOCH_2100_MS}
+    def list_events(self, from_: str = None, to: str = None, tz=None) -> list:
+        """Events whose date falls in [from, to] (default all time), the days read
+        in ``tz`` as ``to_ejson_date`` reads them. Returns docs with the document
+        id merged in under ``_id``."""
+        frm = to_ejson_date(from_, tz) if from_ else {"$date": EPOCH_1900_MS}
+        to_d = to_ejson_date_end(to, tz) if to else {"$date": EPOCH_2100_MS}
         return self.read_pub("eventsByDateRange", [frm, to_d], collection="events")
 
     def get_event(self, event_id: str) -> dict:

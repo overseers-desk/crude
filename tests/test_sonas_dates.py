@@ -11,6 +11,8 @@ import time
 
 import pytest
 
+from zoneinfo import ZoneInfo
+
 from crude_sonas.client import date_str, to_ejson_date, to_ejson_date_end
 
 # 2026-06-18 00:00 Australia/Brisbane (+10) == 2026-06-17 14:00 UTC.
@@ -59,3 +61,28 @@ def test_to_ejson_date_end_is_next_day_midnight(brisbane_tz):
 def test_date_str_passes_through_non_ejson():
     assert date_str(None) == ""
     assert date_str("already a string") == "already a string"
+
+
+@pytest.fixture
+def kolkata_tz():
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Kolkata"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+
+
+def test_a_passed_venue_zone_decides_whatever_the_machine_zone(kolkata_tz):
+    venue = ZoneInfo("Australia/Brisbane")
+    assert to_ejson_date("2026-06-18", venue) == {"$date": BNE_2026_06_18_MIDNIGHT_MS}
+    assert to_ejson_date_end("2026-06-18", venue) == {"$date": BNE_2026_06_19_MIDNIGHT_MS}
+    assert date_str({"$date": BNE_2026_06_18_MIDNIGHT_MS}, venue) == "2026-06-18"
+    # Left to its own zone, a machine west of the venue shows the day before.
+    assert date_str({"$date": BNE_2026_06_18_MIDNIGHT_MS}) == "2026-06-17"
+
