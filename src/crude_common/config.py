@@ -121,18 +121,20 @@ def resolve_account(config: dict, site: str, name: Optional[str]) -> dict:
     return named[name]
 
 
-def resolve_timezone(cfg: dict, site_cfg: dict):
-    """Resolve the display timezone: site section, then top level, then machine.
+def configured_timezone(cfg: dict, site_cfg: dict):
+    """The timezone the config names: site section, then top level, else None.
 
     The `timezone` key holds an IANA zone name. An invalid name aborts with a
     clear message rather than silently falling back, because a wrong zone would
-    corrupt every rendered timestamp.
+    corrupt every date read and every timestamp rendered. None leaves the choice
+    to the caller, which for a typed date is the machine's zone with that date's
+    own offset.
     """
     from zoneinfo import ZoneInfo
 
     name = site_cfg.get("timezone") or cfg.get("timezone")
     if not name:
-        return datetime.now().astimezone().tzinfo
+        return None
     try:
         return ZoneInfo(name)
     except (KeyError, ValueError):
@@ -142,6 +144,11 @@ def resolve_timezone(cfg: dict, site_cfg: dict):
             err=True,
         )
         raise typer.Exit(1)
+
+
+def resolve_timezone(cfg: dict, site_cfg: dict):
+    """Resolve the display timezone: site section, then top level, then machine."""
+    return configured_timezone(cfg, site_cfg) or datetime.now().astimezone().tzinfo
 
 
 def resolve_base_dn(cfg: dict) -> str:

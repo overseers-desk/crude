@@ -191,6 +191,16 @@ def test_emit_list_table_path_unchanged(capsys):
     assert "1 person(s) found." in out
 
 
+def test_configured_timezone_is_none_when_no_zone_is_named():
+    from crude_common.config import configured_timezone
+
+    assert configured_timezone({}, {}) is None
+    assert configured_timezone({"timezone": "UTC"}, {}) == ZoneInfo("UTC")
+    assert configured_timezone(
+        {"timezone": "UTC"}, {"timezone": "Australia/Brisbane"}
+    ) == ZoneInfo("Australia/Brisbane")
+
+
 def test_resolve_timezone_precedence_and_failure():
     from crude_common.config import resolve_base_dn, resolve_timezone
 

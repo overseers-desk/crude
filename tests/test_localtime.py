@@ -95,3 +95,31 @@ def test_parse_iso_utc_reads_a_naive_value_in_the_assumed_zone():
     # An explicit offset wins over the assumed zone.
     got = parse_iso_utc("2026-05-02T10:00:00+02:00", assume=brisbane)
     assert got.isoformat() == "2026-05-02T08:00:00+00:00"
+
+
+@pytest.fixture
+def kolkata_tz():
+    old = os.environ.get("TZ")
+    os.environ["TZ"] = "Asia/Kolkata"
+    time.tzset()
+    try:
+        yield
+    finally:
+        if old is None:
+            os.environ.pop("TZ", None)
+        else:
+            os.environ["TZ"] = old
+        time.tzset()
+
+
+def test_a_passed_zone_decides_whatever_the_machine_zone(kolkata_tz):
+    from zoneinfo import ZoneInfo
+
+    brisbane = ZoneInfo("Australia/Brisbane")
+    assert to_utc_iso("2026-10-03", tz=brisbane) == "2026-10-02T14:00:00Z"
+    assert to_utc_iso("2026-10-03", end=True, tz=brisbane) == "2026-10-03T14:00:00Z"
+    assert format_local("2026-10-02T14:00:00Z", tz=brisbane) == "2026-10-03 00:00"
+    # With no zone passed, the machine's own (here Kolkata, UTC+5:30) applies.
+    assert to_utc_iso("2026-10-03") == "2026-10-02T18:30:00Z"
+    assert format_local("2026-10-02T14:00:00Z") == "2026-10-02 19:30"
+
