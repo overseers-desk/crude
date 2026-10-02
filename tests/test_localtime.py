@@ -84,3 +84,14 @@ def test_parse_iso_utc_returns_aware_utc():
     assert dt is not None and dt.utcoffset().total_seconds() == 0
     assert parse_iso_utc("not a date") is None
     assert parse_iso_utc(None) is None
+
+
+def test_parse_iso_utc_reads_a_naive_value_in_the_assumed_zone():
+    from zoneinfo import ZoneInfo
+
+    brisbane = ZoneInfo("Australia/Brisbane")
+    got = parse_iso_utc("2026-05-02T10:00:00", assume=brisbane)
+    assert got.isoformat() == "2026-05-02T00:00:00+00:00"
+    # An explicit offset wins over the assumed zone.
+    got = parse_iso_utc("2026-05-02T10:00:00+02:00", assume=brisbane)
+    assert got.isoformat() == "2026-05-02T08:00:00+00:00"

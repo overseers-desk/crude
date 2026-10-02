@@ -121,18 +121,12 @@ def test_booking_list_refuses_a_malformed_date_before_calling(sent):
     assert sent == []
 
 
-def test_updated_from_is_filtered_by_rezdy_and_keeps_its_edge(sent, served):
-    served.extend([
-        {"orderNumber": "R-EDGE", "dateUpdated": "2026-09-24T14:00:00Z"},
-        {"orderNumber": "R-EARLY", "dateUpdated": "2026-09-24T13:59:59Z"},
-        {"orderNumber": "R-NEVER"},
-    ])
+def test_updated_from_goes_to_rezdy_a_second_early(sent):
     result = runner.invoke(cli.app, ["booking", "list", "--updated-from", "2026-09-25", "--json"])
     assert result.exit_code == 0
-    # updatedSince means "updated after", so the ask starts a second early and
-    # the check here keeps the booking updated exactly at the day's first second.
+    # Rezdy's updatedSince leaves out a booking stamped exactly at its value, and
+    # the Brisbane day starts at 14:00:00Z: a second earlier keeps that booking.
     assert sent[0]["params"]["updatedSince"] == "2026-09-24T13:59:59Z"
-    assert [b["orderNumber"] for b in json.loads(result.output)] == ["R-EDGE"]
 
 
 def test_a_never_updated_booking_is_in_no_update_window(sent, served):

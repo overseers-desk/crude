@@ -6,7 +6,8 @@ local time too. This is the dominant wire-format conversion, so it lives here fo
 reuse rather than in any one binary. The two pre-existing local-time helpers keep
 their own bespoke code: crude_sonas works in EJSON epoch-ms ({"$date": ms}) and
 crude_rezdy in a config-supplied IANA zone, neither of which is this ISO/system
-case; leaving them untouched preserves their tested boundary conventions.
+case; leaving them untouched preserves their tested boundary conventions. Of this
+module crude_rezdy uses parse_iso_utc alone, passing its configured zone.
 
 The system local zone is read from the process environment at call time: a naive
 datetime's .astimezone() with no argument is interpreted in it, and converting to
@@ -24,13 +25,14 @@ from datetime import datetime, timedelta, timezone
 _OFFSET_NO_COLON = re.compile(r"([+-]\d{2})(\d{2})$")
 
 
-def parse_iso_utc(value):
+def parse_iso_utc(value, assume=timezone.utc):
     """Parse an ISO-8601 instant to an aware UTC datetime, or None if unparseable.
 
     A trailing 'Z' is normalised to '+00:00' and a colon is inserted into a bare
     +HHMM offset (datetime.fromisoformat rejects both before Python 3.11, and the
-    project targets 3.9+). A parsed value carrying no tzinfo is assumed UTC, because
-    the APIs document their timestamps as UTC.
+    project targets 3.9+). A parsed value carrying no tzinfo is read in `assume`:
+    UTC by default, because the APIs document their timestamps as UTC, or the zone
+    a caller passes for a time a user typed.
     """
     if not isinstance(value, str):
         return None
@@ -46,7 +48,7 @@ def parse_iso_utc(value):
     except ValueError:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=assume)
     return dt.astimezone(timezone.utc)
 
 

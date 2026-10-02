@@ -154,7 +154,7 @@ crude-rezdy booking get R123456
 
 For a single day's bookings, give that day as both bounds: `crude-rezdy booking list --from 2026-05-25 --to 2026-05-25`. Rezdy's search takes UTC instants and would read the bare date as midnight UTC, so crude sends the first and last second of that day in the account's `timezone` instead; the same holds for `--created-from/--created-to`. A bound that carries a time is account-local as well, unless it carries `Z` or an offset. Availability times are local (`YYYY-MM-DD HH:mm:ss`).
 
-`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter on the cancellation/update instant, which Rezdy records in UTC, reading a typed date as the account's operational day in the same way. The lower bound is applied by Rezdy, so every page is already in range; the upper bound is checked on the pages fetched, so add `--all` when using it alone. A booking that was never updated carries no update instant and falls in no update window.
+`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter on the cancellation/update instant, which Rezdy records in UTC, reading a typed date as the account's operational day in the same way. The lower bound is sent to Rezdy and holds across every page; the upper bound is checked only on the pages crude fetches, so add `--all` when using it alone. A booking that was never updated has no update instant and matches neither bound.
 
 ### JSON output
 

@@ -1,4 +1,4 @@
-"""Rezdy Supplier API client — requests-based, API-key auth via the apiKey header.
+"""Rezdy Supplier API client: requests-based, API-key auth via the apiKey header.
 
 The transport (`_request`) carries every verb; `_list`/`_one`/`_write` wrap it for
 the three response shapes. Rezdy wraps each body as
@@ -44,12 +44,11 @@ def _seg(value: str) -> str:
 
 class RezdyClient:
     def __init__(self, api_key: str, environment: str = "production"):
-        self.api_key = api_key
         self.environment = environment
         self.base_url = STAGING_BASE if environment == "staging" else PROD_BASE
         self.session = requests.Session()
-        # The key rides the documented apiKey header rather than the query string,
-        # so it stays out of request URLs and out of any error that quotes one.
+        # The key travels in the apiKey header, which keeps it out of request URLs
+        # and out of any error that quotes one.
         self.session.headers.update(
             {"Accept": "application/json", "Content-Type": "application/json",
              "apiKey": api_key}
@@ -208,8 +207,8 @@ class RezdyClient:
 
         Time bounds are ISO 8601 instants, both ends inclusive except updatedSince,
         which Rezdy applies as "updated after". product_code takes one code or a
-        list, sent as repeated productCode parameters. source_channel is the agent
-        code, the filter Rezdy added when it retired agent-code matching in search.
+        list, sent as repeated productCode parameters. source_channel is the
+        agent code.
         """
         params = {"limit": limit, "offset": offset}
         optional = {

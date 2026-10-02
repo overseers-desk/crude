@@ -1,9 +1,9 @@
 """Unit tests for multi-account resolution and rezdy's timezone day-bounds.
 
 These are pure functions with no network, so they run in the default (non-live)
-suite. They pin the two behaviours the features hinge on: the scalar-vs-subtable
-split that lets one site section hold several accounts, and the off-by-one fix
-where a typed operational day is read in the account's zone, not UTC.
+suite. They pin the behaviours the features hinge on: the scalar-vs-subtable
+split that lets one site section hold several accounts, and the reading of a
+typed operational day in the account's zone, not UTC.
 """
 
 import typer
@@ -82,10 +82,22 @@ def test_bound_keeps_an_instant_and_converts_an_offset():
     assert _bound_utc("2026-05-02 10:00:00", tz, end=False) == "2026-05-02T00:00:00Z"
 
 
-def test_bound_rejects_a_value_that_is_no_date(capsys):
+def test_bound_never_reads_an_offset_as_account_local():
+    tz = ZoneInfo("Australia/Brisbane")
+    # "-05" is an offset fromisoformat accepts from Python 3.11 and rejects before
+    # it. Honoured or refused, it is not 10:00 in Brisbane.
+    try:
+        got = _bound_utc("2026-05-02T10:00:00-05", tz, end=False)
+    except typer.Exit:
+        return
+    assert got == "2026-05-02T15:00:00Z"
+
+
+@pytest.mark.parametrize("typed", ["03/10/2026", " ", "20261003", "2026-13-40"])
+def test_bound_rejects_a_value_that_is_no_date(typed, capsys):
     with pytest.raises(typer.Exit):
-        _bound_utc("03/10/2026", ZoneInfo("Australia/Brisbane"), end=False, flag="--from")
-    assert "--from '03/10/2026'" in capsys.readouterr().err
+        _bound_utc(typed, ZoneInfo("Australia/Brisbane"), end=True, flag="--to")
+    assert "--to" in capsys.readouterr().err
 
 
 def test_make_client_requires_timezone():

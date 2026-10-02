@@ -21,7 +21,7 @@ environment = "production"                # optional; "staging" hits api.rezdy-s
 
 ## 2. Transport and auth
 
-Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent in the `apiKey` request header, which keeps it out of request URLs and so out of any error message that quotes one. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `RezdyClient API error`. Rate limit is 100 requests/minute. List endpoints page by `offset`/`limit` (limit max 100); `booking list --all` walks the pages.
+Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent in the `apiKey` request header, which keeps it out of request URLs and so out of any error message that quotes one. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `Rezdy API error`. Rate limit is 100 requests/minute. List endpoints page by `offset`/`limit` (limit max 100, except the availability search, which returns up to 1000 sessions a call); `booking list --all` walks the pages.
 
 ## 3. Command surface
 
@@ -40,7 +40,7 @@ Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging)
 | `voucher` | list *(`--search`; empty returns all)*, get *(by code, read-only)* |
 | `company` | get *(by alias)*, find *(by name)* |
 
-`booking list` follows the booking search as Rezdy has documented it since June 2026. `--search` is a slow prefix match on customer names and payment or voucher codes; matching an order number or an agent code through it is deprecated, so an order goes to `booking get` and an agent's bookings to `--source-channel <agent code>`. `--reseller-reference` (the agent's own booking number), `--role` and a repeated `--product` are the other server-side filters. `category list` takes `--search` and `--visible/--private`. `resource sessions` takes a local `--from/--to` window, in which Rezdy returns the sessions that both start and end inside it, and pages with `--limit/--offset` at up to 100 a page; `availability list` pages with `--offset`.
+`booking list` follows the booking search as Rezdy's changelog entry of 16 June 2026 defines it. `--search` is a slow prefix match on customer names and payment or voucher codes; matching an order number or an agent code through it is deprecated, so an order goes to `booking get` and an agent's bookings to `--source-channel <agent code>`. `--reseller-reference` (the agent's own booking number), `--role` and a repeated `--product` are the other server-side filters. `category list` takes `--search` and `--visible/--private`. `resource sessions` takes a local `--from/--to` window, in which Rezdy returns the sessions that both start and end inside it, and pages with `--limit/--offset` at up to 100 a page; `availability list` pages with `--offset`.
 
 `category` and `rate` writes assign or unassign a product to an existing category/rate; the categories and rates themselves are read-only in the API. `resource` writes assign or unassign a session; resources themselves are read-only — the API has no endpoint to create one, so a new resource (vehicle, room, guide, animal, …) is added in the dashboard and then assigned here.
 
@@ -48,9 +48,9 @@ A few paths are not the obvious guess and follow the spec: a session is mutated 
 
 ## 4. Time bounds
 
-Rezdy's booking search takes ISO 8601 instants, both ends inclusive, and reads a value without a zone as UTC: a bare date is 00:00:00Z, which in a zone east of UTC is mid-morning, so a day sent raw as both bounds matches nothing. `booking list` therefore converts what is typed. A bare date on `--from/--to`, `--created-from/--created-to` or `--updated-from/--updated-to` becomes the first or the last second of that day in the account's `timezone`; a time typed without an offset is account-local too, as on `availability list`, and `Z` or an offset is honoured.
+Rezdy's booking search takes ISO 8601 instants, both ends inclusive, and reads a value without a zone as UTC: a bare date is 00:00:00Z, so a day sent raw as both bounds is a single instant (10:00 in Brisbane) and a range loses the start of its first local day and most of its last. `booking list` therefore converts what is typed. A bare date on `--from/--to`, `--created-from/--created-to` or `--updated-from/--updated-to` becomes the first or the last second of that day in the account's `timezone`; a time typed without an offset is account-local too, as on `availability list`, and `Z` or an offset is honoured.
 
-`--updated-from`, and `booking cancellations --from`, go to Rezdy as `updatedSince`, which it documents as updated after that time; crude asks from one second earlier and checks the edge itself, so the bound stays inclusive and every page returned is already in range. The upper update bound has no server-side filter and is checked on the pages fetched, so `--all` matters when it is used alone. A booking that was never updated carries no `dateUpdated` and is in no update window. The Updated and Cancelled On columns show the account-local day.
+`--updated-from`, and `booking cancellations --from`, go to Rezdy as `updatedSince`, so every page returned is already in range. Rezdy leaves out a booking stamped exactly at that value, so crude asks from one second earlier and the typed bound stays inclusive. Rezdy has no upper update bound: `--updated-to` and the cancellations `--to` are checked on the pages fetched, so `--all` matters when one is used alone. A booking that was never updated carries no `dateUpdated`; Rezdy leaves it out of `updatedSince` results and crude leaves it out of an upper-bound window. The Updated and Cancelled On columns show the account-local day.
 
 ## 5. Write conventions
 

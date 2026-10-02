@@ -1,7 +1,6 @@
 """Typer CLI for the Rezdy Supplier API: crude-rezdy."""
 
 import json
-import re
 import sys
 from datetime import date, datetime, time, timedelta, timezone as _utc
 from typing import Callable, List, Optional
@@ -106,44 +105,42 @@ def _account_timezone(config: dict) -> ZoneInfo:
 
 
 _UTC_FMT = "%Y-%m-%dT%H:%M:%SZ"
-_TRAILING_OFFSET = re.compile(r"[+-]\d{2}:?\d{2}$")
 
 
 def _bound_utc(value: Optional[str], tz: ZoneInfo, *, end: bool,
                flag: str = "--from") -> Optional[str]:
-    """Read a typed bound as the account's operational time; return a UTC ...Z instant.
+    """Return a typed bound as a UTC ...Z instant, read in the account's zone
+    unless it carries Z or an offset.
 
-    A bare YYYY-MM-DD is the start of that day in the account's zone, or for an
-    upper bound its last second. A time with no offset, T or space separated, is
-    account-local too; one carrying Z or an offset is that instant. Rezdy reads a
-    bare date as midnight UTC, so sending the typed day raw would drop the
-    morning of a local day east of UTC. The ...Z form also compares correctly,
-    as a string, against Rezdy's own ...Z stamps.
+    Rezdy reads a bare date as midnight UTC, which in Brisbane is 10:00, so the
+    typed day sent raw is not the account's day. The ...Z form also compares
+    correctly, as a string, against Rezdy's own ...Z stamps.
     """
     if not value:
         return None
     text = value.strip()
-    try:
-        if len(text) == 10:
-            local = datetime.combine(date.fromisoformat(text),
-                                     time(23, 59, 59) if end else time(0, 0, 0), tzinfo=tz)
-        else:
-            text = text.replace(" ", "T", 1)
-            if text[-1] in "Zz" or _TRAILING_OFFSET.search(text):
-                instant = parse_iso_utc(text)
-                if instant is None:
-                    raise ValueError(text)
-                return instant.strftime(_UTC_FMT)
-            local = datetime.fromisoformat(text).replace(tzinfo=tz)
-    except ValueError:
+    instant = None
+    if len(text) == 10:
+        try:
+            instant = datetime.combine(date.fromisoformat(text),
+                                       time(23, 59, 59) if end else time(0, 0), tzinfo=tz)
+        except ValueError:
+            pass
+    elif "T" in text or " " in text:
+        instant = parse_iso_utc(text.replace(" ", "T", 1), assume=tz)
+    if instant is None:
         typer.echo(f"Error: {flag} '{value}' is neither a date (YYYY-MM-DD) nor an "
                    f"ISO 8601 time.", err=True)
         raise typer.Exit(1)
-    return local.astimezone(_utc.utc).strftime(_UTC_FMT)
+    return instant.astimezone(_utc.utc).strftime(_UTC_FMT)
 
 
 def _second_before(instant: Optional[str]) -> Optional[str]:
-    """One second before a ...Z instant: Rezdy's updatedSince means "updated after"."""
+    """One second before a ...Z instant.
+
+    Rezdy's updatedSince leaves out a booking stamped exactly at its value, so
+    asking from a second earlier keeps the typed bound inclusive.
+    """
     if not instant:
         return None
     return (parse_iso_utc(instant) - timedelta(seconds=1)).strftime(_UTC_FMT)
@@ -507,9 +504,7 @@ def list_bookings(
         max_tour_start=tour_to,
         min_date_created=made_from,
         max_date_created=asof.clamp_upper_iso(made_to),
-        # Filtering --updated-from server-side means every page is already in
-        # range, not only the first; the client-side check below restores the
-        # inclusive edge that Rezdy's "updated after" leaves out.
+        # Rezdy applies the lower update bound itself, so every page is in range.
         updated_since=_second_before(changed_from),
         reseller_reference=reseller_reference,
         source_channel=source_channel,
@@ -525,9 +520,8 @@ def list_bookings(
         typer.echo(f"Error fetching bookings: {e}", err=True)
         raise typer.Exit(1)
 
-    # A booking never updated carries no dateUpdated and is outside any update window.
-    if changed_from:
-        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] >= changed_from]
+    # Rezdy has no upper update bound, so this one is checked here. A booking
+    # never updated carries no dateUpdated and is outside any update window.
     if changed_to:
         hi = asof.clamp_upper_iso(changed_to)
         items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] <= hi]
@@ -577,7 +571,7 @@ def list_cancellations(
 
     --from and --to filter against the cancellation date (dateUpdated), not the
     session date. --from is applied by Rezdy, so every page is in range; --to is
-    applied here, so use --all with --to alone to ensure no results are missed.
+    applied here, to the pages fetched, so add --all when using --to alone.
     """
     config = read_config(find_config())
     client = _make_client(config)
@@ -601,8 +595,6 @@ def list_cancellations(
     # A cancellation is dated by when it occurred (dateUpdated); one that
     # occurred after the cutoff had not happened in the bounded world, so the
     # upper filter is clamped to the bound (and applied even with no --to).
-    if lo:
-        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] >= lo]
     hi = asof.clamp_upper_iso(typed_hi)
     if hi:
         items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] <= hi]
