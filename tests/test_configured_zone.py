@@ -7,15 +7,20 @@ follow the config; with no zone in the config, the machine's applies.
 
 import os
 import time
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 from typer.testing import CliRunner
 
+from crude_common import config
+
 runner = CliRunner()
 
 # Brisbane midnight on 3 October 2026, as the instant the APIs carry.
 BNE_MIDNIGHT_UTC = "2026-10-02T14:00:00Z"
+BNE_MIDNIGHT_MS = int(datetime(2026, 10, 2, 14, tzinfo=timezone.utc).timestamp() * 1000)
+BRISBANE = {"timezone": "Australia/Brisbane"}
 
 
 @pytest.fixture
@@ -33,10 +38,19 @@ def kolkata_machine():
         time.tzset()
 
 
-def _config(monkeypatch, module, cfg):
-    """Make `module` read `cfg` as the config on disk."""
-    monkeypatch.setattr(module, "find_config", lambda: "config.toml")
-    monkeypatch.setattr(module, "read_config", lambda _p: cfg)
+def _on_disk(monkeypatch, cfg):
+    """Make `cfg` the config on disk for the timezone lookup."""
+    monkeypatch.setattr(config, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(config, "read_config", lambda _p: cfg)
+    config._timezone_named_for.cache_clear()
+
+
+def test_site_timezone_prefers_the_site_key_and_is_none_when_unnamed(monkeypatch):
+    _on_disk(monkeypatch, {"timezone": "UTC", "wise": {"timezone": "Australia/Brisbane"}})
+    assert str(config.site_timezone("wise")) == "Australia/Brisbane"
+    assert str(config.site_timezone("airwallex")) == "UTC"
+    _on_disk(monkeypatch, {})
+    assert config.site_timezone("wise") is None
 
 
 # ----------------------------------------------------------------------
@@ -44,11 +58,10 @@ def _config(monkeypatch, module, cfg):
 # ----------------------------------------------------------------------
 
 
-def _airwallex_transactions(monkeypatch, cfg):
-    """Run `transaction list` for 3 October against `cfg`; return the bounds sent."""
-    from crude_airwallex import cli_core, render
+def _airwallex_bounds(monkeypatch):
+    """Run `transaction list` for 3 October; return the bounds the client is given."""
+    from crude_airwallex import cli_core
 
-    _config(monkeypatch, render, cfg)
     seen = {}
     core = SimpleNamespace(
         list_financial_transactions=lambda **kw: seen.update(kw) or [])
@@ -60,24 +73,20 @@ def _airwallex_transactions(monkeypatch, cfg):
 
 
 def test_airwallex_reads_a_typed_day_in_the_configured_zone(kolkata_machine, monkeypatch):
-    bounds = _airwallex_transactions(monkeypatch, {"timezone": "Australia/Brisbane"})
-    assert bounds == (BNE_MIDNIGHT_UTC, "2026-10-03T14:00:00Z")
-
-
-def test_airwallex_site_zone_wins_over_the_top_level_one(kolkata_machine, monkeypatch):
-    cfg = {"timezone": "UTC", "airwallex": {"timezone": "Australia/Brisbane"}}
-    assert _airwallex_transactions(monkeypatch, cfg)[0] == BNE_MIDNIGHT_UTC
+    _on_disk(monkeypatch, BRISBANE)
+    assert _airwallex_bounds(monkeypatch) == (BNE_MIDNIGHT_UTC, "2026-10-03T14:00:00Z")
 
 
 def test_airwallex_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch):
+    _on_disk(monkeypatch, {})
     # Kolkata midnight is 18:30Z the day before.
-    assert _airwallex_transactions(monkeypatch, {})[0] == "2026-10-02T18:30:00Z"
+    assert _airwallex_bounds(monkeypatch)[0] == "2026-10-02T18:30:00Z"
 
 
 def test_airwallex_shows_times_in_the_configured_zone(kolkata_machine, monkeypatch):
     from crude_airwallex import render
 
-    _config(monkeypatch, render, {"timezone": "Australia/Brisbane"})
+    _on_disk(monkeypatch, BRISBANE)
     assert render.ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-03 00:00"
     shown = render.localize({"created_at": BNE_MIDNIGHT_UTC}, ("created_at",))
     assert shown["created_at"] == "2026-10-03 00:00"
@@ -88,26 +97,20 @@ def test_airwallex_shows_times_in_the_configured_zone(kolkata_machine, monkeypat
 # ----------------------------------------------------------------------
 
 
-@pytest.fixture
-def wise(monkeypatch):
-    """crude_wise.cli_resources with its per-account zone cache emptied around the test."""
-    from crude_wise import cli_resources
-
-    cli_resources._zone_of.cache_clear()
-    yield cli_resources
-    cli_resources._zone_of.cache_clear()
-
-
 def test_wise_reads_a_typed_day_and_shows_times_in_the_configured_zone(
-        kolkata_machine, monkeypatch, wise):
-    _config(monkeypatch, wise, {"timezone": "Australia/Brisbane"})
+        kolkata_machine, monkeypatch):
+    from crude_wise import cli_resources as wise
+
+    _on_disk(monkeypatch, BRISBANE)
     # A past day, since the window's end is never later than now.
     assert wise._window("2026-06-01", "2026-06-01") == (
         "2026-05-31T14:00:00Z", "2026-06-01T14:00:00Z")
     assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-03 00:00"
 
 
-def test_wise_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch, wise):
-    _config(monkeypatch, wise, {})
+def test_wise_falls_back_to_the_machine_zone(kolkata_machine, monkeypatch):
+    from crude_wise import cli_resources as wise
+
+    _on_disk(monkeypatch, {})
     assert wise._window("2026-06-01", "2026-06-01")[0] == "2026-05-31T18:30:00Z"
     assert wise._ts("createdAt")({"createdAt": BNE_MIDNIGHT_UTC}) == "2026-10-02 19:30"

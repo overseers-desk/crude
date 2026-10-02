@@ -19,19 +19,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime, timezone
-from functools import lru_cache
 from typing import Optional
 
 import typer
 
 from crude_common import asof
-from crude_common.config import (
-    account,
-    configured_timezone,
-    find_config,
-    read_config,
-    resolve_account,
-)
+from crude_common.config import site_timezone
 from crude_common.localtime import format_local, to_utc_iso
 from crude_common.output import emit_list, emit_record
 from crude_wise.client import WiseError
@@ -64,16 +57,9 @@ def _col(path: str):
     return lambda rec: _dig(rec, path)
 
 
-@lru_cache(maxsize=None)
-def _zone_of(name):
-    """The config's timezone for account `name`; cached, since a list asks per row."""
-    cfg = read_config(find_config())
-    return configured_timezone(cfg, resolve_account(cfg, "wise", name))
-
-
 def _zone():
     """The timezone the config names for the selected account, or None for the machine's."""
-    return _zone_of(account())
+    return site_timezone("wise")
 
 
 def _ts(path: str):

@@ -839,6 +839,9 @@ def test_wise_transfers_clamped_and_filtered(bound, monkeypatch, capsys):
 
     monkeypatch.setattr(sess.session, "request", fake)
     monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    # The typed --to is read in the config's timezone; none is named here.
+    monkeypatch.setattr("crude_common.config.find_config", lambda: "config.toml")
+    monkeypatch.setattr("crude_common.config.read_config", lambda p: {})
     cli_resources.transfer_list(status=None, from_=None, to="2026-07-13", limit=25,
                                 output_json=True)
     assert seen["params"]["createdDateEnd"] == BOUND_Z          # user's later date clamped

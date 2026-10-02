@@ -39,3 +39,17 @@ def _claude_config_dir_sandbox(tmp_path_factory, monkeypatch):
     configuration and rewrite the command file there.
     """
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path_factory.mktemp("claude")))
+
+
+@pytest.fixture(autouse=True)
+def _timezone_lookup_starts_empty():
+    """Empty the per-process cache of each site's configured timezone around a test.
+
+    The lookup reads the config on disk once per site and account, so a zone one
+    test resolved from its stubbed config would otherwise answer for the next.
+    """
+    from crude_common import config
+
+    config._timezone_named_for.cache_clear()
+    yield
+    config._timezone_named_for.cache_clear()

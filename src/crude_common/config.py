@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import sys
 from datetime import datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -149,6 +150,22 @@ def configured_timezone(cfg: dict, site_cfg: dict):
 def resolve_timezone(cfg: dict, site_cfg: dict):
     """Resolve the display timezone: site section, then top level, then machine."""
     return configured_timezone(cfg, site_cfg) or datetime.now().astimezone().tzinfo
+
+
+@lru_cache(maxsize=None)
+def _timezone_named_for(site: str, name: Optional[str]):
+    cfg = read_config(find_config())
+    return configured_timezone(cfg, resolve_account(cfg, site, name))
+
+
+def site_timezone(site: str):
+    """The timezone the config on disk names for `site`'s selected account, or None.
+
+    The zone a site CLI reads typed dates in and shows times in; None means the
+    config names none and the machine's zone applies. Looked up once per site and
+    account for the life of the process, since a list column asks once per row.
+    """
+    return _timezone_named_for(site, account())
 
 
 def resolve_base_dn(cfg: dict) -> str:

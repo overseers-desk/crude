@@ -9,20 +9,13 @@ modules can import them without an import cycle.
 
 from __future__ import annotations
 
-from crude_common.config import (
-    account,
-    configured_timezone,
-    find_config,
-    read_config,
-    resolve_account,
-)
+from crude_common.config import site_timezone
 from crude_common.localtime import format_local
 
 
 def zone():
     """The timezone the config names for the selected account, or None for the machine's."""
-    cfg = read_config(find_config())
-    return configured_timezone(cfg, resolve_account(cfg, "airwallex", account()))
+    return site_timezone("airwallex")
 
 
 def ts(field: str):
