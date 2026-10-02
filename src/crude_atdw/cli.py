@@ -16,7 +16,9 @@ from crude_common.config import (
     find_config,
     read_config,
     resolve_account,
+    site_timezone,
 )
+from crude_common.localtime import format_local
 from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
 
@@ -229,6 +231,8 @@ def get(
         value = item.get(key, "")
         if value is None:
             value = ""
+        if key in ("publishedOn", "updatedOn"):
+            value = format_local(value or None, tz=site_timezone("atdw"))
         if isinstance(value, (dict, list)):
             value = json.dumps(value, indent=2)
         value_str = str(value)

@@ -363,3 +363,25 @@ def test_deputy_shows_shift_times_in_the_configured_zone(kolkata_machine, monkey
     assert "2026-10-03 08:00" in one.output
     raw = runner.invoke(cli.app, ["roster", "get", "1", "--json"])
     assert str(start) in raw.output
+
+
+# ----------------------------------------------------------------------
+# ATDW, Xero and Skål
+# ----------------------------------------------------------------------
+
+
+def test_atdw_listing_view_shows_its_stamps_in_the_configured_zone(kolkata_machine, monkeypatch):
+    from crude_atdw import cli
+
+    listing = {"id": "L1", "name": "Cafe", "publishedOn": "2026-10-02T14:00:00.605Z",
+               "updatedOn": None}
+    client = SimpleNamespace(get_own_listing=lambda _id: listing)
+    monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(cli, "read_config", lambda _p: {})
+    monkeypatch.setattr(cli, "_make_client", lambda _c: client)
+    _on_disk(monkeypatch, BRISBANE)
+    table = runner.invoke(cli.app, ["listing", "get", "L1"])
+    assert table.exit_code == 0, table.output
+    assert "2026-10-03 00:00" in table.output
+    raw = runner.invoke(cli.app, ["listing", "get", "L1", "--json"])
+    assert "2026-10-02T14:00:00.605Z" in raw.output
