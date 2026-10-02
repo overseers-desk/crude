@@ -59,9 +59,6 @@ class DeputyClient(HttpSession):
     # Generic resource operations
     # ------------------------------------------------------------------
 
-    def list_resource(self, obj: str, start: int = 0, max_: int = PAGE_MAX) -> list:
-        return self._get(f"/resource/{obj}", params={"start": start, "max": max_})
-
     def get_resource(self, obj: str, id: str) -> dict:
         return self._get(f"/resource/{obj}/{id}")
 
@@ -135,16 +132,6 @@ class DeputyClient(HttpSession):
             rows = self.query_resource(
                 obj, search=search, sort=sort, join=join, start=start, max_=page
             )
-            results.extend(rows)
-            if len(rows) < page:
-                break
-            start += len(rows)
-        return results
-
-    def paginate_list(self, obj: str, page: int = PAGE_MAX) -> list:
-        results, start = [], 0
-        while True:
-            rows = self.list_resource(obj, start=start, max_=page)
             results.extend(rows)
             if len(rows) < page:
                 break

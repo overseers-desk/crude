@@ -147,8 +147,9 @@ def test_deputy_lists_one_employee(crude_config):
     from crude_deputy.cli import _make_client
 
     client = _make_client(crude_config)
-    items = client.list_resource("Employee", max_=1)
+    items = client.query_resource("Employee", max_=1)
     assert isinstance(items, list)
+    assert len(items) <= 1          # QUERY honours max; the plain GET list does not
     if items:
         assert items[0].get("Id")
 

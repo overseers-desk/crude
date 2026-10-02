@@ -437,15 +437,15 @@ def resource_list(
     """List records of any resource object."""
     client = _make_client(read_config(find_config()))
     try:
+        # Through QUERY with no clauses: Deputy's plain GET list ignores start
+        # and max, so it can neither limit nor page.
         if fetch_all:
-            items = client.paginate_list(obj)
+            items = client.paginate_query(obj)
         else:
-            items = client.list_resource(obj, start=start, max_=limit)
+            items = client.query_resource(obj, start=start, max_=limit)
     except Exception as e:
         typer.echo(f"Error listing {obj}: {e}", err=True)
         raise typer.Exit(1)
-    # The plain GET list takes no query clauses, so the bound is enforced
-    # entirely client-side on the returned Created/Modified audit fields.
     items = asof.bound_records(items, "Created", "Modified", what=obj)
     _emit(items, output_json)
 
