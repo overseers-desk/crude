@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.0
+Version:        1.6.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -96,6 +96,27 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Fri Oct 02 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.1-1
+- A `timezone` key in the config names the zone crude works in: typed dates
+  are read in it and times are shown in it. At the top level it covers every
+  site, inside a site's section it wins for that site, and with no key the
+  computer's zone applies. crude-airwallex, crude-wise, crude-sonas,
+  crude-facebook, crude-mautic and crude-clover's record lists follow it.
+- crude-rezdy: a date typed on `booking list` or `booking cancellations` is
+  the account's day; a bare date used to reach Rezdy as midnight UTC. A time
+  typed without an offset is account-local too.
+- crude-rezdy: the filters of Rezdy's current Supplier API on `booking list`,
+  `category list`, `resource sessions` and `availability list`.
+- crude-rezdy: the API key travels in the apiKey header, out of URLs and
+  error text.
+- crude-sonas: with the `timezone` key set, dates are the venue's days, and a
+  timeline time typed without an offset is venue time.
+- crude-deputy: `resource list` honours --limit and --start, and --all stops
+  at the last page.
+- crude-facebook, crude-mautic: tables and record views show times in the
+  working timezone; `post create --schedule` reads an ISO time typed without
+  an offset in the same zone.
+
 * Wed Sep 30 2026 Weiwu Zhang <a@colourful.land> - 1.6.0-1
 - crude-wise: a Wise Business backend for balances, the balance statement,
   transfers, recipients and the activity feed. The statement's SCA challenge

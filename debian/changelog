@@ -1,3 +1,37 @@
+crude (1.6.1) unstable; urgency=medium
+
+  * A `timezone` key in the config (an IANA name) names the zone crude works
+    in: typed dates are read in it and times are shown in it, whatever the
+    computer's clock is set to. At the top level it covers every site, inside
+    a site's section it wins for that site, and with no key the computer's
+    zone applies. crude-airwallex, crude-wise, crude-sonas, crude-facebook,
+    crude-mautic and crude-clover's record lists follow it.
+  * crude-rezdy: a date typed on `booking list` or `booking cancellations`
+    is the account's day. A bare date used to reach Rezdy as midnight UTC, so
+    for a Brisbane account a range lost the first ten hours of its first day
+    and all but the first ten hours of its last. A time typed without an
+    offset is account-local too.
+  * crude-rezdy: the filters of Rezdy's current Supplier API. `booking list`
+    takes --source-channel, --reseller-reference, --role and a repeatable
+    --product; `category list` takes --search and --visible/--private;
+    `resource sessions` takes --from/--to/--limit/--offset; `availability
+    list` takes --offset.
+  * crude-rezdy: the API key travels in the apiKey header, out of URLs and
+    error text.
+  * crude-sonas: with the `timezone` key set, dates are the venue's days. On
+    a computer west of the venue an event showed a day early, and a day's
+    range took in the next day's events. A timeline time typed without an
+    offset is venue time under the same key.
+  * crude-deputy: `resource list` honours --limit and --start, and --all
+    stops at the last page. It ignored both, and --all did not finish on an
+    object of 500 rows or more.
+  * crude-facebook, crude-mautic: tables and record views show times in the
+    working timezone in place of the API's UTC strings; --json stays raw.
+    `post create --schedule` reads an ISO time typed without an offset in
+    the same zone.
+
+ -- Rivermill Webmaster <pt7535886@gmail.com>  Fri, 02 Oct 2026 18:20:45 +1000
+
 crude (1.6.0) unstable; urgency=medium
 
   * crude-wise: a Wise Business backend for balances, the balance statement,
