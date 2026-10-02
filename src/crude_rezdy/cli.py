@@ -3,7 +3,7 @@
 import json
 import sys
 from datetime import datetime, time, timezone as _utc
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import typer
@@ -117,6 +117,16 @@ def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
         local = datetime(y, m, d, bound.hour, bound.minute, bound.second, tzinfo=tz)
         return local.astimezone(_utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     return date_str
+
+
+def _local_bound(value: Optional[str], *, end: bool) -> Optional[str]:
+    """A typed local bound in Rezdy's 'YYYY-MM-DD HH:mm:ss' form; a bare date is the whole day."""
+    if not value:
+        return None
+    text = value.strip()
+    if len(text) == 10:
+        return f"{text} {'23:59:59' if end else '00:00:00'}"
+    return text.replace("T", " ", 1)
 
 
 # ----------------------------------------------------------------------
@@ -300,6 +310,7 @@ def list_availability(
     to: str = typer.Option(..., "--to", help="End of range, local time 'YYYY-MM-DD HH:mm:ss'."),
     min_availability: Optional[int] = typer.Option(None, "--min-availability", help="Only sessions with at least this many seats."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List availability sessions for a product within a date range."""
@@ -320,7 +331,8 @@ def list_availability(
     client = _client()
     try:
         items = client.list_availability(
-            product, from_, to, min_availability=min_availability, limit=limit
+            product, from_, to, min_availability=min_availability, limit=limit,
+            offset=offset,
         )
     except Exception as e:
         typer.echo(f"Error fetching availability: {e}", err=True)
@@ -409,14 +421,17 @@ def batch_availability(
 @booking_app.command("list")
 def list_bookings(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by order status (e.g. CONFIRMED, CANCELLED)."),
-    search: Optional[str] = typer.Option(None, "--search", help="Search order number, customer name, agent or voucher code."),
-    product: Optional[str] = typer.Option(None, "--product", help="Filter by product code."),
+    search: Optional[str] = typer.Option(None, "--search", help="Prefix search on a customer name or a payment/voucher code. Slow: prefer the other filters. An order number is `booking get`; an agent code is --source-channel."),
+    product: Optional[List[str]] = typer.Option(None, "--product", help="Filter by product code; repeat for several."),
     from_: Optional[str] = typer.Option(None, "--from", help="Tour starts on or after this time (ISO 8601)."),
     to: Optional[str] = typer.Option(None, "--to", help="Tour starts before or on this time (ISO 8601)."),
     created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this date (ISO 8601)."),
     created_to: Optional[str] = typer.Option(None, "--created-to", help="Created on or before this date (ISO 8601)."),
     updated_from: Optional[str] = typer.Option(None, "--updated-from", help="Last updated on or after this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
     updated_to: Optional[str] = typer.Option(None, "--updated-to", help="Last updated on or before this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
+    source_channel: Optional[str] = typer.Option(None, "--source-channel", help="Bookings made by this agent, by the agent code on Rezdy's agents screen."),
+    reseller_reference: Optional[str] = typer.Option(None, "--reseller-reference", help="Bookings carrying this reseller reference (the agent's own booking number)."),
+    role: Optional[str] = typer.Option(None, "--role", help="Bookings where this account is RESELLER, SUPPLIER, or ALL (default: the role of the account's plan)."),
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages automatically (ignores --limit and --offset)."),
@@ -432,6 +447,10 @@ def list_bookings(
     config = read_config(find_config())
     client = _make_client(config)
 
+    if role and role.upper() not in ("RESELLER", "SUPPLIER", "ALL"):
+        typer.echo(f"Error: --role must be RESELLER, SUPPLIER or ALL, not '{role}'.", err=True)
+        raise typer.Exit(1)
+
     # WORLD_AS_OF acts on knowledge time: creation is bounded server-side via
     # maxDateCreated (clamped or injected), the update side is post-filtered.
     # Tour time (--from/--to) is the domain timeline and stays user-controlled:
@@ -440,11 +459,14 @@ def list_bookings(
     kwargs = dict(
         order_status=status,
         search=search,
-        product_code=product,
+        product_code=product or None,
         min_tour_start=from_,
         max_tour_start=to,
         min_date_created=created_from,
         max_date_created=asof.clamp_upper_iso(created_to),
+        reseller_reference=reseller_reference,
+        source_channel=source_channel,
+        role=role.upper() if role else None,
     )
 
     try:
@@ -926,6 +948,8 @@ def delete_pickup_list(
 
 @category_app.command("list")
 def list_categories(
+    search: Optional[str] = typer.Option(None, "--search", help="Match against the category name."),
+    visible: Optional[bool] = typer.Option(None, "--visible/--private", help="Only public (--visible) or only private (--private) categories; both when omitted."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
@@ -933,7 +957,7 @@ def list_categories(
     """List categories."""
     client = _client()
     try:
-        items = client.list_categories(limit=limit, offset=offset)
+        items = client.list_categories(search=search, visible=visible, limit=limit, offset=offset)
     except Exception as e:
         typer.echo(f"Error fetching categories: {e}", err=True)
         raise typer.Exit(1)
@@ -1111,12 +1135,25 @@ def list_resources(
 @resource_app.command("sessions")
 def resource_sessions(
     resource_id: str = typer.Argument(..., help="Resource id."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Window start, a local day or time (YYYY-MM-DD or 'YYYY-MM-DD HH:mm:ss')."),
+    to: Optional[str] = typer.Option(None, "--to", help="Window end, a local day or time (a bare date runs to the end of that day)."),
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results (Rezdy returns at most 100 a page)."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
-    """List the sessions assigned to a resource."""
+    """List the sessions assigned to a resource.
+
+    With --from/--to, Rezdy returns the sessions that both start and end inside
+    the window, so a session running past --to is left out.
+    """
     client = _client()
     try:
-        items = client.list_resource_sessions(resource_id)
+        items = client.list_resource_sessions(
+            resource_id,
+            start_time_local=_local_bound(from_, end=False),
+            end_time_local=_local_bound(to, end=True),
+            limit=limit, offset=offset,
+        )
     except Exception as e:
         typer.echo(f"Error fetching resource sessions: {e}", err=True)
         raise typer.Exit(1)

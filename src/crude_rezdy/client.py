@@ -148,6 +148,7 @@ class RezdyClient:
         end_time_local: str,
         min_availability: int = None,
         limit: int = 100,
+        offset: int = 0,
     ) -> list:
         """Return sessions for a product within a local-time date range.
 
@@ -158,6 +159,7 @@ class RezdyClient:
             "startTimeLocal": start_time_local,
             "endTimeLocal": end_time_local,
             "limit": limit,
+            "offset": offset,
         }
         if min_availability is not None:
             params["minAvailability"] = min_availability
@@ -190,30 +192,40 @@ class RezdyClient:
         self,
         order_status: str = None,
         search: str = None,
-        product_code: str = None,
+        product_code=None,
         min_tour_start: str = None,
         max_tour_start: str = None,
         min_date_created: str = None,
         max_date_created: str = None,
+        updated_since: str = None,
+        reseller_reference: str = None,
+        source_channel: str = None,
+        role: str = None,
         limit: int = 20,
         offset: int = 0,
     ) -> list:
-        """Search bookings. Tour-time and created-date bounds are ISO 8601."""
+        """Search bookings.
+
+        Time bounds are ISO 8601 instants, both ends inclusive except updatedSince,
+        which Rezdy applies as "updated after". product_code takes one code or a
+        list, sent as repeated productCode parameters. source_channel is the agent
+        code, the filter Rezdy added when it retired agent-code matching in search.
+        """
         params = {"limit": limit, "offset": offset}
-        if order_status:
-            params["orderStatus"] = order_status
-        if search:
-            params["search"] = search
-        if product_code:
-            params["productCode"] = product_code
-        if min_tour_start:
-            params["minTourStartTime"] = min_tour_start
-        if max_tour_start:
-            params["maxTourStartTime"] = max_tour_start
-        if min_date_created:
-            params["minDateCreated"] = min_date_created
-        if max_date_created:
-            params["maxDateCreated"] = max_date_created
+        optional = {
+            "orderStatus": order_status,
+            "search": search,
+            "productCode": product_code,
+            "minTourStartTime": min_tour_start,
+            "maxTourStartTime": max_tour_start,
+            "minDateCreated": min_date_created,
+            "maxDateCreated": max_date_created,
+            "updatedSince": updated_since,
+            "resellerReference": reseller_reference,
+            "sourceChannel": source_channel,
+            "role": role,
+        }
+        params.update({k: v for k, v in optional.items() if v})
         return self._list("/bookings", params)
 
     def get_booking(self, order_number: str) -> dict:
@@ -304,8 +316,15 @@ class RezdyClient:
     # Categories
     # ------------------------------------------------------------------
 
-    def list_categories(self, limit: int = 100, offset: int = 0) -> list:
-        return self._list("/categories", {"limit": limit, "offset": offset})
+    def list_categories(self, search: str = None, visible: bool = None,
+                        limit: int = 100, offset: int = 0) -> list:
+        """Categories, optionally by name and by visibility (None returns both)."""
+        params = {"limit": limit, "offset": offset}
+        if search:
+            params["search"] = search
+        if visible is not None:
+            params["visible"] = "true" if visible else "false"
+        return self._list("/categories", params)
 
     def get_category(self, category_id: str) -> dict:
         return self._one(f"/categories/{category_id}")
@@ -342,8 +361,16 @@ class RezdyClient:
     def list_resources(self, limit: int = 100, offset: int = 0) -> list:
         return self._list("/resources", {"limit": limit, "offset": offset})
 
-    def list_resource_sessions(self, resource_id: str) -> list:
-        return self._list(f"/resources/{resource_id}/sessions")
+    def list_resource_sessions(self, resource_id: str, start_time_local: str = None,
+                               end_time_local: str = None, limit: int = 100,
+                               offset: int = 0) -> list:
+        """Sessions assigned to a resource, optionally within a local-time window."""
+        params = {"limit": limit, "offset": offset}
+        if start_time_local:
+            params["startTimeLocal"] = start_time_local
+        if end_time_local:
+            params["endTimeLocal"] = end_time_local
+        return self._list(f"/resources/{resource_id}/sessions", params)
 
     def list_session_resources(self, session_id: str = None, product_code: str = None,
                                start_time: str = None, start_time_local: str = None,

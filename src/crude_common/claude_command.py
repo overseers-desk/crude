@@ -88,12 +88,12 @@ Rezdy Supplier API — full CRUD over products, availability, bookings, customer
     crude-rezdy product update <code> [--name <s>] [--terms <s>] [--data '<json>'] [--yes]
     crude-rezdy product delete <code> [--yes]
     crude-rezdy product image-add <code> (--data | -f | stdin) [--yes] ; product image-remove <code> <imageId> [--yes] ; product pickups <code>
-    crude-rezdy availability list --product <code> --from "<YYYY-MM-DD HH:mm:ss>" --to "<...>" [--min-availability] [--limit]
+    crude-rezdy availability list --product <code> --from "<YYYY-MM-DD HH:mm:ss>" --to "<...>" [--min-availability] [--limit] [--offset]
     crude-rezdy availability create (--data | -f | stdin) [--yes]
     crude-rezdy availability update --product <code> --start-local "<YYYY-MM-DD HH:mm:ss>" (--data | -f | stdin) [--yes]
     crude-rezdy availability delete --product <code> --start-local "<...>" [--yes]
     crude-rezdy availability batch (--data | -f | stdin) [--yes]
-    crude-rezdy booking list [--status] [--search] [--product] [--from] [--to] [--created-from] [--created-to] [--updated-from] [--updated-to] [--limit] [--offset] [--all]
+    crude-rezdy booking list [--status] [--search] [--product <code> ...] [--source-channel <agent code>] [--reseller-reference <ref>] [--role] [--from] [--to] [--created-from] [--created-to] [--updated-from] [--updated-to] [--limit] [--offset] [--all]
     crude-rezdy booking cancellations [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit] [--all]
     crude-rezdy booking get <orderno>
     crude-rezdy booking quote (--data | -f | stdin)
@@ -103,9 +103,9 @@ Rezdy Supplier API — full CRUD over products, availability, bookings, customer
     crude-rezdy customer list [--search] [--limit] [--offset] ; customer get <id> ; customer create (--data | -f | stdin) [--yes] ; customer delete <id> [--yes]
     crude-rezdy extra list [--search] ; extra get <id> ; extra create (--data | -f | stdin) [--yes] ; extra update <id> [--name <s>] [--data '<json>'] [--yes] ; extra delete <id> [--yes]
     crude-rezdy pickup-list list [--search] ; pickup-list get <id> ; pickup-list create (--data | -f | stdin) [--yes] ; pickup-list update <id> [--name <s>] [--data '<json>'] [--yes] ; pickup-list delete <id> [--yes]
-    crude-rezdy category list ; category get <id> ; category products <id> ; category add-product <categoryId> <code> [--yes] ; category remove-product <categoryId> <code> [--yes]
+    crude-rezdy category list [--search] [--visible | --private] ; category get <id> ; category products <id> ; category add-product <categoryId> <code> [--yes] ; category remove-product <categoryId> <code> [--yes]
     crude-rezdy rate list [--name <s>] [--product <code>] ; rate get <id> ; rate add-product <rateId> <code> [--yes] ; rate remove-product <rateId> <code> [--yes]
-    crude-rezdy resource list ; resource sessions <id> ; resource for-session (--session <id> | --product <code> --start/--start-local <t>) ; resource add-session <resourceId> <sessionId> [--yes] ; resource remove-session <resourceId> <sessionId> [--yes]
+    crude-rezdy resource list ; resource sessions <id> [--from] [--to] [--limit] [--offset] ; resource for-session (--session <id> | --product <code> --start/--start-local <t>) ; resource add-session <resourceId> <sessionId> [--yes] ; resource remove-session <resourceId> <sessionId> [--yes]
     crude-rezdy manifest {order,session}-{status,set,remove} --product <code> [--order <no>] [--start <utc> | --start-local <t>] [--checkin/--no-checkin] [--yes]
     crude-rezdy voucher list [--search] ; voucher get <code> ; company get <alias> ; company find <name>
 
@@ -117,6 +117,8 @@ Product **terms** (`--terms`) and **custom booking questions** are product field
 --updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
 These two filters compare against a UTC instant; crude reads the typed date as the account's operational day (the required `timezone`) and converts to UTC, so a boundary date is not off by one.
 --all on either command fetches all pages automatically (default limit is otherwise applied).
+`booking list --search` is a slow prefix match on customer names and payment or voucher codes. Rezdy has deprecated finding an order number or an agent code through it: use `booking get <orderno>` for an order and `--source-channel <agent code>` for an agent's bookings. `--product` repeats for several products.
+`resource sessions --from/--to` is a local-time window (a bare date is the whole day); Rezdy returns the sessions that both start and end inside it, at most 100 a page.
 For one day's bookings, set --from and --to to that day's bounds. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
 
 ## crude-deputy (deputy.com)

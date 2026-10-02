@@ -266,7 +266,8 @@ def test_rezdy_booking_list_clamps_created_and_flags_updated(bound, monkeypatch,
     rcli = _stub_rezdy_cli(monkeypatch, BOOKINGS, seen)
     rcli.list_bookings(status=None, search=None, product=None, from_=None, to=None,
                        created_from=None, created_to=None, updated_from=None,
-                       updated_to=None, limit=20, offset=0, fetch_all=False,
+                       updated_to=None, source_channel=None, reseller_reference=None,
+                       role=None, limit=20, offset=0, fetch_all=False,
                        output_json=True)
     assert seen["max_date_created"] == BOUND_Z                  # server bound injected
     out = json.loads(capsys.readouterr().out)

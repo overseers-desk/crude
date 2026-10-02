@@ -146,8 +146,11 @@ crude-rezdy product list --search "kayak" --limit 10
 crude-rezdy product get P12345
 crude-rezdy availability list --product P12345 --from "2026-05-25 00:00:00" --to "2026-05-31 23:59:59"
 crude-rezdy booking list --status CONFIRMED --product P12345
+crude-rezdy booking list --source-channel MYAGENT
 crude-rezdy booking get R123456
 ```
+
+`booking list --source-channel` takes the agent code from Rezdy's agents screen and `--reseller-reference` the agent's own booking number; `--product` repeats for several products. An order number goes to `booking get`: Rezdy has deprecated matching order numbers and agent codes through `--search`.
 
 For a single day's bookings, set the tour-time bounds to that day: `crude-rezdy booking list --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z`. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
 
