@@ -40,6 +40,18 @@ def _when(field: str):
     return lambda rec: format_local(rec.get(field), tz=site_timezone("mautic"))
 
 
+# Timestamp fields at the top level of a segment, campaign or email record.
+_STAMPS = ("dateAdded", "dateModified", "publishUp", "publishDown")
+
+
+def _show(rec: dict, output_json: bool) -> None:
+    """Print one record: untouched for --json, otherwise with its timestamps in
+    the timezone the lists show."""
+    if not output_json:
+        rec = {k: _when(k)(rec) if k in _STAMPS and v else v for k, v in rec.items()}
+    emit_record(rec, output_json)
+
+
 _FORM_COLS = [
     ("ID", "id"), ("Alias", "alias"), ("Name", "name"),
     ("Published", "isPublished"), ("Added", _when("dateAdded")),
@@ -256,8 +268,8 @@ def contact_get(
     allf = ((rec.get("fields") or {}).get("all")) or {}
     summary = {"id": rec.get("id"), "points": rec.get("points"),
                "added": _when("dateAdded")(rec), "last_active": _when("lastActive")(rec)}
-    # fields.all repeats last_active as a contact field, in the form Mautic stores
-    # it; the summary's own line, in the timezone shown everywhere else, stands.
+    # fields.all carries last_active too, as stored; the summary keeps its own,
+    # in the timezone every other time here is shown in.
     summary.update({k: v for k, v in allf.items()
                     if v not in (None, "") and k not in summary})
     emit_record(summary, False)
@@ -288,7 +300,7 @@ def segment_get(
         rec = sess.one(f"/segments/{segment_id}", "list")
     except MauticError as e:
         _fail(f"segment {segment_id}", e)
-    emit_record(asof.check_record(rec, "dateAdded", "dateModified", what="segment"), output_json)
+    _show(asof.check_record(rec, "dateAdded", "dateModified", what="segment"), output_json)
 
 
 @campaign.command("list", help="List campaigns.")
@@ -312,7 +324,7 @@ def campaign_get(
         rec = sess.one(f"/campaigns/{campaign_id}", "campaign")
     except MauticError as e:
         _fail(f"campaign {campaign_id}", e)
-    emit_record(asof.check_record(rec, "dateAdded", "dateModified", what="campaign"), output_json)
+    _show(asof.check_record(rec, "dateAdded", "dateModified", what="campaign"), output_json)
 
 
 @email.command("list", help="List emails with their sent and read counts.")
@@ -341,4 +353,4 @@ def email_get(
         _fail(f"email {email_id}", e)
     rec = asof.check_record(rec, "dateAdded", "dateModified", what="email")
     rec = asof.current_state(rec, "email send and read counts (running totals)")
-    emit_record(rec, output_json)
+    _show(rec, output_json)

@@ -30,7 +30,7 @@ def parse_iso_utc(value, assume=timezone.utc):
     +HHMM offset (datetime.fromisoformat rejects both before Python 3.11, and the
     project targets 3.9+). A parsed value carrying no tzinfo is read in `assume`:
     UTC by default, because the APIs document their timestamps as UTC, or the zone
-    a caller passes for a time a user typed.
+    a caller passes for a time a user typed, None being the machine's.
     """
     if not isinstance(value, str):
         return None

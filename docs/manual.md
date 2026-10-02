@@ -182,7 +182,7 @@ body is best-effort current state, disclosed as such. The per-backend boundary
 | Airwallex | all lists (`to_created_at`) | `get` by `created_at` | `account get`; `updated_at`>bound | `balance current`, `fx-rate current` |
 | Clover | orders `createdTime<=` | payments/refunds/credits | catalog, registry | `--since` mode; `scopes --probe-writes` |
 | Rezdy | bookings `maxDateCreated` | vouchers, cancellations | products/extras/rates etc.; `dateUpdated`>bound | availability at/after cutoff |
-| Deputy | QUERY `Created le` | plain lists, `get` | `Modified`>bound | — |
+| Deputy | QUERY `Created le` | `get` | `Modified`>bound | — |
 | Xero | accounting `where UpdatedDateUTC<=`; journals exact; report date params | projects/payroll etc. where stamps exist | reports (computed-now); stamp-less lists | PDF / attachment of a post-cutoff record |
 | Sonas | — (DDP) | `createdAt`-family per collection; export bundles | event doc bodies | — |
 | Facebook | posts `until` | posts, comments by `created_time` | `page get` | insights, scheduled posts |

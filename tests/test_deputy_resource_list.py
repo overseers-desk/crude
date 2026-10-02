@@ -2,8 +2,8 @@
 
 Deputy's plain GET list ignores start and max: it answers with the same first
 page whatever is asked. The stub here models that server, so a command that
-still listed through GET would show the wrong rows, and its --all would never
-see a short page.
+listed through GET would show the wrong rows, and its --all would never see a
+short page.
 """
 
 import json
@@ -23,7 +23,6 @@ ROWS = [{"Id": n} for n in range(1, 1201)]
 
 @pytest.fixture
 def requests_seen(monkeypatch):
-    """Serve ROWS as Deputy does; yield the (method, path) of each request."""
     client = DeputyClient("t", "install", "au")
     seen = []
 
@@ -60,4 +59,4 @@ def test_limit_and_start_are_honoured(requests_seen):
 def test_all_walks_every_page_and_stops(requests_seen):
     result = runner.invoke(cli.app, ["resource", "list", "Timesheet", "--all", "--json"])
     assert _ids(result) == [row["Id"] for row in ROWS]
-    assert len(requests_seen) == 3      # 500, 500, then the short page of 200
+    assert len(requests_seen) == 3

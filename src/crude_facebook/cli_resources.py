@@ -38,16 +38,12 @@ def _when(field: str):
 
 
 def _schedule_time(value: str) -> str:
-    """The --schedule value as Graph is sent it.
-
-    With a timezone in the config, an ISO time is read in that zone unless it
-    carries an offset, and goes out as Unix seconds. A Unix time, a value that
-    is no ISO time, or any value when the config names no zone goes as typed.
-    """
-    tz = site_timezone("facebook")
-    if tz is None or value.isdigit():
+    """An ISO time goes out as Unix seconds, read in the zone it carries or, when
+    it carries none, in the timezone the config names (the machine's when it
+    names none). A Unix time, or a value that is no ISO time, goes as typed."""
+    if value.isdigit():
         return value
-    instant = parse_iso_utc(value, assume=tz)
+    instant = parse_iso_utc(value, assume=site_timezone("facebook"))
     return value if instant is None else str(int(instant.timestamp()))
 
 
@@ -165,8 +161,8 @@ def post_create(
         None, "--photo-url", help="A public image URL to post as a photo."),
     schedule: Optional[str] = typer.Option(
         None, "--schedule",
-        help="Unix time or ISO 8601 (with no offset, read in the config's timezone when "
-             "it names one); schedules the post (10 min to ~75 days ahead) instead of "
+        help="Unix time or ISO 8601 (with no offset, read in the config's timezone, else "
+             "this machine's); schedules the post (10 min to ~75 days ahead) instead of "
              "publishing now."),
     yes: bool = _YES,
     output_json: bool = _JSON,

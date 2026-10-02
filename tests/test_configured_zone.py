@@ -222,16 +222,36 @@ def test_mautic_contact_shows_last_active_once_in_the_configured_zone(
     assert "a@example.com" in result.output
 
 
+def test_mautic_record_view_shows_its_timestamps_in_the_configured_zone(
+        kolkata_machine, monkeypatch):
+    from crude_mautic import cli, cli_resources
+
+    email = {"id": 7, "name": "Spring", "dateAdded": "2026-10-02T14:00:00+00:00",
+             "dateModified": None, "publishUp": None}
+    sess = SimpleNamespace(one=lambda _path, _entity: email)
+    monkeypatch.setattr(cli_resources, "_session", lambda: sess)
+    _on_disk(monkeypatch, BRISBANE)
+    table = runner.invoke(cli.app, ["email", "get", "7"])
+    assert table.exit_code == 0, table.output
+    assert "2026-10-03 00:00" in table.output
+    raw = runner.invoke(cli.app, ["email", "get", "7", "--json"])
+    assert "2026-10-02T14:00:00+00:00" in raw.output
+
+
 def test_facebook_shows_and_schedules_in_the_configured_zone(kolkata_machine, monkeypatch):
     from crude_facebook import cli_resources as facebook
 
-    nine_am_brisbane = str(int(datetime(2026, 10, 4, 23, tzinfo=timezone.utc).timestamp()))
+    def unix(day, hour, minute=0):
+        return str(int(datetime(2026, 10, day, hour, minute, tzinfo=timezone.utc).timestamp()))
+
     _on_disk(monkeypatch, BRISBANE)
     assert facebook._when("created_time")({"created_time": "2026-10-02T14:00:00+0000"}) == (
         "2026-10-03 00:00")
-    assert facebook._schedule_time("2026-10-05T09:00") == nine_am_brisbane
-    assert facebook._schedule_time("2026-10-05T01:00:00+02:00") == nine_am_brisbane
-    assert facebook._schedule_time("1791154800") == "1791154800"
+    # 09:00 on 5 October in Brisbane is 23:00 UTC on the 4th.
+    assert facebook._schedule_time("2026-10-05T09:00") == unix(4, 23)
+    assert facebook._schedule_time("2026-10-05T01:00:00+02:00") == unix(4, 23)
+    assert facebook._schedule_time(unix(4, 23)) == unix(4, 23)
+    assert facebook._schedule_time("next monday") == "next monday"
     _on_disk(monkeypatch, {})
-    # No zone in the config: the value reaches Graph exactly as typed.
-    assert facebook._schedule_time("2026-10-05T09:00") == "2026-10-05T09:00"
+    # With no zone in the config the machine's applies: 09:00 in Kolkata is 03:30 UTC.
+    assert facebook._schedule_time("2026-10-05T09:00") == unix(5, 3, 30)

@@ -1,10 +1,9 @@
 """Deputy API client — requests-based, permanent Bearer-token auth.
 
 Deputy's Resource API is uniform across every object, so this client is generic:
-one set of operations (list/get/query/info/create/update/delete) parameterised by
-the object name, rather than a hand-written pair per object. The base URL is built
-from the install subdomain and geo region; the token is permanent, so there is no
-login or refresh.
+one set of operations parameterised by the object name, rather than a hand-written
+pair per object. The base URL is built from the install subdomain and geo region;
+the token is permanent, so there is no login or refresh.
 """
 
 from __future__ import annotations
