@@ -18,7 +18,7 @@ from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, read_data
 from crude_common.localtime import to_utc_iso
-from crude_airwallex.render import localize, ts
+from crude_airwallex.render import localize, ts, zone
 
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
 
@@ -69,8 +69,8 @@ def conversion_list(
 ):
     """List booked FX conversions (filters: --from/--to date)."""
     items = _client().fx.list_conversions(
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )

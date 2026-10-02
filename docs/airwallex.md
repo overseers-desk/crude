@@ -42,8 +42,9 @@ These were confirmed against a live production account; treat them as ground tru
     `transactionType`, `sourceType`, `createdAt`, `settledAt`, `estimatedSettledAt`, `currencyPair`,
     `clientRate`, `sourceId`, `fundingSourceId`, `batchId`, `description`.
 - **Timestamps** are ISO-8601 UTC with milliseconds and a `+00:00` offset, e.g.
-  `2026-06-17T07:53:44.068+00:00`. crude renders all timestamps in the machine's local timezone
-  (`crude_common.localtime`) and reads typed `--from/--to` as local days converted to UTC.
+  `2026-06-17T07:53:44.068+00:00`. crude renders all timestamps in the `timezone` the config names
+  (under `[airwallex]`, else at the top level; the machine's zone when neither is set) and reads
+  typed `--from/--to` as days in that zone, converted to UTC (`crude_common.localtime`).
 - **Date filter:** `financial_transactions` filters on `from_created_at` / `to_created_at`
   (snake_case query params, ISO-8601 UTC); confirmed filtering (a 2020 window returned 0, a recent
   window returned the page cap). The `--to` bound is the exclusive next-local-midnight, so a

@@ -32,6 +32,7 @@ from crude_common.config import (
 )
 from crude_airwallex import auth
 from crude_airwallex.client import AirwallexAuthError, AirwallexClient, AirwallexError, AirwallexSession
+from crude_airwallex.render import zone
 
 app = typer.Typer(
     help="crude-airwallex — Airwallex global payments and transactions over the REST API.",
@@ -130,7 +131,7 @@ def login():
     except AirwallexError as e:
         typer.echo(f"Error: login failed: {e}", err=True)
         raise typer.Exit(1)
-    when = datetime.fromtimestamp(session.token["expires_at"]).strftime("%Y-%m-%d %H:%M")
+    when = datetime.fromtimestamp(session.token["expires_at"], zone()).strftime("%Y-%m-%d %H:%M")
     typer.echo(f"Logged in. Token valid until {when} (local time).")
 
 

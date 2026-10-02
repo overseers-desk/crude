@@ -23,7 +23,7 @@ from crude_common import asof
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 from crude_common.localtime import to_utc_iso
-from crude_airwallex.render import localize, ts
+from crude_airwallex.render import localize, ts, zone
 
 _JSON = typer.Option(False, "--json", help="Print the raw JSON of the result.")
 
@@ -62,8 +62,8 @@ def intent_list(
     """List payment intents (filters: status, --from/--to date)."""
     items = _client().payments.list_payment_intents(
         status=status,
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )
@@ -187,8 +187,8 @@ def refund_list(
     """List refunds (filters: status, --from/--to date)."""
     items = _client().payments.list_refunds(
         status=status,
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )
@@ -254,8 +254,8 @@ def customer_list(
 ):
     """List saved customers (filters: --from/--to date)."""
     items = _client().payments.list_customers(
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )
@@ -360,8 +360,8 @@ def consent_list(
     """List payment consents (filters: status, --from/--to date)."""
     items = _client().payments.list_payment_consents(
         status=status,
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )
@@ -416,8 +416,8 @@ def link_list(
     """List payment links (filters: status, --from/--to date)."""
     items = _client().payments.list_payment_links(
         status=status,
-        from_=to_utc_iso(from_) if from_ else None,
-        to=to_utc_iso(to, end=True) if to else None,
+        from_=to_utc_iso(from_, tz=zone()) if from_ else None,
+        to=to_utc_iso(to, end=True, tz=zone()) if to else None,
         all_pages=all_,
         limit=limit,
     )

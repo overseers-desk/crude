@@ -168,7 +168,7 @@ crude-rezdy booking list --json
 
 ## Airwallex usage (`crude-airwallex`)
 
-Airwallex authenticates with a `client_id` and `api_key` (both generated under Developer > API keys in the Airwallex console), set in the `[airwallex]` section; there is no separate login step, though `crude-airwallex login` confirms the credentials and reports the token's expiry. All timestamps print in your computer's local timezone, and `--from`/`--to` filters are read as local dates.
+Airwallex authenticates with a `client_id` and `api_key` (both generated under Developer > API keys in the Airwallex console), set in the `[airwallex]` section; there is no separate login step, though `crude-airwallex login` confirms the credentials and reports the token's expiry. All timestamps print in the `timezone` the config names, and `--from`/`--to` dates are read in it; with none named, both use your computer's zone.
 
 ```
 crude-airwallex balance current

@@ -264,7 +264,7 @@ Accounting resources: account, bank-transaction, bank-transfer, batch-payment, b
 
 ## crude-airwallex (airwallex.com)
 
-Airwallex global payments and transactions over the official REST API. Credentials in `[airwallex]` (`client_id`, `api_key`; optional `environment = "demo"`, optional `on_behalf_of` for platform accounts); the bearer token is fetched on first use and cached in `~/.local/state/crude/airwallex_token.json`, refreshed on expiry. There is no consent step; `crude-airwallex login` just confirms the credentials. All timestamps are shown in the machine's local timezone, and `--from`/`--to` are read as local YYYY-MM-DD dates converted to UTC.
+Airwallex global payments and transactions over the official REST API. Credentials in `[airwallex]` (`client_id`, `api_key`; optional `environment = "demo"`, optional `on_behalf_of` for platform accounts); the bearer token is fetched on first use and cached in `~/.local/state/crude/airwallex_token.json`, refreshed on expiry. There is no consent step; `crude-airwallex login` just confirms the credentials. All timestamps are shown in the `timezone` the config names (under `[airwallex]`, else at the top level; the machine's zone when neither is set), and `--from`/`--to` are YYYY-MM-DD dates read in that zone and converted to UTC.
 
     crude-airwallex login                                   # confirm credentials, report token expiry
     crude-airwallex account get
