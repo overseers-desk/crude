@@ -90,8 +90,7 @@ def _make_client(config: dict):
 
 
 def _zone():
-    """The venue's timezone: the one the config names for the selected account,
-    or None for the machine's."""
+    """The venue's timezone, as the config names it."""
     return site_timezone("sonas")
 
 
@@ -1171,7 +1170,9 @@ def _datetime_ejson(value: str) -> dict:
     """Parse an ISO datetime (e.g. 2031-11-20T15:00 or '... +10:00') to EJSON.
 
     A value with no offset is read in the venue's zone when the config names one,
-    the zone the app itself renders times in, and as UTC otherwise."""
+    the zone the app itself renders times in. With no zone named it is UTC, the
+    one reading of a time to be written that does not depend on where the command
+    is run."""
     from datetime import datetime, timezone
     try:
         dt = datetime.fromisoformat(value)

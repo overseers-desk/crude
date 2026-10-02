@@ -58,7 +58,6 @@ def _col(path: str):
 
 
 def _zone():
-    """The timezone the config names for the selected account, or None for the machine's."""
     return site_timezone("wise")
 
 

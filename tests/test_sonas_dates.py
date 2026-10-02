@@ -2,8 +2,8 @@
 
 Sonas stores an event date as venue-local midnight. Rendering it in UTC shows the
 prior calendar day for any zone east of UTC (a Brisbane +10 wedding at local
-midnight is the previous day in UTC), which made a 2026-06-18 wedding print as the
-17th. These tests pin Australia/Brisbane so they are deterministic on any host.
+midnight is the previous day in UTC). These tests pin Australia/Brisbane so they
+are deterministic on any host.
 """
 
 import os

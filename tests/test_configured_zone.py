@@ -2,7 +2,8 @@
 
 Each test puts the machine in one zone (Kolkata, UTC+5:30) and the config in
 another (Brisbane, UTC+10), then checks that a typed date and a shown time
-follow the config; with no zone in the config, the machine's applies.
+follow the config. With no zone in the config the machine's applies, except to
+a Sonas clock time, which stays UTC.
 """
 
 import os
@@ -170,3 +171,14 @@ def test_sonas_reads_a_time_with_no_offset_as_venue_time(kolkata_machine, monkey
     assert cli._datetime_ejson("2031-11-20T15:00+02:00") == {"$date": ms(2031, 11, 20, 13)}
     _on_disk(monkeypatch, {})
     assert cli._datetime_ejson("2031-11-20T15:00") == {"$date": ms(2031, 11, 20, 15)}
+
+
+def test_site_timezone_reads_the_config_once_per_site(monkeypatch):
+    reads = []
+    monkeypatch.setattr(config, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(config, "read_config", lambda _p: reads.append(1) or BRISBANE)
+    config._timezone_named_for.cache_clear()
+    for _ in range(3):
+        config.site_timezone("wise")
+    config.site_timezone("clover")
+    assert len(reads) == 2

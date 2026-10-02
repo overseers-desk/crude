@@ -127,9 +127,10 @@ def configured_timezone(cfg: dict, site_cfg: dict):
 
     The `timezone` key holds an IANA zone name. An invalid name aborts with a
     clear message rather than silently falling back, because a wrong zone would
-    corrupt every date read and every timestamp rendered. None leaves the choice
-    to the caller, which for a typed date is the machine's zone with that date's
-    own offset.
+    corrupt every date read and every timestamp rendered. None leaves the
+    fallback to the caller: a typed date falls back to the machine's zone as it
+    stood on that date, which resolve_timezone's fixed current offset would get
+    wrong across a daylight-saving change.
     """
     from zoneinfo import ZoneInfo
 

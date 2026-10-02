@@ -1,4 +1,4 @@
-"""crude_common.localtime renders ISO-8601 UTC in the machine's local zone.
+"""crude_common.localtime renders ISO-8601 UTC in local time: a passed zone, else the machine's.
 
 A REST API returns timestamps in UTC; showing them raw prints the wrong calendar
 day for any zone east of UTC (a 2026-06-18 00:00 +10 instant is 2026-06-17 14:00
