@@ -54,7 +54,10 @@ def test_request_sends_method_body_and_apikey(monkeypatch):
 
     assert captured["method"] == "POST"
     assert captured["url"].endswith("/v1/products")
-    assert captured["params"]["apiKey"] == "KEY"
+    # The key travels in the apiKey header and never in the query string, where
+    # requests would quote it back in the text of a connection or HTTP error.
+    assert client.session.headers["apiKey"] == "KEY"
+    assert "apiKey" not in captured["params"]
     assert captured["json"] == {"name": "X"}
     assert out == {"productCode": "P1"}
 

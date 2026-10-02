@@ -1,4 +1,4 @@
-"""Rezdy Supplier API client — requests-based, API-key auth via query parameter.
+"""Rezdy Supplier API client — requests-based, API-key auth via the apiKey header.
 
 The transport (`_request`) carries every verb; `_list`/`_one`/`_write` wrap it for
 the three response shapes. Rezdy wraps each body as
@@ -48,8 +48,11 @@ class RezdyClient:
         self.environment = environment
         self.base_url = STAGING_BASE if environment == "staging" else PROD_BASE
         self.session = requests.Session()
+        # The key rides the documented apiKey header rather than the query string,
+        # so it stays out of request URLs and out of any error that quotes one.
         self.session.headers.update(
-            {"Accept": "application/json", "Content-Type": "application/json"}
+            {"Accept": "application/json", "Content-Type": "application/json",
+             "apiKey": api_key}
         )
         self._name_caches: dict = {}
 
@@ -65,7 +68,6 @@ class RezdyClient:
         body (e.g. 204 on DELETE) yields an empty dict.
         """
         params = {k: v for k, v in (params or {}).items() if v is not None}
-        params["apiKey"] = self.api_key
         r = self.session.request(
             method, f"{self.base_url}/v1{path}", params=params,
             json=body if body is not None else None,

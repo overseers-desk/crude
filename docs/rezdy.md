@@ -21,7 +21,7 @@ environment = "production"                # optional; "staging" hits api.rezdy-s
 
 ## 2. Transport and auth
 
-Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent as the `apiKey` query parameter. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `RezdyClient API error`. Rate limit is 100 requests/minute. List endpoints page by `offset`/`limit` (limit max 100); `booking list --all` walks the pages.
+Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent in the `apiKey` request header, which keeps it out of request URLs and so out of any error message that quotes one. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `RezdyClient API error`. Rate limit is 100 requests/minute. List endpoints page by `offset`/`limit` (limit max 100); `booking list --all` walks the pages.
 
 ## 3. Command surface
 
