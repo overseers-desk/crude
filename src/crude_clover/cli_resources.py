@@ -92,7 +92,7 @@ def _auto_emit(items: list, output_json: bool, what: str) -> None:
     for row in items:
         cells = []
         for col in columns:
-            v = row.get(col)
+            v = ms_local(col)(row) if col in _STAMPS else row.get(col)
             cell = "(object)" if isinstance(v, dict) else (
                 f"{len(v)} item(s)" if isinstance(v, list) else s(v))
             cells.append(cell[:57] + "..." if len(cell) > 60 else cell)

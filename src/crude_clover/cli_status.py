@@ -20,7 +20,7 @@ from rich.table import Table
 from crude_common import asof
 from crude_clover.client import CloverError
 from crude_clover.orders import day_windows
-from crude_clover.resources import REGISTRY
+from crude_clover.resources import REGISTRY, tz_name
 
 console = Console()
 
@@ -50,7 +50,8 @@ def _client():
 
 
 def status(
-    tz: str = typer.Option("Australia/Brisbane", "--tz", help="IANA timezone for 'today'."),
+    tz: str = typer.Option(None, "--tz", help="IANA timezone for 'today' (default: the config's "
+                           "timezone, else Australia/Brisbane)."),
 ):
     """Confirm the token and report today's order count and revenue."""
     client = _client()
@@ -59,6 +60,7 @@ def status(
     except CloverError as e:
         typer.echo(f"Token check failed: {e}", err=True)
         raise typer.Exit(1)
+    tz = tz_name(tz)
     today = datetime.now(ZoneInfo(tz)).date().isoformat()
     count = 0
     revenue = 0

@@ -8,6 +8,7 @@ from __future__ import annotations
 import typer
 
 from crude_clover.flatten import flatten
+from crude_clover.resources import tz_name
 
 
 def register(app: typer.Typer) -> None:
@@ -19,8 +20,8 @@ def register(app: typer.Typer) -> None:
         catalog: str = typer.Option(..., "--catalog", help="Catalog JSON from `catalog dump`."),
         output: str = typer.Option(..., "-o", "--output", help="Write the CSV to this path."),
         tz: str = typer.Option(
-            "Australia/Brisbane", "--tz", help="IANA timezone for the Date/Time columns."
-        ),
+            None, "--tz", help="IANA timezone for the Date/Time columns (default: the "
+                               "config's timezone, else Australia/Brisbane)."),
     ):
         """Render Clover orders into the Square item-level CSV shape.
 
@@ -28,5 +29,5 @@ def register(app: typer.Typer) -> None:
         negative-Net Sales row per refund. Qty is 1 per line item, or unitQty
         (thousandths) for an item sold by measure.
         """
-        written = flatten(orders, catalog, output, tz)
+        written = flatten(orders, catalog, output, tz_name(tz))
         typer.echo(f"Wrote {written} rows to {output}.", err=True)

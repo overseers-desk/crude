@@ -45,6 +45,15 @@ def cents(field):
     return lambda r: f"{(r.get(field) or 0) / 100:.2f}"
 
 
+def tz_name(typed=None) -> str:
+    """The IANA zone a --tz option works in: the typed value, else the timezone
+    the config names, else Australia/Brisbane."""
+    if typed:
+        return typed
+    zone = site_timezone("clover")
+    return zone.key if zone is not None else "Australia/Brisbane"
+
+
 def ms_local(field):
     """A column rendering an epoch-ms field in the timezone the config names,
     or in the machine's when it names none."""

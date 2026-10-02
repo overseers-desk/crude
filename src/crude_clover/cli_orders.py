@@ -17,6 +17,7 @@ import typer
 from crude_common import asof
 from crude_clover.client import CloverError
 from crude_clover.orders import day_windows
+from crude_clover.resources import tz_name
 
 orders_app = typer.Typer(help="Clover orders (line items, payments, refunds expanded).")
 
@@ -53,7 +54,8 @@ def _pull_range(client, from_, to, tz, path) -> int:
 def list_(
     from_: str = typer.Option(None, "--from", help="From date YYYY-MM-DD (in --tz, inclusive)."),
     to: str = typer.Option(None, "--to", help="To date YYYY-MM-DD (in --tz, inclusive)."),
-    tz: str = typer.Option("Australia/Brisbane", "--tz", help="IANA timezone for the date bounds."),
+    tz: str = typer.Option(None, "--tz", help="IANA timezone for the date bounds (default: the "
+                           "config's timezone, else Australia/Brisbane)."),
     output: str = typer.Option(..., "-o", "--output", help="Write the JSONL to this path (required)."),
     since: int = typer.Option(
         None, "--since", help="Incremental: orders with modifiedTime >= this epoch ms."),
@@ -61,6 +63,7 @@ def list_(
         False, "--compare", help="Also pull the matching 364-day-prior period to <output>.prior."),
 ):
     """Pull orders to a JSONL file: a date range, or everything since a timestamp."""
+    tz = tz_name(tz)
     if since is not None and asof.active():
         # --since is explicitly a live-sync tool (modifiedTime>=): its whole
         # point is to pull mutations, which a bounded run must not observe.

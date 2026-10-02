@@ -163,6 +163,27 @@ def test_clover_record_view_shows_its_times_as_the_list_does(kolkata_machine, mo
     assert str(BNE_MIDNIGHT_MS) in raw.output
 
 
+def test_clover_tz_option_defaults_to_the_configured_zone(monkeypatch):
+    from crude_clover import resources
+
+    _on_disk(monkeypatch, {"timezone": "Asia/Kolkata"})
+    assert resources.tz_name(None) == "Asia/Kolkata"
+    assert resources.tz_name("UTC") == "UTC"
+    _on_disk(monkeypatch, {})
+    assert resources.tz_name(None) == "Australia/Brisbane"
+
+
+def test_clover_generic_list_shows_its_stamps_in_the_configured_zone(
+        kolkata_machine, monkeypatch, capsys):
+    from crude_clover import cli_resources
+
+    _on_disk(monkeypatch, BRISBANE)
+    cli_resources._auto_emit([{"id": "X1", "createdTime": BNE_MIDNIGHT_MS, "note": "n"}],
+                             False, "thing")
+    out = capsys.readouterr().out
+    assert "2026-10-03 00:00" in out and str(BNE_MIDNIGHT_MS) not in out
+
+
 # ----------------------------------------------------------------------
 # Sonas
 # ----------------------------------------------------------------------

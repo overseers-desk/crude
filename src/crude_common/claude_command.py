@@ -125,7 +125,7 @@ For one day's bookings, give the day as both bounds: `booking list --from 2026-0
 
 ## crude-deputy (deputy.com)
 
-Deputy rostering, timesheets, leave. Permanent token in `[deputy]` (`deputy_api_token`, `deputy_install`, `deputy_geo`); there is no login step.
+Deputy rostering, timesheets, leave. Permanent token in `[deputy]` (`deputy_api_token`, `deputy_install`, `deputy_geo`); there is no login step. Tables and record views show a shift's StartTime and EndTime (Unix seconds in the API) as times in the config's `timezone` and a Date as the day; `--json` is raw.
 
     crude-deputy me
     crude-deputy employee list [--limit] [--all]
@@ -294,7 +294,7 @@ AP Clover POS over the documented REST API. A static Bearer token in `[clover]` 
     crude-clover catalog dump -o PATH.json
     crude-clover flatten PATH.jsonl --catalog PATH.json -o PATH.csv [--tz IANA]
 
-`orders list` writes JSONL (one Order per line) with line items, modifications, payments, and refunds expanded; it slices the range by local day and splits further if a window exceeds Clover's 10000-offset cap. The category dimension is not on line items, so `catalog dump` exposes each item's raw Clover category for `flatten` to join. `flatten` renders the orders into the legacy Square item-level CSV column shape (one row per line item, plus one negative-Net Sales row per refund), so an analysis built on Square exports can read Clover data; `Category` carries the raw Clover category, and mapping it into report buckets is the analysis's job. `--tz` defaults to Australia/Brisbane and sets both the date bounds and the local Date/Time columns.
+`orders list` writes JSONL (one Order per line) with line items, modifications, payments, and refunds expanded; it slices the range by local day and splits further if a window exceeds Clover's 10000-offset cap. The category dimension is not on line items, so `catalog dump` exposes each item's raw Clover category for `flatten` to join. `flatten` renders the orders into the legacy Square item-level CSV column shape (one row per line item, plus one negative-Net Sales row per refund), so an analysis built on Square exports can read Clover data; `Category` carries the raw Clover category, and mapping it into report buckets is the analysis's job. `--tz` defaults to the config's `timezone` (else Australia/Brisbane) and sets both the date bounds and the local Date/Time columns.
 
 ## crude-facebook (graph.facebook.com)
 
