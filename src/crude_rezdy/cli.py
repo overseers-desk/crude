@@ -22,7 +22,7 @@ from crude_common.config import (
     s,
 )
 from crude_common.ldif import LdifSink, PersonMap
-from crude_common.localtime import parse_iso_utc
+from crude_common.localtime import format_local, localize, parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 
@@ -144,6 +144,10 @@ def _second_before(instant: Optional[str]) -> Optional[str]:
     if not instant:
         return None
     return (parse_iso_utc(instant) - timedelta(seconds=1)).strftime(_UTC_FMT)
+
+
+# The UTC instants a booking carries at its top level.
+_BOOKING_STAMPS = ("dateCreated", "dateConfirmed", "datePaid", "dateReconciled", "dateUpdated")
 
 
 def _local_day(stamp, tz: ZoneInfo) -> str:
@@ -647,6 +651,8 @@ def get_booking(
         typer.echo(f"Error fetching booking {order_number}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "dateCreated", "dateUpdated", what="booking")
+    if not output_json:
+        item = localize(item, _BOOKING_STAMPS, tz=_account_timezone(read_config(find_config())))
     emit_record(item, output_json)
 
 
@@ -1384,13 +1390,18 @@ def list_vouchers(
         typer.echo(f"Error fetching vouchers: {e}", err=True)
         raise typer.Exit(1)
     items = asof.bound_records(items, "issueDate", what="voucher")
-    emit_list(items, [
-        ("Code", "code"),
-        ("Status", "status"),
-        ("Issued", "issueDate"),
-        ("Expiry", "expiryDate"),
-        ("Reference", "internalReference"),
-    ], "voucher", output_json)
+    # --json ignores the columns, so the account's zone is read for the table alone.
+    columns = []
+    if not output_json:
+        tz = _account_timezone(read_config(find_config()))
+        columns = [
+            ("Code", "code"),
+            ("Status", "status"),
+            ("Issued", lambda v: format_local(v.get("issueDate"), tz=tz)),
+            ("Expiry", lambda v: format_local(v.get("expiryDate"), tz=tz)),
+            ("Reference", "internalReference"),
+        ]
+    emit_list(items, columns, "voucher", output_json)
 
 
 @voucher_app.command("get")
@@ -1406,6 +1417,9 @@ def get_voucher(
         typer.echo(f"Error fetching voucher {voucher_code}: {e}", err=True)
         raise typer.Exit(1)
     item = asof.check_record(item, "issueDate", what="voucher")
+    if not output_json:
+        item = localize(item, ("issueDate", "expiryDate"),
+                        tz=_account_timezone(read_config(find_config())))
     emit_record(item, output_json)
 
 

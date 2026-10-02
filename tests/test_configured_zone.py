@@ -255,3 +255,50 @@ def test_facebook_shows_and_schedules_in_the_configured_zone(kolkata_machine, mo
     _on_disk(monkeypatch, {})
     # With no zone in the config the machine's applies: 09:00 in Kolkata is 03:30 UTC.
     assert facebook._schedule_time("2026-10-05T09:00") == unix(5, 3, 30)
+
+
+# ----------------------------------------------------------------------
+# Rezdy record views and vouchers
+# ----------------------------------------------------------------------
+
+
+@pytest.fixture
+def rezdy(monkeypatch):
+    """crude-rezdy with a Brisbane account and no network; returns the client class."""
+    from crude_rezdy import cli
+    from crude_rezdy.client import RezdyClient
+
+    monkeypatch.setattr(cli, "find_config", lambda: "config.toml")
+    monkeypatch.setattr(
+        cli, "read_config",
+        lambda _p: {"rezdy": {"api_key": "KEY", "timezone": "Australia/Brisbane"}})
+    monkeypatch.setattr(cli, "_make_client", lambda _c: RezdyClient("KEY"))
+    return RezdyClient
+
+
+def test_rezdy_booking_view_shows_its_instants_in_the_account_zone(
+        kolkata_machine, rezdy, monkeypatch):
+    from crude_rezdy import cli
+
+    booking = {"orderNumber": "R1", "dateCreated": BNE_MIDNIGHT_UTC, "datePaid": None}
+    monkeypatch.setattr(rezdy, "get_booking", lambda self, order: booking)
+    table = runner.invoke(cli.app, ["booking", "get", "R1"])
+    assert table.exit_code == 0, table.output
+    assert "2026-10-03 00:00" in table.output
+    raw = runner.invoke(cli.app, ["booking", "get", "R1", "--json"])
+    assert BNE_MIDNIGHT_UTC in raw.output
+
+
+def test_rezdy_voucher_dates_are_the_account_days(kolkata_machine, rezdy, monkeypatch):
+    from crude_rezdy import cli
+
+    # Issued at the start of 3 October in Brisbane, valid to the end of the 4th.
+    voucher = {"code": "V1", "status": "ISSUED", "issueDate": BNE_MIDNIGHT_UTC,
+               "expiryDate": "2026-10-04T13:59:59Z"}
+    monkeypatch.setattr(rezdy, "list_vouchers", lambda self, **kw: [voucher])
+    monkeypatch.setattr(rezdy, "get_voucher", lambda self, code: voucher)
+    listed = runner.invoke(cli.app, ["voucher", "list"])
+    assert listed.exit_code == 0, listed.output
+    assert "2026-10-03 00:00" in listed.output and "2026-10-04 23:59" in listed.output
+    one = runner.invoke(cli.app, ["voucher", "get", "V1"])
+    assert "2026-10-03 00:00" in one.output and "2026-10-04 23:59" in one.output
