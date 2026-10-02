@@ -46,7 +46,13 @@ Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging)
 
 A few paths are not the obvious guess and follow the spec: a session is mutated by product code and local start time (`availability update --product P1 --start-local "..."`), not a session id; `manifest *-set` toggles check-in (`--checkin/--no-checkin`) for an order-session or a whole session, keyed by `--product` and `--start`/`--start-local`; `rate list` and the search-based `extra`/`pickup-list` lists take their documented query terms rather than offset paging. Custom booking questions are not a separate resource: they are the product's `bookingFields` array, edited through `product update` — and because that overlay replaces the list wholesale rather than merging it, you send the complete set of fields, not just the new one.
 
-## 4. Write conventions
+## 4. Time bounds
+
+Rezdy's booking search takes ISO 8601 instants, both ends inclusive, and reads a value without a zone as UTC: a bare date is 00:00:00Z, which in a zone east of UTC is mid-morning, so a day sent raw as both bounds matches nothing. `booking list` therefore converts what is typed. A bare date on `--from/--to`, `--created-from/--created-to` or `--updated-from/--updated-to` becomes the first or the last second of that day in the account's `timezone`; a value carrying a time is an instant, with `Z` or an offset honoured and a time carrying neither read as UTC.
+
+`--updated-from`, and `booking cancellations --from`, go to Rezdy as `updatedSince`, which it documents as updated after that time; crude asks from one second earlier and checks the edge itself, so the bound stays inclusive and every page returned is already in range. The upper update bound has no server-side filter and is checked on the pages fetched, so `--all` matters when it is used alone. A booking that was never updated carries no `dateUpdated` and is in no update window. The Updated and Cancelled On columns show the account-local day.
+
+## 5. Write conventions
 
 - **JSON bodies.** `create`, `quote`, `batch`, and the full-object `update` verbs take their body from `--data '<json>'`, `-f/--file <path>`, or piped stdin.
 - **Confirmation.** A write that creates or destroys prompts before acting; pass `--yes/-y` to skip (for scripts).
@@ -54,7 +60,7 @@ A few paths are not the obvious guess and follow the spec: a session is mutated 
 - **Read-merge-write.** `product update`, `extra update`, and `pickup-list update` fetch the current object, overlay the typed flags and `--data`, and write the merged whole back — so `product update P1 --terms "..."` changes only the terms and leaves the rest intact. A flag left unset is not part of the change; an explicit empty string clears the field. `availability update` and `booking update` send the body directly: the API has no single-session read to merge against, and a booking update accepts only status, customer, and participants.
 - **Booking notifications.** `booking create` sets `sendNotifications=false` by default, so a test order emails no one; `--notify` turns it on and is authoritative over any `sendNotifications` in `--data`.
 
-## 5. Terms & Conditions
+## 6. Terms & Conditions
 
 T&C is the product's `terms` field, not a separate resource. Edit it through the product:
 
@@ -63,11 +69,11 @@ crude-rezdy product update P1 --terms "Full refund up to 48h before departure."
 crude-rezdy product get P1 --json | jq .terms
 ```
 
-## 6. ID resolution
+## 7. ID resolution
 
 Most list endpoints already return human names alongside their codes (a booking item carries `productName`, a category's products carry `name`). Where a command works from a bare product code, the name is resolved for confirmation: `availability list --product P1 ...` prints the product's name above the sessions. The resolver caches the product list for the process.
 
-## 7. What the public API does not expose
+## 8. What the public API does not expose
 
 These are operator-dashboard features with no public Supplier API endpoint, so `crude-rezdy` does not implement them:
 

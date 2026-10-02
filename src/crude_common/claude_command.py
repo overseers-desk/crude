@@ -114,12 +114,12 @@ Writes take a JSON body from `--data '<json>'`, `-f <file>`, or stdin, and verbs
 Product **terms** (`--terms`) and **custom booking questions** are product fields edited through `product update`: booking questions are the product's `bookingFields` array (set via `--data`), and because that list is replaced wholesale you send the complete set. Resources are read + session-assignment only — a new resource is created in the Rezdy dashboard, then assigned here; vouchers/coupons are read-only. `product create` enforces a few fields the spec does not flag: `description` ≥100 chars, `durationMinutes`, and a priceOption `id` (pass `0`, rezdy assigns the real one). Full command surface, JSON body shapes, and these specifics are in the crude repo docs/rezdy.md.
 
 `booking cancellations` filters by when the cancellation occurred (dateUpdated), not the session date. Use --from/--to with YYYY-MM-DD dates.
---updated-from / --updated-to on `booking list` apply the same client-side filter to any status.
-These two filters compare against a UTC instant; crude reads the typed date as the account's operational day (the required `timezone`) and converts to UTC, so a boundary date is not off by one.
---all on either command fetches all pages automatically (default limit is otherwise applied).
+--updated-from / --updated-to on `booking list` apply the same filter to any status.
+Every date typed on `booking list` and `booking cancellations` is the account's operational day (the required `timezone`), converted to the UTC instants Rezdy compares against, so a boundary date is not off by one; a value with a time is an instant, UTC unless it carries an offset.
+The lower update bound is applied by Rezdy and the upper one on the pages fetched, so add --all when --updated-to (or the cancellations --to) is used alone; --all fetches all pages (default limit is otherwise applied). A never-updated booking is in no update window.
 `booking list --search` is a slow prefix match on customer names and payment or voucher codes. Rezdy has deprecated finding an order number or an agent code through it: use `booking get <orderno>` for an order and `--source-channel <agent code>` for an agent's bookings. `--product` repeats for several products.
 `resource sessions --from/--to` is a local-time window (a bare date is the whole day); Rezdy returns the sessions that both start and end inside it, at most 100 a page.
-For one day's bookings, set --from and --to to that day's bounds. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
+For one day's bookings, give the day as both bounds: `booking list --from 2026-05-25 --to 2026-05-25`. Availability times are local (`YYYY-MM-DD HH:mm:ss`).
 
 ## crude-deputy (deputy.com)
 

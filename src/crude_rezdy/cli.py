@@ -2,7 +2,7 @@
 
 import json
 import sys
-from datetime import datetime, time, timezone as _utc
+from datetime import date, datetime, time, timedelta, timezone as _utc
 from typing import Callable, List, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -22,6 +22,7 @@ from crude_common.config import (
     s,
 )
 from crude_common.ldif import LdifSink, PersonMap
+from crude_common.localtime import parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 
@@ -99,24 +100,53 @@ def _client():
 
 
 def _account_timezone(config: dict) -> ZoneInfo:
-    """The selected rezdy account's timezone, for the client-side instant filters."""
+    """The selected rezdy account's timezone, for reading typed dates and times."""
     return _parse_timezone(resolve_account(config, "rezdy", account()))
 
 
-def _day_bound_utc(date_str: str, tz: ZoneInfo, *, end: bool) -> str:
-    """Map a typed --from/--to into a UTC instant for comparison with dateUpdated.
+_UTC_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
-    A bare YYYY-MM-DD is read as the start (or, for --to, the end) of that day in
-    the account's zone, then converted to UTC and rendered as a ...Z string, so a
-    lexicographic compare against Rezdy's ...Z dateUpdated is correct. A value that
-    already carries a time is passed through unchanged.
+
+def _bound_utc(value: Optional[str], tz: ZoneInfo, *, end: bool,
+               flag: str = "--from") -> Optional[str]:
+    """Read a typed bound; return a UTC ...Z instant.
+
+    A bare YYYY-MM-DD is the start of that day in the account's zone, or for an
+    upper bound its last second. Rezdy reads a bare date as midnight UTC, so
+    sending the typed day raw would drop the morning of a local day east of UTC.
+    A value carrying a time is an instant: Z or an offset is honoured, and a time
+    with neither is UTC, as Rezdy reads it. The ...Z form also compares
+    correctly, as a string, against Rezdy's own ...Z stamps.
     """
-    if date_str and len(date_str) == 10:
-        y, m, d = (int(p) for p in date_str.split("-"))
-        bound = time(23, 59, 59) if end else time(0, 0, 0)
-        local = datetime(y, m, d, bound.hour, bound.minute, bound.second, tzinfo=tz)
-        return local.astimezone(_utc.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    return date_str
+    if not value:
+        return None
+    text = value.strip()
+    try:
+        if len(text) == 10:
+            local = datetime.combine(date.fromisoformat(text),
+                                     time(23, 59, 59) if end else time(0, 0, 0), tzinfo=tz)
+            return local.astimezone(_utc.utc).strftime(_UTC_FMT)
+        instant = parse_iso_utc(text.replace(" ", "T", 1))
+        if instant is None:
+            raise ValueError(text)
+    except ValueError:
+        typer.echo(f"Error: {flag} '{value}' is neither a date (YYYY-MM-DD) nor an "
+                   f"ISO 8601 time.", err=True)
+        raise typer.Exit(1)
+    return instant.strftime(_UTC_FMT)
+
+
+def _second_before(instant: Optional[str]) -> Optional[str]:
+    """One second before a ...Z instant: Rezdy's updatedSince means "updated after"."""
+    if not instant:
+        return None
+    return (parse_iso_utc(instant) - timedelta(seconds=1)).strftime(_UTC_FMT)
+
+
+def _local_day(stamp, tz: ZoneInfo) -> str:
+    """The account-local calendar day of a Rezdy UTC stamp, for table columns."""
+    instant = parse_iso_utc(stamp)
+    return instant.astimezone(tz).strftime("%Y-%m-%d") if instant else s(stamp)[:10]
 
 
 def _local_bound(value: Optional[str], *, end: bool) -> Optional[str]:
@@ -423,12 +453,12 @@ def list_bookings(
     status: Optional[str] = typer.Option(None, "--status", help="Filter by order status (e.g. CONFIRMED, CANCELLED)."),
     search: Optional[str] = typer.Option(None, "--search", help="Prefix search on a customer name or a payment/voucher code. Slow: prefer the other filters. An order number is `booking get`; an agent code is --source-channel."),
     product: Optional[List[str]] = typer.Option(None, "--product", help="Filter by product code; repeat for several."),
-    from_: Optional[str] = typer.Option(None, "--from", help="Tour starts on or after this time (ISO 8601)."),
-    to: Optional[str] = typer.Option(None, "--to", help="Tour starts before or on this time (ISO 8601)."),
-    created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this date (ISO 8601)."),
-    created_to: Optional[str] = typer.Option(None, "--created-to", help="Created on or before this date (ISO 8601)."),
-    updated_from: Optional[str] = typer.Option(None, "--updated-from", help="Last updated on or after this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
-    updated_to: Optional[str] = typer.Option(None, "--updated-to", help="Last updated on or before this date (YYYY-MM-DD or ISO 8601, client-side filter)."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Tour starts on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    to: Optional[str] = typer.Option(None, "--to", help="Tour starts on or before this day or time (a bare date covers the whole day)."),
+    created_from: Optional[str] = typer.Option(None, "--created-from", help="Created on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    created_to: Optional[str] = typer.Option(None, "--created-to", help="Created on or before this day or time (a bare date covers the whole day)."),
+    updated_from: Optional[str] = typer.Option(None, "--updated-from", help="Last updated on or after this day or time; never-updated bookings are left out."),
+    updated_to: Optional[str] = typer.Option(None, "--updated-to", help="Last updated on or before this day or time (filtered client-side: add --all to search every page)."),
     source_channel: Optional[str] = typer.Option(None, "--source-channel", help="Bookings made by this agent, by the agent code on Rezdy's agents screen."),
     reseller_reference: Optional[str] = typer.Option(None, "--reseller-reference", help="Bookings carrying this reseller reference (the agent's own booking number)."),
     role: Optional[str] = typer.Option(None, "--role", help="Bookings where this account is RESELLER, SUPPLIER, or ALL (default: the role of the account's plan)."),
@@ -439,31 +469,43 @@ def list_bookings(
 ):
     """List bookings.
 
-    For a single day's bookings, set --from and --to to that day's start and
-    end (e.g. --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z).
+    Dates are the account's operational day, so --from 2026-05-25 --to 2026-05-25
+    lists that day's tours. A value with a time is an instant, UTC unless it
+    carries an offset.
     Use --updated-from / --updated-to to filter by when the booking was last
     modified (e.g. when it was cancelled).
     """
     config = read_config(find_config())
     client = _make_client(config)
+    tz = _account_timezone(config)
 
     if role and role.upper() not in ("RESELLER", "SUPPLIER", "ALL"):
         typer.echo(f"Error: --role must be RESELLER, SUPPLIER or ALL, not '{role}'.", err=True)
         raise typer.Exit(1)
+    tour_from = _bound_utc(from_, tz, end=False, flag="--from")
+    tour_to = _bound_utc(to, tz, end=True, flag="--to")
+    made_from = _bound_utc(created_from, tz, end=False, flag="--created-from")
+    made_to = _bound_utc(created_to, tz, end=True, flag="--created-to")
+    changed_from = _bound_utc(updated_from, tz, end=False, flag="--updated-from")
+    changed_to = _bound_utc(updated_to, tz, end=True, flag="--updated-to")
 
     # WORLD_AS_OF acts on knowledge time: creation is bounded server-side via
     # maxDateCreated (clamped or injected), the update side is post-filtered.
     # Tour time (--from/--to) is the domain timeline and stays user-controlled:
     # a tour next week booked before the cutoff is legitimately visible.
-    asof.check_window_start(created_from, "--created-from")
+    asof.check_window_start(made_from, "--created-from")
     kwargs = dict(
         order_status=status,
         search=search,
         product_code=product or None,
-        min_tour_start=from_,
-        max_tour_start=to,
-        min_date_created=created_from,
-        max_date_created=asof.clamp_upper_iso(created_to),
+        min_tour_start=tour_from,
+        max_tour_start=tour_to,
+        min_date_created=made_from,
+        max_date_created=asof.clamp_upper_iso(made_to),
+        # Filtering --updated-from server-side means every page is already in
+        # range, not only the first; the client-side check below restores the
+        # inclusive edge that Rezdy's "updated after" leaves out.
+        updated_since=_second_before(changed_from),
         reseller_reference=reseller_reference,
         source_channel=source_channel,
         role=role.upper() if role else None,
@@ -478,14 +520,12 @@ def list_bookings(
         typer.echo(f"Error fetching bookings: {e}", err=True)
         raise typer.Exit(1)
 
-    if updated_from or updated_to:
-        tz = _account_timezone(config)
-        if updated_from:
-            lo = _day_bound_utc(updated_from, tz, end=False)
-            items = [b for b in items if b.get("dateUpdated", "") >= lo]
-        if updated_to:
-            hi = asof.clamp_upper_iso(_day_bound_utc(updated_to, tz, end=True))
-            items = [b for b in items if b.get("dateUpdated", "") <= hi]
+    # A booking never updated carries no dateUpdated and is outside any update window.
+    if changed_from:
+        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] >= changed_from]
+    if changed_to:
+        hi = asof.clamp_upper_iso(changed_to)
+        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] <= hi]
 
     # Belt and braces on creation, plus the mutated-after-cutoff flag.
     items = asof.bound_records(items, "dateCreated", "dateUpdated", what="booking")
@@ -513,7 +553,7 @@ def list_bookings(
             s(first.get("productName", ""))[:35],
             s(first.get("startTimeLocal", ""))[:16],
             paid_total,
-            s(item.get("dateUpdated", ""))[:10],
+            _local_day(item.get("dateUpdated"), tz),
         )
 
     console.print(table)
@@ -522,8 +562,8 @@ def list_bookings(
 
 @booking_app.command("cancellations")
 def list_cancellations(
-    from_: Optional[str] = typer.Option(None, "--from", help="Cancellations on or after this date (YYYY-MM-DD)."),
-    to: Optional[str] = typer.Option(None, "--to", help="Cancellations on or before this date (YYYY-MM-DD)."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Cancelled on or after this day or time (a bare date is the account's day; a time is UTC unless it carries an offset)."),
+    to: Optional[str] = typer.Option(None, "--to", help="Cancelled on or before this day or time (a bare date covers the whole day)."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results (ignored when --all is set)."),
     fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages automatically."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
@@ -531,16 +571,24 @@ def list_cancellations(
     """List cancelled bookings, filtered by when the cancellation occurred.
 
     --from and --to filter against the cancellation date (dateUpdated), not the
-    session date. Use --all to ensure no results are missed.
+    session date. --from is applied by Rezdy, so every page is in range; --to is
+    applied here, so use --all with --to alone to ensure no results are missed.
     """
     config = read_config(find_config())
     client = _make_client(config)
+    tz = _account_timezone(config)
+    lo = _bound_utc(from_, tz, end=False, flag="--from")
+    typed_hi = _bound_utc(to, tz, end=True, flag="--to")
+    if lo:
+        asof.check_window_start(lo, "--from")
 
     try:
         if fetch_all:
-            items = client.paginate(limit=100, order_status="CANCELLED")
+            items = client.paginate(limit=100, order_status="CANCELLED",
+                                    updated_since=_second_before(lo))
         else:
-            items = client.list_bookings(order_status="CANCELLED", limit=limit)
+            items = client.list_bookings(order_status="CANCELLED",
+                                         updated_since=_second_before(lo), limit=limit)
     except Exception as e:
         typer.echo(f"Error fetching cancellations: {e}", err=True)
         raise typer.Exit(1)
@@ -548,15 +596,11 @@ def list_cancellations(
     # A cancellation is dated by when it occurred (dateUpdated); one that
     # occurred after the cutoff had not happened in the bounded world, so the
     # upper filter is clamped to the bound (and applied even with no --to).
-    if from_ or to or asof.active():
-        tz = _account_timezone(config)
-        if from_:
-            asof.check_window_start(_day_bound_utc(from_, tz, end=False), "--from")
-            lo = _day_bound_utc(from_, tz, end=False)
-            items = [b for b in items if b.get("dateUpdated", "") >= lo]
-        hi = asof.clamp_upper_iso(_day_bound_utc(to, tz, end=True) if to else None)
-        if hi:
-            items = [b for b in items if b.get("dateUpdated", "") <= hi]
+    if lo:
+        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] >= lo]
+    hi = asof.clamp_upper_iso(typed_hi)
+    if hi:
+        items = [b for b in items if b.get("dateUpdated") and b["dateUpdated"] <= hi]
 
     items = asof.bound_records(items, "dateCreated", what="cancellation")
 
@@ -583,7 +627,7 @@ def list_cancellations(
             _customer_name(item),
             s(first.get("productName", ""))[:35],
             s(first.get("startTimeLocal", ""))[:16],
-            s(item.get("dateUpdated", ""))[:10],
+            _local_day(item.get("dateUpdated"), tz),
             paid_total,
             str(_refund_count(item)),
             notes[:60],

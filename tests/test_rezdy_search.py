@@ -7,6 +7,9 @@ reaches the network.
 
 from types import SimpleNamespace
 
+import json
+from zoneinfo import ZoneInfo
+
 import pytest
 from typer.testing import CliRunner
 
@@ -17,14 +20,20 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def sent(monkeypatch):
+def served():
+    """The records the stubbed API answers with; a test fills it before invoking."""
+    return []
+
+
+@pytest.fixture
+def sent(monkeypatch, served):
     """The requests a command sends, each as its method, url and query parameters."""
     client = RezdyClient("KEY")
     calls = []
 
     def fake_request(method, url, params=None, json=None):
         calls.append({"method": method, "url": url, "params": params})
-        body = {"requestStatus": {"success": True}, "items": []}
+        body = {"requestStatus": {"success": True}, "items": list(served)}
         return SimpleNamespace(ok=True, status_code=200, json=lambda: body)
 
     monkeypatch.setattr(client.session, "request", fake_request)
@@ -90,3 +99,61 @@ def test_availability_list_pages_with_offset(sent):
         "--to", "2026-10-09 23:59:59", "--limit", "1000", "--offset", "1000", "--json",
     ])
     assert sent[0]["params"]["offset"] == 1000
+
+
+def test_booking_list_sends_a_typed_day_as_the_account_day(sent):
+    result = runner.invoke(cli.app, [
+        "booking", "list", "--from", "2026-10-03", "--to", "2026-10-03",
+        "--created-from", "2026-09-30", "--created-to", "2026-09-30", "--json",
+    ])
+    assert result.exit_code == 0
+    params = sent[0]["params"]
+    # Brisbane is UTC+10: the day's first and last second, as UTC instants.
+    assert params["minTourStartTime"] == "2026-10-02T14:00:00Z"
+    assert params["maxTourStartTime"] == "2026-10-03T13:59:59Z"
+    assert params["minDateCreated"] == "2026-09-29T14:00:00Z"
+    assert params["maxDateCreated"] == "2026-09-30T13:59:59Z"
+
+
+def test_booking_list_refuses_a_malformed_date_before_calling(sent):
+    result = runner.invoke(cli.app, ["booking", "list", "--from", "03/10/2026"])
+    assert result.exit_code == 1
+    assert sent == []
+
+
+def test_updated_from_is_filtered_by_rezdy_and_keeps_its_edge(sent, served):
+    served.extend([
+        {"orderNumber": "R-EDGE", "dateUpdated": "2026-09-24T14:00:00Z"},
+        {"orderNumber": "R-EARLY", "dateUpdated": "2026-09-24T13:59:59Z"},
+        {"orderNumber": "R-NEVER"},
+    ])
+    result = runner.invoke(cli.app, ["booking", "list", "--updated-from", "2026-09-25", "--json"])
+    assert result.exit_code == 0
+    # updatedSince means "updated after", so the ask starts a second early and
+    # the check here keeps the booking updated exactly at the day's first second.
+    assert sent[0]["params"]["updatedSince"] == "2026-09-24T13:59:59Z"
+    assert [b["orderNumber"] for b in json.loads(result.output)] == ["R-EDGE"]
+
+
+def test_a_never_updated_booking_is_in_no_update_window(sent, served):
+    served.extend([
+        {"orderNumber": "R-OLD", "dateUpdated": "2024-12-31T00:00:00Z"},
+        {"orderNumber": "R-NEVER"},
+    ])
+    result = runner.invoke(cli.app, ["booking", "list", "--updated-to", "2025-01-01", "--json"])
+    assert [b["orderNumber"] for b in json.loads(result.output)] == ["R-OLD"]
+
+
+def test_cancellations_from_is_filtered_by_rezdy(sent):
+    result = runner.invoke(cli.app, ["booking", "cancellations", "--from", "2026-09-01", "--json"])
+    assert result.exit_code == 0
+    params = sent[0]["params"]
+    assert params["orderStatus"] == "CANCELLED"
+    assert params["updatedSince"] == "2026-08-31T13:59:59Z"
+
+
+def test_update_column_shows_the_account_local_day():
+    tz = ZoneInfo("Australia/Brisbane")
+    # 21:23Z on 2 May is 07:23 on 3 May in Brisbane.
+    assert cli._local_day("2026-05-02T21:23:28Z", tz) == "2026-05-03"
+    assert cli._local_day(None, tz) == ""

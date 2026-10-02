@@ -152,9 +152,9 @@ crude-rezdy booking get R123456
 
 `booking list --source-channel` takes the agent code from Rezdy's agents screen and `--reseller-reference` the agent's own booking number; `--product` repeats for several products. An order number goes to `booking get`: Rezdy has deprecated matching order numbers and agent codes through `--search`.
 
-For a single day's bookings, set the tour-time bounds to that day: `crude-rezdy booking list --from 2026-05-25T00:00:00Z --to 2026-05-25T23:59:59Z`. Availability times are local (`YYYY-MM-DD HH:mm:ss`); booking times are ISO 8601.
+For a single day's bookings, give that day as both bounds: `crude-rezdy booking list --from 2026-05-25 --to 2026-05-25`. Rezdy's search takes UTC instants and would read the bare date as midnight UTC, so crude sends the first and last second of that day in the account's `timezone` instead; the same holds for `--created-from/--created-to`. A bound that carries a time is an instant, UTC unless it carries an offset. Availability times are local (`YYYY-MM-DD HH:mm:ss`).
 
-`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter client-side against the cancellation/update instant, which Rezdy records in UTC. crude reads the typed date as the account's operational day (the `timezone` above) and converts to UTC for the comparison, so a date typed at the day boundary is not filed a day off.
+`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter on the cancellation/update instant, which Rezdy records in UTC, reading a typed date as the account's operational day in the same way. The lower bound is applied by Rezdy, so every page is already in range; the upper bound is checked on the pages fetched, so add `--all` when using it alone. A booking that was never updated carries no update instant and falls in no update window.
 
 ### JSON output
 

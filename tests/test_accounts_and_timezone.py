@@ -10,7 +10,7 @@ import typer
 import pytest
 
 from crude_common.config import resolve_account
-from crude_rezdy.cli import _day_bound_utc
+from crude_rezdy.cli import _bound_utc
 from zoneinfo import ZoneInfo
 
 
@@ -54,19 +54,37 @@ def test_missing_section_default_is_empty():
     assert resolve_account({}, "rezdy", None) == {}
 
 
-def test_day_bound_reads_typed_date_in_account_zone():
+def test_bound_reads_typed_date_in_account_zone():
     # The real cancelled booking from issue #3: 21:23Z is 07:23 next day in Brisbane.
     date_updated = "2026-05-02T21:23:28Z"
     tz = ZoneInfo("Australia/Brisbane")
     # Filed under 03 May Brisbane, so --to 2026-05-02 must exclude it...
-    assert not (date_updated <= _day_bound_utc("2026-05-02", tz, end=True))
+    assert not (date_updated <= _bound_utc("2026-05-02", tz, end=True))
     # ...and --to 2026-05-03 must include it.
-    assert date_updated <= _day_bound_utc("2026-05-03", tz, end=True)
+    assert date_updated <= _bound_utc("2026-05-03", tz, end=True)
 
 
-def test_day_bound_passes_through_explicit_instant():
+def test_bound_spans_the_whole_local_day():
+    # A Brisbane day runs 14:00Z the day before to 13:59:59Z: sent raw, the bare
+    # date would be midnight UTC, 10:00 local, and miss the morning.
     tz = ZoneInfo("Australia/Brisbane")
-    assert _day_bound_utc("2026-05-02T10:00:00Z", tz, end=False) == "2026-05-02T10:00:00Z"
+    assert _bound_utc("2026-10-03", tz, end=False) == "2026-10-02T14:00:00Z"
+    assert _bound_utc("2026-10-03", tz, end=True) == "2026-10-03T13:59:59Z"
+
+
+def test_bound_keeps_an_instant_and_converts_an_offset():
+    tz = ZoneInfo("Australia/Brisbane")
+    assert _bound_utc("2026-05-02T10:00:00Z", tz, end=False) == "2026-05-02T10:00:00Z"
+    assert _bound_utc("2026-05-03T07:23:28+10:00", tz, end=False) == "2026-05-02T21:23:28Z"
+    # A time carrying neither Z nor an offset is UTC, T or space separated.
+    assert _bound_utc("2026-05-02T10:00:00", tz, end=False) == "2026-05-02T10:00:00Z"
+    assert _bound_utc("2026-05-02 10:00:00", tz, end=False) == "2026-05-02T10:00:00Z"
+
+
+def test_bound_rejects_a_value_that_is_no_date(capsys):
+    with pytest.raises(typer.Exit):
+        _bound_utc("03/10/2026", ZoneInfo("Australia/Brisbane"), end=False, flag="--from")
+    assert "--from '03/10/2026'" in capsys.readouterr().err
 
 
 def test_make_client_requires_timezone():
