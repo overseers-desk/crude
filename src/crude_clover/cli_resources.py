@@ -34,7 +34,7 @@ from crude_common.config import (
 )
 from crude_common.ldif import LdifSink
 from crude_clover.client import CloverError
-from crude_clover.resources import REGISTRY
+from crude_clover.resources import REGISTRY, ms_local
 
 console = Console()
 
@@ -48,6 +48,18 @@ def _client():
     from crude_clover.cli import _client as _impl
 
     return _impl()
+
+
+# Epoch-millisecond fields a Clover record carries at its top level.
+_STAMPS = ("createdTime", "clientCreatedTime", "modifiedTime", "timestamp")
+
+
+def _show(rec, output_json: bool, ldif: Optional[LdifSink] = None) -> None:
+    """Print one record: raw for --json and LDIF, and for the table with its
+    timestamps as the lists show them."""
+    if not output_json and ldif is None and isinstance(rec, dict):
+        rec = {k: ms_local(k)(rec) if k in _STAMPS else v for k, v in rec.items()}
+    emit_record(rec, output_json, ldif=ldif)
 
 
 def _ldif_sink(pm) -> LdifSink:
@@ -106,7 +118,7 @@ def _resource(spec) -> typer.Typer:
             except CloverError as e:
                 typer.echo(f"Error: {e}", err=True)
                 raise typer.Exit(1)
-            emit_record(asof.current_state(rec, f"the {name} record"), output_json)
+            _show(asof.current_state(rec, f"the {name} record"), output_json)
         return sub
 
     # People-shaped resources (customers, employees) carry a PersonMap and get a
@@ -141,7 +153,7 @@ def _resource(spec) -> typer.Typer:
             rec = asof.check_record(rec, spec.created, "modifiedTime", what=name)
         else:
             rec = asof.current_state(rec, f"this {name} record")
-        emit_record(rec, output_json, ldif=_ldif_sink(spec.ldif) if ldif else None)
+        _show(rec, output_json, ldif=_ldif_sink(spec.ldif) if ldif else None)
 
     if spec.ldif is not None:
         @sub.command("list", help=f"List {name}.")

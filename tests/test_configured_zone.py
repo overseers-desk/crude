@@ -257,6 +257,20 @@ def test_facebook_shows_and_schedules_in_the_configured_zone(kolkata_machine, mo
     assert facebook._schedule_time("2026-10-05T09:00") == unix(5, 3, 30)
 
 
+def test_clover_record_view_shows_its_times_as_the_list_does(kolkata_machine, monkeypatch):
+    from crude_clover import cli, cli_resources
+
+    payment = {"id": "P1", "amount": 5000, "createdTime": BNE_MIDNIGHT_MS, "modifiedTime": None}
+    stub = SimpleNamespace(resources=SimpleNamespace(get=lambda *a, **kw: payment))
+    monkeypatch.setattr(cli_resources, "_client", lambda: stub)
+    _on_disk(monkeypatch, BRISBANE)
+    table = runner.invoke(cli.app, ["payments", "get", "P1"])
+    assert table.exit_code == 0, table.output
+    assert "2026-10-03 00:00" in table.output
+    raw = runner.invoke(cli.app, ["payments", "get", "P1", "--json"])
+    assert str(BNE_MIDNIGHT_MS) in raw.output
+
+
 # ----------------------------------------------------------------------
 # Rezdy record views and vouchers
 # ----------------------------------------------------------------------
