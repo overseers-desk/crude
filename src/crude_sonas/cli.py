@@ -1168,8 +1168,10 @@ def _event_timeline(client, event_id: str) -> dict:
 
 
 def _datetime_ejson(value: str) -> dict:
-    """Parse an ISO datetime (e.g. 2031-11-20T15:00 or '... +10:00') to EJSON;
-    a naive value counts as UTC. The app renders times in the venue timezone."""
+    """Parse an ISO datetime (e.g. 2031-11-20T15:00 or '... +10:00') to EJSON.
+
+    A value with no offset is read in the venue's zone when the config names one,
+    the zone the app itself renders times in, and as UTC otherwise."""
     from datetime import datetime, timezone
     try:
         dt = datetime.fromisoformat(value)
@@ -1177,7 +1179,7 @@ def _datetime_ejson(value: str) -> dict:
         typer.echo(f"Error: invalid datetime {value!r}: {e}", err=True)
         raise typer.Exit(2)
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=_zone() or timezone.utc)
     return {"$date": int(dt.timestamp() * 1000)}
 
 
@@ -1204,8 +1206,10 @@ def timeline_list(
             time_v = entry.get("time")
             if isinstance(time_v, dict) and "$date" in time_v:
                 from datetime import datetime, timezone
+                zone = _zone()
                 entry["time"] = datetime.fromtimestamp(
-                    time_v["$date"] / 1000, timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+                    time_v["$date"] / 1000, zone or timezone.utc).strftime(
+                        "%Y-%m-%d %H:%M" if zone else "%Y-%m-%d %H:%M UTC")
     _emit(entries, output_json, columns=[
         ("Id", "_id"), ("Type", "type"), ("Time", "time"),
         ("Offset(min)", "relOffsetMinutes"), ("Duration(min)", "durationMinutes"),
@@ -1218,7 +1222,7 @@ def timeline_add(
     event_id: str = typer.Argument(..., help="Event document id."),
     description: Optional[str] = typer.Option(None, "--description", help="Entry name."),
     time: Optional[str] = typer.Option(
-        None, "--time", help="Absolute entry: ISO datetime (naive = UTC)."),
+        None, "--time", help="Absolute entry: ISO datetime; with no offset it is venue time when the config names a timezone, else UTC."),
     after: Optional[str] = typer.Option(
         None, "--after", help="Relative entry: the entry id this one follows (timeRefId)."),
     offset_minutes: Optional[int] = typer.Option(
@@ -2195,7 +2199,7 @@ def appointment_create(
     type_: Optional[str] = typer.Option(
         None, "--type", help="CalendarEventType, name or number (e.g. InternalMeeting, 11)."),
     start: Optional[str] = typer.Option(
-        None, "--start", help="Start: ISO datetime (naive = UTC)."),
+        None, "--start", help="Start: ISO datetime; with no offset it is venue time when the config names a timezone, else UTC."),
     end: Optional[str] = typer.Option(
         None, "--end", help="End: ISO datetime, at least 15 minutes after start."),
     title: Optional[str] = typer.Option(None, "--title", help="Appointment title."),

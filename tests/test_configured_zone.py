@@ -156,3 +156,17 @@ def test_sonas_event_list_reads_and_shows_days_in_the_venue_zone(kolkata_machine
     assert seen == {"from_": "2026-10-03", "to": "2026-10-03", "tz": "Australia/Brisbane"}
     # Stored at Brisbane midnight on the 3rd; Kolkata's own clock would say the 2nd.
     assert "2026-10-03" in result.output and "2026-10-02" not in result.output
+
+
+def test_sonas_reads_a_time_with_no_offset_as_venue_time(kolkata_machine, monkeypatch):
+    from crude_sonas import cli
+
+    def ms(*utc):
+        return int(datetime(*utc, tzinfo=timezone.utc).timestamp() * 1000)
+
+    _on_disk(monkeypatch, BRISBANE)
+    # 3 pm in Brisbane is 05:00 UTC.
+    assert cli._datetime_ejson("2031-11-20T15:00") == {"$date": ms(2031, 11, 20, 5)}
+    assert cli._datetime_ejson("2031-11-20T15:00+02:00") == {"$date": ms(2031, 11, 20, 13)}
+    _on_disk(monkeypatch, {})
+    assert cli._datetime_ejson("2031-11-20T15:00") == {"$date": ms(2031, 11, 20, 15)}
