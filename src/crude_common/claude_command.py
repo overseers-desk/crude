@@ -99,7 +99,7 @@ Rezdy Supplier API — full CRUD over products, availability, bookings, customer
     crude-rezdy booking cancellations [--from <YYYY-MM-DD>] [--to <YYYY-MM-DD>] [--limit] [--all]
     crude-rezdy booking get <orderno>
     crude-rezdy booking quote (--data | -f | stdin)
-    crude-rezdy booking create (--data | -f | stdin) [--notify] [--yes]
+    crude-rezdy booking create (--data | -f | stdin) [--no-notify] [--yes]
     crude-rezdy booking update <orderno> (--data | -f | stdin) [--yes]
     crude-rezdy booking cancel <orderno> [--yes]
     crude-rezdy customer list [--search] [--limit] [--offset] ; customer get <id> ; customer create (--data | -f | stdin) [--yes] ; customer delete <id> [--yes]
@@ -111,7 +111,7 @@ Rezdy Supplier API — full CRUD over products, availability, bookings, customer
     crude-rezdy manifest {order,session}-{status,set,remove} --product <code> [--order <no>] [--start <utc> | --start-local <t>] [--checkin/--no-checkin] [--yes]
     crude-rezdy voucher list [--search] ; voucher get <code> ; company get <alias> ; company find <name>
 
-Writes take a JSON body from `--data '<json>'`, `-f <file>`, or stdin, and verbs that create or destroy prompt unless `--yes`; `--json` on any verb returns the raw API object. `product`, `extra`, and `pickup-list` `update` are read-merge-write — a typed flag or `--data` key overlays the fetched object and an empty string clears a field, so `product update P1 --terms "..."` touches only the terms; `availability update` and `booking update` send the body as-is. `booking create` sends `sendNotifications=false` (emails no one) unless `--notify`.
+Writes take a JSON body from `--data '<json>'`, `-f <file>`, or stdin, and verbs that create or destroy prompt unless `--yes`; `--json` on any verb returns the raw API object. `product`, `extra`, and `pickup-list` `update` are read-merge-write — a typed flag or `--data` key overlays the fetched object and an empty string clears a field, so `product update P1 --terms "..."` touches only the terms; `availability update` and `booking update` send the body as-is. `booking create` sends `sendNotifications=true` (Rezdy emails the customer); `--no-notify` or `sendNotifications=false` in the body suppresses that only after a confirmation that defaults to no, which `--yes` does not skip.
 
 Product **terms** (`--terms`) and **custom booking questions** are product fields edited through `product update`: booking questions are the product's `bookingFields` array (set via `--data`), and because that list is replaced wholesale you send the complete set. Resources are read + session-assignment only — a new resource is created in the Rezdy dashboard, then assigned here; vouchers/coupons are read-only. `product create` enforces a few fields the spec does not flag: `description` ≥100 chars, `durationMinutes`, and a priceOption `id` (pass `0`, rezdy assigns the real one). Full command surface, JSON body shapes, and these specifics are in the crude repo docs/rezdy.md.
 

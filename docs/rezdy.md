@@ -58,7 +58,7 @@ Rezdy's booking search takes ISO 8601 instants, both ends inclusive, and reads a
 - **Confirmation.** A write that creates or destroys prompts before acting; pass `--yes/-y` to skip (for scripts).
 - **Output.** A write prints `<what>: done.` and, when the API returns the affected object, its JSON. `--json` on any verb prints the raw API object with no table.
 - **Read-merge-write.** `product update`, `extra update`, and `pickup-list update` fetch the current object, overlay the typed flags and `--data`, and write the merged whole back — so `product update P1 --terms "..."` changes only the terms and leaves the rest intact. A flag left unset is not part of the change; an explicit empty string clears the field. `availability update` and `booking update` send the body directly: the API has no single-session read to merge against, and a booking update accepts only status, customer, and participants.
-- **Booking notifications.** `booking create` sets `sendNotifications=false` by default, so a test order emails no one; `--notify` turns it on and is authoritative over any `sendNotifications` in `--data`.
+- **Booking notifications.** `booking create` sends `sendNotifications=true` by default, so Rezdy emails the customer as it normally does. `--no-notify`, or `sendNotifications=false` in `--data`, suppresses the emails, but only after a confirmation whose default answer is no (the booking is then not created); `--yes` skips the ordinary create prompt but never this one, so suppressing customer emails is always a deliberate answer. `--no-notify` wins over a `sendNotifications=true` in `--data`.
 
 ## 6. Terms & Conditions
 
