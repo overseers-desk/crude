@@ -1,3 +1,14 @@
+crude (1.6.3) unstable; urgency=medium
+
+  * crude-rezdy: `booking create` asks Rezdy to email the customer by
+    default. Suppressing the emails (--no-notify, or sendNotifications=false
+    in the body) needs an explicit confirmation whose default is no, and
+    --yes does not answer it.
+  * crude-airwallex: `transaction list --all` fetches every page; it used to
+    stop after 100 rows.
+
+ -- Rivermill Webmaster <pt7535886@gmail.com>  Fri, 09 Oct 2026 10:00:00 +1000
+
 crude (1.6.2) unstable; urgency=medium
 
   * Single-record views show their timestamps in the config's timezone:

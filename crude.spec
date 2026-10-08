@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.2
+Version:        1.6.3
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -96,6 +96,14 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Fri Oct 09 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.3-1
+- crude-rezdy: `booking create` asks Rezdy to email the customer by default.
+  Suppressing the emails (--no-notify, or sendNotifications=false in the
+  body) needs an explicit confirmation whose default is no; --yes does not
+  answer it.
+- crude-airwallex: `transaction list --all` fetches every page; it used to
+  stop after 100 rows.
+
 * Fri Oct 02 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.2-1
 - Single-record views show their timestamps in the config's timezone: every
   crude-rezdy `get`, crude-clover `payments`, `refunds`, `credits` and
