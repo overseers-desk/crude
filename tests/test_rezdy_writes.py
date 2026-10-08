@@ -2,7 +2,7 @@
 
 These pin the behaviours the write verbs hinge on: the position-based payload
 extraction, Rezdy's in-body error channel, the read-merge-write that lets a
-single field change without dropping the rest, the booking-create notification
+single field change without dropping the rest, the booking-create notification default
 default, and the cached id->name resolver. The transport is monkeypatched, so
 nothing reaches the network.
 """
@@ -112,26 +112,58 @@ def test_merge_update_requires_a_change():
                           {"name": None}, "update", yes=True, output_json=True)
 
 
-def test_booking_create_defaults_notifications_off(monkeypatch):
-    captured = {}
+def _fake_booking_client(monkeypatch):
+    captured = {"n": 0}
 
     class FakeClient:
         def create_booking(self, body):
+            captured["n"] += 1
             captured["body"] = body
             return {"orderNumber": "R1"}
 
     monkeypatch.setattr(cli, "_client", lambda: FakeClient())
+    return captured
 
-    cli.create_booking(data='{"items": []}', file=None, notify=False, yes=True, output_json=True)
-    assert captured["body"]["sendNotifications"] is False
 
-    # The flag is authoritative over a sendNotifications carried in --data.
-    cli.create_booking(data='{"items": [], "sendNotifications": true}', file=None,
-                       notify=False, yes=True, output_json=True)
-    assert captured["body"]["sendNotifications"] is False
+def _create(**kw):
+    args = dict(data='{"items": []}', file=None, no_notify=False, yes=True, output_json=True)
+    args.update(kw)
+    cli.create_booking(**args)
 
-    cli.create_booking(data='{"items": []}', file=None, notify=True, yes=True, output_json=True)
+
+def test_booking_create_notifies_by_default(monkeypatch):
+    captured = _fake_booking_client(monkeypatch)
+    _create()
     assert captured["body"]["sendNotifications"] is True
+    _create(data='{"items": [], "sendNotifications": true}')
+    assert captured["body"]["sendNotifications"] is True
+
+
+@pytest.mark.parametrize("kw", [
+    {"no_notify": True},
+    {"data": '{"items": [], "sendNotifications": false}'},
+    {"no_notify": True, "data": '{"items": [], "sendNotifications": true}'},
+])
+def test_booking_create_suppression_declined_creates_nothing(monkeypatch, kw):
+    captured = _fake_booking_client(monkeypatch)
+    seen = {}
+
+    def decline(text, default=None, abort=False, **_):
+        seen.update(default=default, text=text)
+        raise typer.Abort()
+
+    monkeypatch.setattr(cli.typer, "confirm", decline)
+    with pytest.raises(typer.Abort):
+        _create(**kw)  # yes=True does not skip the suppression prompt
+    assert seen["default"] is False
+    assert captured["n"] == 0
+
+
+def test_booking_create_suppression_confirmed_sends_false(monkeypatch):
+    captured = _fake_booking_client(monkeypatch)
+    monkeypatch.setattr(cli.typer, "confirm", lambda *a, **k: True)
+    _create(no_notify=True)
+    assert captured["body"]["sendNotifications"] is False
 
 
 def test_product_names_resolver_is_cached(monkeypatch):

@@ -685,19 +685,24 @@ def quote_booking(
 def create_booking(
     data: Optional[str] = typer.Option(None, "--data", help="Booking object as JSON (or -f / stdin)."),
     file: Optional[str] = typer.Option(None, "-f", "--file", help="Read the JSON body from a file."),
-    notify: bool = typer.Option(False, "--notify", help="Let Rezdy send customer/supplier emails (default off)."),
+    no_notify: bool = typer.Option(False, "--no-notify", help="Suppress Rezdy's customer/supplier emails (asks for confirmation; --yes does not skip it)."),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
 ):
     """Create a booking from a JSON body.
 
-    sendNotifications defaults off so a test booking does not email anyone; pass
-    --notify to enable. The flag is authoritative over any sendNotifications in
-    --data.
+    sendNotifications is true, so Rezdy emails the customer as it normally does.
+    --no-notify, or sendNotifications=false in the body, suppresses the emails
+    only after a confirmation that defaults to no; --yes does not answer it.
     """
     client = _client()
     body = read_data(data, file)
-    body["sendNotifications"] = notify
+    suppress = no_notify or not body.get("sendNotifications", True)
+    body["sendNotifications"] = not suppress
+    if suppress:
+        asof.refuse_write_cli("create booking")
+        typer.confirm("Notifications are off: Rezdy will NOT email the customer about this booking. "
+                      "Create it without emails?", default=False, abort=True)
     do_write(lambda: client.create_booking(body), "create booking",
               confirm="Create this booking? (a real order)", yes=yes, output_json=output_json)
 
