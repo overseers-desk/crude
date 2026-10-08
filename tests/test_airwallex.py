@@ -87,6 +87,42 @@ def test_paginate_walks_pages_and_stops_on_has_more_false(monkeypatch):
     assert seen_pages == [0, 1]  # 0-based page_num
 
 
+def test_paginate_follows_camelcase_hasmore(monkeypatch):
+    # /financial_transactions answers {"items": [...], "hasMore": bool}, not has_more.
+    xs = _session()
+    pages = [
+        {"items": [{"id": 1}], "hasMore": True},
+        {"items": [{"id": 2}], "hasMore": True},
+        {"items": [{"id": 3}], "hasMore": False},
+    ]
+    seen_pages = []
+
+    def fake(method, url, **kw):
+        seen_pages.append(kw["params"]["page_num"])
+        return _FakeResp(body=pages[len(seen_pages) - 1])
+
+    monkeypatch.setattr(xs.session, "request", fake)
+    out = xs.paginate("/x")
+    assert [r["id"] for r in out] == [1, 2, 3]
+    assert seen_pages == [0, 1, 2]
+
+
+def test_paginate_cursor_follows_camelcase_hasmore(monkeypatch):
+    xs = _session()
+    pages = [
+        {"items": [{"id": 1}], "hasMore": True, "page_after": "cur1"},
+        {"items": [{"id": 2}], "hasMore": False},
+    ]
+    seen = []
+
+    def fake(method, url, **kw):
+        seen.append(kw["params"].get("page_after"))
+        return _FakeResp(body=pages[len(seen) - 1])
+
+    monkeypatch.setattr(xs.session, "request", fake)
+    assert [r["id"] for r in xs.paginate_cursor("/x")] == [1, 2]
+
+
 def test_paginate_first_page_only_when_not_all_pages(monkeypatch):
     xs = _session()
     calls = {"n": 0}

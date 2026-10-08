@@ -50,6 +50,14 @@ def _items(data):
     return []
 
 
+def _has_more(data) -> bool:
+    """The envelope's more-pages flag. Most endpoints send ``has_more``, but
+    /financial_transactions sends ``hasMore`` (verified live)."""
+    if not isinstance(data, dict):
+        return False
+    return bool(data.get("has_more") or data.get("hasMore"))
+
+
 class AirwallexSession(HttpSession):
     def __init__(self, account, client_id, api_key, *, base, on_behalf_of=None, token=None):
         super().__init__(base)
@@ -154,7 +162,7 @@ class AirwallexSession(HttpSession):
             results.extend(chunk)
             if limit is not None and len(results) >= limit:
                 break
-            has_more = bool(data.get("has_more")) if isinstance(data, dict) else False
+            has_more = _has_more(data)
             if not has_more:
                 break
             if limit is None and not all_pages:
@@ -178,7 +186,7 @@ class AirwallexSession(HttpSession):
             results.extend(chunk)
             if limit is not None and len(results) >= limit:
                 break
-            has_more = bool(data.get("has_more")) if isinstance(data, dict) else False
+            has_more = _has_more(data)
             cursor = data.get("page_after") if isinstance(data, dict) else None
             if not has_more or not cursor:
                 break
