@@ -173,6 +173,7 @@ def _resource(
     delete_fn: Optional[str] = None,
     remove: Optional[tuple] = None,
     person_map: Optional[PersonMap] = None,
+    help: Optional[str] = None,
 ) -> typer.Typer:
     """Create a resource sub-app with the standard CRUD verbs and return it.
 
@@ -185,7 +186,7 @@ def _resource(
     get gain a `--ldif` flag that emits inetOrgPerson LDIF. Resources built
     without one are unchanged and gain no flag.
     """
-    sub = typer.Typer(help=f"Xero {label}.")
+    sub = typer.Typer(help=help or f"Xero {label}.")
     app.add_typer(sub, name=name)
 
     def _fetch_list(where, order, fetch_all, limit):
@@ -448,6 +449,7 @@ def register(app: typer.Typer) -> None:
         [("ID", "EmployeeID"), ("First", "FirstName"), ("Last", "LastName"), ("Status", "Status")],
         list_fn="list_employees", get_fn="get_employee",
         create_fn="create_employee", update_fn="update_employee",
+        help="Xero Accounting API employee (not payroll staff: see pay-employee).",
     )
 
     invoice = _resource(

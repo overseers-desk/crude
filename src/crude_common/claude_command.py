@@ -264,7 +264,7 @@ Accounting resources: account, bank-transaction, bank-transfer, batch-payment, b
     crude-xero attachment list|get|add --on <resource> --id <guid> [--file ...] [--out ...] [--mime ...]
     crude-xero history list|add --on <resource> --id <guid> [--note ...]
 
-`update` is read-merge-write: crude fetches the object, overlays your `--data`/flags, and posts the whole back, so an update changes only what you pass. The other Xero APIs (Payroll, Files, Assets, Projects, BankFeeds, Finance) are documented in the crude repo docs/xero.md.
+`update` is read-merge-write: crude fetches the object, overlays your `--data`/flags, and posts the whole back, so an update changes only what you pass. Payroll (AU) resources take the same verbs: pay-employee (payroll staff, with tax declaration, bank accounts and pay template; the Accounting `employee` is a different, contact-like record), pay-run, timesheet, leave-application, super-fund, payroll-calendar, pay-item, payslip (ro), payroll-settings (ro). The other Xero APIs (Files, Assets, Projects, BankFeeds, Finance) are documented in the crude repo docs/xero.md.
 
 ## crude-airwallex (airwallex.com)
 
