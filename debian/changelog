@@ -1,3 +1,11 @@
+crude (1.6.4) unstable; urgency=medium
+
+  * crude-xero: the `employee` help says it is the Accounting API record and
+    points payroll staff at `pay-employee`; the Claude command lists the
+    Payroll resources (pay-employee, pay-run, payslip, ...).
+
+ -- Rivermill Webmaster <pt7535886@gmail.com>  Sun, 11 Oct 2026 18:30:00 +1000
+
 crude (1.6.3) unstable; urgency=medium
 
   * crude-rezdy: `booking create` asks Rezdy to email the customer by

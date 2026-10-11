@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.3
+Version:        1.6.4
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -96,6 +96,11 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Sun Oct 11 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.4-1
+- crude-xero: the `employee` help says it is the Accounting API record and
+  points payroll staff at `pay-employee`; the Claude command lists the
+  Payroll resources (pay-employee, pay-run, payslip, ...).
+
 * Fri Oct 09 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.3-1
 - crude-rezdy: `booking create` asks Rezdy to email the customer by default.
   Suppressing the emails (--no-notify, or sendNotifications=false in the
