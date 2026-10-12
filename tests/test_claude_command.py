@@ -33,3 +33,15 @@ def test_a_same_named_skill_supersedes_the_command(tmp_path, monkeypatch):
     (tmp_path / "skills" / "crude").mkdir(parents=True)
     claude_command.refresh()
     assert not (tmp_path / "commands" / "crude.md").exists()
+
+
+def test_an_unwritable_tree_is_skipped_not_raised(tmp_path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+    commands = tmp_path / "commands"
+    commands.mkdir()
+    commands.chmod(0o500)
+    try:
+        claude_command.refresh()
+    finally:
+        commands.chmod(0o700)
+    assert not (commands / "crude.md").exists()

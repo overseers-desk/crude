@@ -368,15 +368,20 @@ def refresh() -> None:
 
     Idempotent and silent. Does nothing when Claude Code is not installed or a
     same-named skill supersedes the command. "Out of date" is content inequality
-    with COMMAND, so no version field is needed.
+    with COMMAND, so no version field is needed. A write that fails (a read-only
+    tree) is skipped, since the command the user asked for matters more than the
+    refresh.
     """
     if _superseded():
         return
     f = command_file()
-    if f.exists() and f.read_text() == COMMAND:
+    try:
+        if f.exists() and f.read_text() == COMMAND:
+            return
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(COMMAND)
+    except OSError:
         return
-    f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(COMMAND)
 
 
 def version_callback(value: bool) -> None:
