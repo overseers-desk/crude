@@ -1,9 +1,10 @@
-"""A helper's own exit is not reported a second time as a failed fetch.
+"""A helper's own exit is not reported a second time by the command around it.
 
-Config helpers print their message and raise ``typer.Exit(1)``. In click 8.1
-``typer.Exit`` subclasses ``RuntimeError``, so a command's ``except Exception``
-around the work would catch it and print a junk ``Error fetching x: 1`` (the
-``str`` of the exit) under the real message. These run real commands through the
+A helper that prints its message and raises ``typer.Exit(1)`` (a config value
+missing, a timezone unknown) raises a ``RuntimeError``, so an unguarded
+``except Exception`` around the work catches it and prints a junk
+``Error fetching x: 1`` or ``Error: create x: 1`` (the ``str`` of the exit)
+under the real message. These run real commands through the
 app against a config on disk that triggers the helper's exit; nothing reaches a
 network, because every one stops before any request.
 """
