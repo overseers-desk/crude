@@ -160,9 +160,10 @@ def beneficiary_create(
     output_json: bool = _JSON,
 ):
     """Create a beneficiary from a JSON body."""
+    client = _client().beneficiaries
     body = read_data(data, file)
     do_write(
-        lambda: _client().beneficiaries.create_beneficiary(body),
+        lambda: client.create_beneficiary(body),
         "create beneficiary",
         confirm="Create this beneficiary?",
         yes=yes,
@@ -199,8 +200,9 @@ def beneficiary_delete(
     output_json: bool = _JSON,
 ):
     """Delete a beneficiary by id."""
+    client = _client().beneficiaries
     do_write(
-        lambda: _client().beneficiaries.delete_beneficiary(beneficiary_id),
+        lambda: client.delete_beneficiary(beneficiary_id),
         f"delete beneficiary {beneficiary_id}",
         confirm=f"Delete beneficiary {beneficiary_id}?",
         yes=yes,

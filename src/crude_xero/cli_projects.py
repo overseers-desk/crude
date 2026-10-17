@@ -105,9 +105,10 @@ def _register_project(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         body = read_data(data, file)
         do_write(
-            lambda: _projects().create_project(body),
+            lambda: papi.create_project(body),
             "create project", confirm="Create this project?",
             yes=yes, output_json=output_json,
         )
@@ -121,6 +122,7 @@ def _register_project(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         body = read_data(data, file, required=False)
         if status is not None:
             body["status"] = status
@@ -128,7 +130,7 @@ def _register_project(app: typer.Typer) -> None:
             typer.echo("Error: nothing to update; pass --status or --data.", err=True)
             raise typer.Exit(1)
         do_write(
-            lambda: _projects().update_project(project_id, body),
+            lambda: papi.update_project(project_id, body),
             f"update project {project_id}", confirm=f"Update project {project_id}?",
             yes=yes, output_json=output_json,
         )
@@ -177,9 +179,10 @@ def _register_task(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         body = read_data(data, file)
         do_write(
-            lambda: _projects().create_task(project_id, body),
+            lambda: papi.create_task(project_id, body),
             f"create task on project {project_id}", confirm="Create this task?",
             yes=yes, output_json=output_json,
         )
@@ -207,8 +210,9 @@ def _register_task(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         do_write(
-            lambda: _projects().delete_task(project_id, task_id),
+            lambda: papi.delete_task(project_id, task_id),
             f"delete task {task_id}", confirm=f"Delete task {task_id}?",
             yes=yes, output_json=output_json,
         )
@@ -257,9 +261,10 @@ def _register_time(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         body = read_data(data, file)
         do_write(
-            lambda: _projects().create_time(project_id, body),
+            lambda: papi.create_time(project_id, body),
             f"create time entry on project {project_id}", confirm="Create this time entry?",
             yes=yes, output_json=output_json,
         )
@@ -287,8 +292,9 @@ def _register_time(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _projects()
         do_write(
-            lambda: _projects().delete_time(project_id, time_id),
+            lambda: papi.delete_time(project_id, time_id),
             f"delete time entry {time_id}", confirm=f"Delete time entry {time_id}?",
             yes=yes, output_json=output_json,
         )

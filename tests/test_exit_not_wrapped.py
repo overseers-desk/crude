@@ -4,9 +4,10 @@ A helper that prints its message and raises ``typer.Exit(1)`` (a config value
 missing, a timezone unknown) raises a ``RuntimeError``, so an unguarded
 ``except Exception`` around the work catches it and prints a junk
 ``Error fetching x: 1`` or ``Error: create x: 1`` (the ``str`` of the exit)
-under the real message. These run real commands through the
-app against a config on disk that triggers the helper's exit; nothing reaches a
-network, because every one stops before any request.
+under the real message. A write builds its client before it asks for
+confirmation, so the same exit ends the write before the prompt. These run real
+commands through the app against a config on disk that triggers the helper's
+exit; nothing reaches a network, because every one stops before any request.
 """
 
 import pytest
@@ -57,6 +58,24 @@ def test_write_with_unconfigured_account_prints_only_the_real_error(config_dir):
     result = runner.invoke(app, ["invoice", "create", "--data", "{}", "--yes"])
     assert result.exit_code == 1
     assert _lines(result) == ["Error: [xero] must set client_id."]
+
+
+def test_xero_write_without_yes_errors_before_the_prompt(config_dir):
+    from crude_xero.cli import app
+
+    config_dir("[xero]\n")
+    result = runner.invoke(app, ["invoice", "create", "--data", "{}"], input="y\n")
+    assert result.exit_code == 1
+    assert _lines(result) == ["Error: [xero] must set client_id."]
+
+
+def test_airwallex_write_without_yes_errors_before_the_prompt(config_dir):
+    from crude_airwallex.cli import app
+
+    config_dir("[airwallex]\n")
+    result = runner.invoke(app, ["transfer", "create", "--data", "{}"], input="y\n")
+    assert result.exit_code == 1
+    assert _lines(result) == ["Error: [airwallex] must set client_id and api_key."]
 
 
 def test_sonas_read_with_unknown_timezone_prints_only_the_real_error(config_dir):

@@ -84,9 +84,10 @@ def transfer_create(
     output_json: bool = _JSON,
 ):
     """Create a transfer from a JSON body. MOVES REAL MONEY."""
+    client = _client().transfers
     body = read_data(data, file)
     do_write(
-        lambda: _client().transfers.create_transfer(body),
+        lambda: client.create_transfer(body),
         "create transfer",
         confirm="Create this transfer? (moves real money)",
         yes=yes,

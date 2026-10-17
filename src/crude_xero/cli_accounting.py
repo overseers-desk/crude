@@ -113,8 +113,9 @@ def _add_remove(sub: typer.Typer, cmd: str, method: str, name: str, label: str) 
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         do_write(
-            lambda: getattr(_client().accounting, method)(guid),
+            lambda: getattr(client, method)(guid),
             f"{cmd} {name} {guid}",
             confirm=f"{cmd.capitalize()} {name} {guid}?",
             yes=yes,
@@ -151,9 +152,10 @@ def _add_allocate(sub: typer.Typer, method: str, name: str, label: str) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         body = read_data(data, file)
         do_write(
-            lambda: getattr(_client().accounting, method)(guid, body),
+            lambda: getattr(client, method)(guid, body),
             f"allocate {name} {guid}",
             confirm=f"Allocate {name} {guid}?",
             yes=yes,
@@ -291,9 +293,10 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            client = _client().accounting
             body = read_data(data, file)
             do_write(
-                lambda: getattr(_client().accounting, create_fn)(body),
+                lambda: getattr(client, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
                 yes=yes,
@@ -416,9 +419,10 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         body = read_data(data, file)
         do_write(
-            lambda: _client().accounting.add_contact_group_members(group_id, body),
+            lambda: client.add_contact_group_members(group_id, body),
             f"add members to group {group_id}", yes=yes, output_json=output_json,
         )
 
@@ -429,8 +433,9 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         do_write(
-            lambda: _client().accounting.remove_contact_group_member(group_id, contact_id),
+            lambda: client.remove_contact_group_member(group_id, contact_id),
             f"remove {contact_id} from group {group_id}",
             confirm=f"Remove {contact_id} from group {group_id}?",
             yes=yes, output_json=output_json,
@@ -475,8 +480,9 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         do_write(
-            lambda: _client().accounting.email_invoice(guid),
+            lambda: client.email_invoice(guid),
             f"email invoice {guid}",
             confirm=f"Email invoice {guid} to the contact? (real mail)",
             yes=yes, output_json=output_json,
@@ -648,9 +654,10 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         body = read_data(data, file)
         do_write(
-            lambda: _client().accounting.update_tax_rate(body),
+            lambda: client.update_tax_rate(body),
             "update tax rate", confirm="Update this tax rate?",
             yes=yes, output_json=output_json,
         )
@@ -674,9 +681,10 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         body = read_data(data, file)
         do_write(
-            lambda: _client().accounting.add_tracking_option(category_id, body),
+            lambda: client.add_tracking_option(category_id, body),
             f"add option to category {category_id}", yes=yes, output_json=output_json,
         )
 
@@ -689,9 +697,10 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         body = read_data(data, file)
         do_write(
-            lambda: _client().accounting.update_tracking_option(category_id, option_id, body),
+            lambda: client.update_tracking_option(category_id, option_id, body),
             f"update option {option_id}", confirm=f"Update option {option_id}?",
             yes=yes, output_json=output_json,
         )
@@ -703,8 +712,9 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         do_write(
-            lambda: _client().accounting.delete_tracking_option(category_id, option_id),
+            lambda: client.delete_tracking_option(category_id, option_id),
             f"delete option {option_id}", confirm=f"Delete option {option_id}?",
             yes=yes, output_json=output_json,
         )

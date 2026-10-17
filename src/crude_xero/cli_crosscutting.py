@@ -85,12 +85,13 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         _check_endpoint(on, ATTACHMENT_ENDPOINTS)
         content = Path(file).read_bytes()
         filename = os.path.basename(file)
         ct = mime or mimetypes.guess_type(file)[0] or "application/octet-stream"
         do_write(
-            lambda: _client().accounting.add_attachment(on, id_, filename, content, ct),
+            lambda: client.add_attachment(on, id_, filename, content, ct),
             f"add attachment {filename} to {on} {id_}", yes=yes, output_json=output_json,
         )
 
@@ -122,8 +123,9 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().accounting
         _check_endpoint(on, HISTORY_ENDPOINTS)
         do_write(
-            lambda: _client().accounting.add_history(on, id_, note),
+            lambda: client.add_history(on, id_, note),
             f"add note to {on} {id_}", yes=yes, output_json=output_json,
         )

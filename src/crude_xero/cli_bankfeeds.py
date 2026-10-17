@@ -97,9 +97,10 @@ def _register_feed_connection(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _bankfeeds()
         body = read_data(data, file)
         do_write(
-            lambda: _bankfeeds().create_feed_connections(body),
+            lambda: client.create_feed_connections(body),
             "create feed connection(s)", confirm="Create these feed connection(s)?",
             yes=yes, output_json=output_json,
         )
@@ -114,9 +115,10 @@ def _register_feed_connection(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _bankfeeds()
         body = read_data(data, file)
         do_write(
-            lambda: _bankfeeds().delete_feed_connections(body),
+            lambda: client.delete_feed_connections(body),
             "delete feed connection(s)", confirm="Delete these feed connection(s)?",
             yes=yes, output_json=output_json,
         )
@@ -162,9 +164,10 @@ def _register_statement(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _bankfeeds()
         body = read_data(data, file)
         do_write(
-            lambda: _bankfeeds().create_statements(body),
+            lambda: client.create_statements(body),
             "create statement(s)", confirm="Create these statement(s)?",
             yes=yes, output_json=output_json,
         )

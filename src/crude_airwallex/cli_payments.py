@@ -101,9 +101,10 @@ def intent_create(
     output_json: bool = _JSON,
 ):
     """Create a payment intent from a JSON body. REQUESTS REAL MONEY from a shopper."""
+    client = _client().payments
     body = read_data(data, file)
     do_write(
-        lambda: _client().payments.create_payment_intent(body),
+        lambda: client.create_payment_intent(body),
         "create payment intent",
         confirm="Create this payment intent? (requests real money from a shopper)",
         yes=yes,
@@ -120,9 +121,10 @@ def intent_confirm(
     output_json: bool = _JSON,
 ):
     """Confirm a payment intent. AUTHORIZES A REAL PAYMENT against the shopper."""
+    client = _client().payments
     body = read_data(data, file, required=False)
     do_write(
-        lambda: _client().payments.confirm_payment_intent(intent_id, body),
+        lambda: client.confirm_payment_intent(intent_id, body),
         f"confirm payment intent {intent_id}",
         confirm=f"Confirm payment intent {intent_id}? (authorizes a real payment)",
         yes=yes,
@@ -139,9 +141,10 @@ def intent_capture(
     output_json: bool = _JSON,
 ):
     """Capture an authorized payment intent. MOVES REAL MONEY (settles the charge)."""
+    client = _client().payments
     body = read_data(data, file, required=False)
     do_write(
-        lambda: _client().payments.capture_payment_intent(intent_id, body),
+        lambda: client.capture_payment_intent(intent_id, body),
         f"capture payment intent {intent_id}",
         confirm=f"Capture payment intent {intent_id}? (moves real money)",
         yes=yes,
@@ -158,9 +161,10 @@ def intent_cancel(
     output_json: bool = _JSON,
 ):
     """Cancel a payment intent (voids its authorization)."""
+    client = _client().payments
     body = read_data(data, file, required=False)
     do_write(
-        lambda: _client().payments.cancel_payment_intent(intent_id, body),
+        lambda: client.cancel_payment_intent(intent_id, body),
         f"cancel payment intent {intent_id}",
         confirm=f"Cancel payment intent {intent_id}? (voids the authorization)",
         yes=yes,
@@ -227,9 +231,10 @@ def refund_create(
     output_json: bool = _JSON,
 ):
     """Issue a refund from a JSON body. MOVES REAL MONEY back to the shopper."""
+    client = _client().payments
     body = read_data(data, file)
     do_write(
-        lambda: _client().payments.create_refund(body),
+        lambda: client.create_refund(body),
         "create refund",
         confirm="Issue this refund? (moves real money back to the shopper)",
         yes=yes,
@@ -293,9 +298,10 @@ def customer_create(
     output_json: bool = _JSON,
 ):
     """Create a customer from a JSON body."""
+    client = _client().payments
     body = read_data(data, file)
     do_write(
-        lambda: _client().payments.create_customer(body),
+        lambda: client.create_customer(body),
         "create customer",
         confirm="Create this customer?",
         yes=yes,
@@ -332,8 +338,9 @@ def customer_delete(
     output_json: bool = _JSON,
 ):
     """Delete a customer by id."""
+    client = _client().payments
     do_write(
-        lambda: _client().payments.delete_customer(customer_id),
+        lambda: client.delete_customer(customer_id),
         f"delete customer {customer_id}",
         confirm=f"Delete customer {customer_id}?",
         yes=yes,
@@ -456,9 +463,10 @@ def link_create(
     output_json: bool = _JSON,
 ):
     """Create a payment link from a JSON body. PUBLISHES A PUBLIC PAYMENT PAGE."""
+    client = _client().payments
     body = read_data(data, file)
     do_write(
-        lambda: _client().payments.create_payment_link(body),
+        lambda: client.create_payment_link(body),
         "create payment link",
         confirm="Create this payment link? (publishes a public page that collects real money)",
         yes=yes,

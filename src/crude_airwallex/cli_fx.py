@@ -110,9 +110,10 @@ def conversion_create(
     output_json: bool = _JSON,
 ):
     """Book a conversion from a JSON body. MOVES REAL MONEY."""
+    client = _client().fx
     body = read_data(data, file)
     do_write(
-        lambda: _client().fx.create_conversion(body),
+        lambda: client.create_conversion(body),
         "create conversion",
         confirm="Book this conversion? (moves real money)",
         yes=yes,

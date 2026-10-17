@@ -85,9 +85,10 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            client = _assets()
             body = read_data(data, file)
             do_write(
-                lambda: getattr(_assets(), create_fn)(body),
+                lambda: getattr(client, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
                 yes=yes,

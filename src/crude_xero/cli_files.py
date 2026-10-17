@@ -113,9 +113,10 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            client = _client().files
             body = read_data(data, file)
             do_write(
-                lambda: getattr(_client().files, create_fn)(body),
+                lambda: getattr(client, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
                 yes=yes,
@@ -152,8 +153,9 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            client = _client().files
             do_write(
-                lambda: getattr(_client().files, delete_fn)(guid),
+                lambda: getattr(client, delete_fn)(guid),
                 f"delete {name} {guid}",
                 confirm=f"Delete {name} {guid}?",
                 yes=yes,
@@ -188,11 +190,12 @@ def register(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().files
         content = Path(file_path).read_bytes()
         stored = name or os.path.basename(file_path)
         ct = mime or mimetypes.guess_type(file_path)[0] or "application/octet-stream"
         do_write(
-            lambda: _client().files.upload_file(stored, content, ct, folder_id=folder),
+            lambda: client.upload_file(stored, content, ct, folder_id=folder),
             f"upload {stored}", yes=yes, output_json=output_json,
         )
 
@@ -263,9 +266,10 @@ def _register_associations(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().files
         body = read_data(data, file)
         do_write(
-            lambda: _client().files.create_association(file_id, body),
+            lambda: client.create_association(file_id, body),
             f"associate file {file_id}", yes=yes, output_json=output_json,
         )
 
@@ -276,8 +280,9 @@ def _register_associations(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        client = _client().files
         do_write(
-            lambda: _client().files.delete_association(file_id, object_id),
+            lambda: client.delete_association(file_id, object_id),
             f"remove association {object_id} from file {file_id}",
             confirm=f"Remove association {object_id} from file {file_id}?",
             yes=yes, output_json=output_json,

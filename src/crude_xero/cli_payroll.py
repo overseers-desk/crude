@@ -217,9 +217,10 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            papi = _payroll()
             body = read_data(data, file)
             do_write(
-                lambda: getattr(_payroll(), create_fn)(body),
+                lambda: getattr(papi, create_fn)(body),
                 f"create {name}",
                 confirm=f"Create this {name}?",
                 yes=yes,
@@ -256,8 +257,9 @@ def _resource(
             yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
             output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
         ):
+            papi = _payroll()
             do_write(
-                lambda: getattr(_payroll(), delete_fn)(guid),
+                lambda: getattr(papi, delete_fn)(guid),
                 f"delete {name} {guid}",
                 confirm=f"Delete {name} {guid}?",
                 yes=yes,
@@ -350,9 +352,10 @@ def _register_pay_item(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _payroll()
         body = read_data(data, file)
         do_write(
-            lambda: _payroll().create_pay_item(body),
+            lambda: papi.create_pay_item(body),
             "create pay item", confirm="Create this pay item?",
             yes=yes, output_json=output_json,
         )
@@ -364,9 +367,10 @@ def _register_pay_item(app: typer.Typer) -> None:
         yes: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
         output_json: bool = typer.Option(False, "--json", help="Print raw JSON of the result."),
     ):
+        papi = _payroll()
         body = read_data(data, file)
         do_write(
-            lambda: _payroll().update_pay_item(body),
+            lambda: papi.update_pay_item(body),
             "update pay item", confirm="Update this pay item?",
             yes=yes, output_json=output_json,
         )

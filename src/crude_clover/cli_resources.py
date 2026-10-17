@@ -204,8 +204,9 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
+            client = _client()
             body = read_data(data, file)
-            do_write(lambda: _client().resources.create(seg, body),
+            do_write(lambda: client.resources.create(seg, body),
                       f"create {name}", confirm=f"Create this {name}? (writes to the live POS)",
                       yes=yes, output_json=output_json)
 
@@ -217,8 +218,9 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
+            client = _client()
             body = read_data(data, file)
-            do_write(lambda: _client().resources.update(seg, rid, body),
+            do_write(lambda: client.resources.update(seg, rid, body),
                       f"update {name} {rid}", confirm=f"Update {name} {rid}? (writes to the live POS)",
                       yes=yes, output_json=output_json)
 
@@ -228,7 +230,8 @@ def _resource(spec) -> typer.Typer:
             yes: bool = _YES,
             output_json: bool = _JSON,
         ):
-            do_write(lambda: _client().resources.delete(seg, rid),
+            client = _client()
+            do_write(lambda: client.resources.delete(seg, rid),
                       f"delete {name} {rid}", confirm=f"Delete {name} {rid}? (cannot be undone)",
                       yes=yes, output_json=output_json)
 
@@ -313,8 +316,9 @@ def _g_create(
     output_json: bool = _JSON,
 ):
     """Create any record. MUTATES THE LIVE POS."""
+    client = _client()
     body = read_data(data, file)
-    do_write(lambda: _client().resources.create(segment, body),
+    do_write(lambda: client.resources.create(segment, body),
               f"create {segment}", confirm=f"Create this {segment}? (writes to the live POS)",
               yes=yes, output_json=output_json)
 
@@ -329,8 +333,9 @@ def _g_update(
     output_json: bool = _JSON,
 ):
     """Update any record (partial). MUTATES THE LIVE POS."""
+    client = _client()
     body = read_data(data, file)
-    do_write(lambda: _client().resources.update(segment, rid, body),
+    do_write(lambda: client.resources.update(segment, rid, body),
               f"update {segment} {rid}", confirm=f"Update {segment} {rid}? (writes to the live POS)",
               yes=yes, output_json=output_json)
 
@@ -343,7 +348,8 @@ def _g_delete(
     output_json: bool = _JSON,
 ):
     """Delete any record. Irreversible."""
-    do_write(lambda: _client().resources.delete(segment, rid),
+    client = _client()
+    do_write(lambda: client.resources.delete(segment, rid),
               f"delete {segment} {rid}", confirm=f"Delete {segment} {rid}? (cannot be undone)",
               yes=yes, output_json=output_json)
 
