@@ -47,6 +47,8 @@ def register(app: typer.Typer) -> None:
         _check_endpoint(on, ATTACHMENT_ENDPOINTS)
         try:
             items = _client().accounting.list_attachments(on, id_)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching attachments: {e}", err=True)
             raise typer.Exit(1)
@@ -67,6 +69,8 @@ def register(app: typer.Typer) -> None:
         _check_endpoint(on, ATTACHMENT_ENDPOINTS)
         try:
             content = _client().accounting.get_attachment(on, id_, file)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching attachment: {e}", err=True)
             raise typer.Exit(1)
@@ -99,6 +103,8 @@ def register(app: typer.Typer) -> None:
         _check_endpoint(on, HISTORY_ENDPOINTS)
         try:
             items = _client().accounting.list_history(on, id_)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching history: {e}", err=True)
             raise typer.Exit(1)

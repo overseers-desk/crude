@@ -80,6 +80,8 @@ def _resource(
             try:
                 items = getattr(_client().files, list_fn)(
                     all_pages=fetch_all, limit=None if fetch_all else limit)
+            except typer.Exit:
+                raise
             except Exception as e:
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
@@ -95,6 +97,8 @@ def _resource(
         ):
             try:
                 item = getattr(_client().files, get_fn)(guid)
+            except typer.Exit:
+                raise
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
@@ -199,6 +203,8 @@ def register(app: typer.Typer) -> None:
     ):
         try:
             content = _client().files.get_file_content(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching file content: {e}", err=True)
             raise typer.Exit(1)
@@ -228,6 +234,8 @@ def _register_associations(app: typer.Typer) -> None:
     ):
         try:
             items = _client().files.list_file_associations(file_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching associations: {e}", err=True)
             raise typer.Exit(1)
@@ -240,6 +248,8 @@ def _register_associations(app: typer.Typer) -> None:
     ):
         try:
             items = _client().files.list_object_associations(object_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching associations: {e}", err=True)
             raise typer.Exit(1)
@@ -285,6 +295,8 @@ def _register_inbox(app: typer.Typer) -> None:
     ):
         try:
             item = _client().files.list_inbox()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching inbox: {e}", err=True)
             raise typer.Exit(1)

@@ -132,6 +132,8 @@ def _add_pdf(sub: typer.Typer, method: str, name: str, label: str) -> None:
     ):
         try:
             content = getattr(_client().accounting, method)(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {name} PDF: {e}", err=True)
             raise typer.Exit(1)
@@ -194,6 +196,8 @@ def _resource(
             return getattr(_client().accounting, list_fn)(
                 where=where, order=order, all_pages=fetch_all,
                 limit=None if fetch_all else limit)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {label}: {e}", err=True)
             raise typer.Exit(1)
@@ -239,6 +243,8 @@ def _resource(
             try:
                 items = getattr(_client().accounting, list_fn)(
                     all_pages=fetch_all, limit=None if fetch_all else limit)
+            except typer.Exit:
+                raise
             except Exception as e:
                 typer.echo(f"Error fetching {label}: {e}", err=True)
                 raise typer.Exit(1)
@@ -248,6 +254,8 @@ def _resource(
     def _fetch_one(guid):
         try:
             return getattr(_client().accounting, get_fn)(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
             raise typer.Exit(1)
@@ -481,6 +489,8 @@ def register(app: typer.Typer) -> None:
     ):
         try:
             item = _client().accounting.get_invoice_online_url(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching invoice online URL: {e}", err=True)
             raise typer.Exit(1)
@@ -512,6 +522,8 @@ def register(app: typer.Typer) -> None:
         try:
             items = _client().accounting.list_journals(
                 offset=offset, all_pages=fetch_all, limit=None if fetch_all else limit)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching journals: {e}", err=True)
             raise typer.Exit(1)
@@ -549,6 +561,8 @@ def register(app: typer.Typer) -> None:
     ):
         try:
             item = _client().accounting.get_organisation()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching organisation: {e}", err=True)
             raise typer.Exit(1)
@@ -714,6 +728,8 @@ def _register_reports(app: typer.Typer) -> None:
     ):
         try:
             items = _client().accounting.list_reports()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching reports: {e}", err=True)
             raise typer.Exit(1)
@@ -755,6 +771,8 @@ def _add_report(report: typer.Typer, cmd_name: str, xero_name: str) -> None:
             params[k] = v
         try:
             result = _client().accounting.get_report(xero_name, params or None)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {cmd_name} report: {e}", err=True)
             raise typer.Exit(1)

@@ -69,6 +69,8 @@ def _register_feed_connection(app: typer.Typer) -> None:
     ):
         try:
             items = _bankfeeds().list_feed_connections(page=page, page_size=page_size)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching feed connections: {e}", err=True)
             raise typer.Exit(1)
@@ -81,6 +83,8 @@ def _register_feed_connection(app: typer.Typer) -> None:
     ):
         try:
             item = _bankfeeds().get_feed_connection(feed_connection_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching feed connection {feed_connection_id}: {e}", err=True)
             raise typer.Exit(1)
@@ -130,6 +134,8 @@ def _register_statement(app: typer.Typer) -> None:
     ):
         try:
             items = _bankfeeds().list_statements(page=page, page_size=page_size)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching statements: {e}", err=True)
             raise typer.Exit(1)
@@ -142,6 +148,8 @@ def _register_statement(app: typer.Typer) -> None:
     ):
         try:
             item = _bankfeeds().get_statement(statement_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching statement {statement_id}: {e}", err=True)
             raise typer.Exit(1)

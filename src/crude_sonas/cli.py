@@ -451,6 +451,8 @@ def event_list(
     client = _make_client(read_config(find_config()))
     try:
         events = client.list_events(from_, to, _zone())
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error listing events: {e}", err=True)
         raise typer.Exit(1)
@@ -631,6 +633,8 @@ def event_export(
             (out_dir / f"{event_id}.json").write_text(
                 json.dumps(bundle, indent=2, ensure_ascii=False))
             index.append(_index_row(bundle))
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error exporting corpus: {e}", err=True)
         raise typer.Exit(1)
@@ -720,6 +724,8 @@ def event_leads(
         leads = []
         if show_list or output_json:
             leads = [_lead_row(client, event_id) for event_id in ids]
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error counting leads: {e}", err=True)
         raise typer.Exit(1)
@@ -2074,6 +2080,8 @@ def availability_list(
     try:
         items = client.read_pub("availabilityByDateRange", _range_params(from_, to),
                                 collection="availability")
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error fetching availability: {e}", err=True)
         raise typer.Exit(1)
@@ -2150,6 +2158,8 @@ def appointment_list(
     try:
         items = client.read_pub("calendarEventsByDateRange", _range_params(from_, to),
                                 collection="calendar-events")
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error fetching appointments: {e}", err=True)
         raise typer.Exit(1)
@@ -2275,6 +2285,8 @@ def tasting_list(
     try:
         items = client.read_pub("tastingEventsByDateRange", _range_params(from_, to),
                                 collection="tasting-events")
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error fetching tasting events: {e}", err=True)
         raise typer.Exit(1)

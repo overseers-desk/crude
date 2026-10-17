@@ -77,6 +77,8 @@ def _register_project(app: typer.Typer) -> None:
         try:
             items = _projects().list_projects(
                 page=page, page_size=page_size, states=states, contact_id=contact)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching projects: {e}", err=True)
             raise typer.Exit(1)
@@ -89,6 +91,8 @@ def _register_project(app: typer.Typer) -> None:
     ):
         try:
             item = _projects().get_project(project_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching project {project_id}: {e}", err=True)
             raise typer.Exit(1)
@@ -143,6 +147,8 @@ def _register_task(app: typer.Typer) -> None:
     ):
         try:
             items = _projects().list_tasks(project_id, page=page, page_size=page_size)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching tasks: {e}", err=True)
             raise typer.Exit(1)
@@ -156,6 +162,8 @@ def _register_task(app: typer.Typer) -> None:
     ):
         try:
             item = _projects().get_task(project_id, task_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching task {task_id}: {e}", err=True)
             raise typer.Exit(1)
@@ -219,6 +227,8 @@ def _register_time(app: typer.Typer) -> None:
     ):
         try:
             items = _projects().list_time(project_id, page=page, page_size=page_size)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching time entries: {e}", err=True)
             raise typer.Exit(1)
@@ -232,6 +242,8 @@ def _register_time(app: typer.Typer) -> None:
     ):
         try:
             item = _projects().get_time(project_id, time_id)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching time entry {time_id}: {e}", err=True)
             raise typer.Exit(1)
@@ -292,6 +304,8 @@ def _register_project_user(app: typer.Typer) -> None:
     ):
         try:
             items = _projects().list_project_users()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching project users: {e}", err=True)
             raise typer.Exit(1)

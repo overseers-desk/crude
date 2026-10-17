@@ -69,6 +69,8 @@ def _resource(
         ):
             try:
                 item = getattr(_assets(), get_fn)(guid)
+            except typer.Exit:
+                raise
             except Exception as e:
                 typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
                 raise typer.Exit(1)
@@ -125,6 +127,8 @@ def register(app: typer.Typer) -> None:
             raise typer.Exit(1)
         try:
             items = _assets().list_assets(key, page=page, page_size=limit, order_by=order_by)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching assets: {e}", err=True)
             raise typer.Exit(1)
@@ -143,6 +147,8 @@ def register(app: typer.Typer) -> None:
     ):
         try:
             items = _assets().list_asset_types()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching asset types: {e}", err=True)
             raise typer.Exit(1)
@@ -161,6 +167,8 @@ def register(app: typer.Typer) -> None:
     ):
         try:
             item = _assets().get_settings()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching asset settings: {e}", err=True)
             raise typer.Exit(1)

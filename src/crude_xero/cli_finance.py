@@ -107,6 +107,8 @@ def _register_cash_validation(app: typer.Typer) -> None:
         params = _params(balance_date=balance_date, extra=param)
         try:
             result = _finance().get_cash_validation(params or None)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching cash validation: {e}", err=True)
             raise typer.Exit(1)
@@ -133,6 +135,8 @@ def _register_bank_statement(app: typer.Typer) -> None:
             result = _finance().get_bank_statement_accounting(
                 bank_account, from_date, to_date, summary_only=summary_only or None
             )
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching bank-statement accounting: {e}", err=True)
             raise typer.Exit(1)
@@ -174,6 +178,8 @@ def _add_param_command(sub: typer.Typer, cmd_name: str, method: str, label: str)
         params = _params(date=date, from_date=from_date, to_date=to_date, extra=param)
         try:
             result = getattr(_finance(), method)(params or None)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {label}: {e}", err=True)
             raise typer.Exit(1)

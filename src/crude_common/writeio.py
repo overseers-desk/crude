@@ -58,6 +58,8 @@ def do_write(action: Callable, what: str, *, confirm: Optional[str] = None,
         typer.confirm(confirm, abort=True)
     try:
         result = action()
+    except typer.Exit:
+        raise
     except Exception as e:
         typer.echo(f"Error: {what}: {e}", err=True)
         raise typer.Exit(1)

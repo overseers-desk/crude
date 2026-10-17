@@ -145,6 +145,8 @@ def _resource(
         try:
             return getattr(_payroll(), list_fn)(
                 all_pages=fetch_all, limit=None if fetch_all else limit)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {label}: {e}", err=True)
             raise typer.Exit(1)
@@ -178,6 +180,8 @@ def _resource(
     def _fetch_one(guid):
         try:
             return getattr(_payroll(), get_fn)(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching {label} {guid}: {e}", err=True)
             raise typer.Exit(1)
@@ -332,6 +336,8 @@ def _register_pay_item(app: typer.Typer) -> None:
     ):
         try:
             item = _payroll().list_pay_items()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching pay items: {e}", err=True)
             raise typer.Exit(1)
@@ -378,6 +384,8 @@ def _register_payslip(app: typer.Typer) -> None:
     ):
         try:
             item = _payroll().get_payslip(guid)
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching payslip {guid}: {e}", err=True)
             raise typer.Exit(1)
@@ -395,6 +403,8 @@ def _register_settings(app: typer.Typer) -> None:
     ):
         try:
             item = _payroll().get_settings()
+        except typer.Exit:
+            raise
         except Exception as e:
             typer.echo(f"Error fetching payroll settings: {e}", err=True)
             raise typer.Exit(1)
