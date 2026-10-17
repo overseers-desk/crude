@@ -149,7 +149,11 @@ def _resolve_tenant(xero_section: dict, session: XeroSession, requested: Optiona
     Calling connections() may trigger a token refresh; that is expected.
     """
     want = requested or xero_section.get("default_tenant")
-    conns = session.connections()
+    try:
+        conns = session.connections()
+    except XeroError as e:
+        typer.echo(f"Error fetching connections: {e}", err=True)
+        raise typer.Exit(1)
     if not conns:
         typer.echo(
             "Error: this token reaches no Xero organisations; run `crude-xero auth`.",
