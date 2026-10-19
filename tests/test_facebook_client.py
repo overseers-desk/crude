@@ -2,7 +2,8 @@
 
 Pins the auth-param injection, the appsecret_proof, the Graph error-code mapping,
 cursor pagination, the config page-id fallback (so calls work when /me/accounts is
-empty), and the insight-value shapes.
+empty), the insight-value shapes, and that a connection failure or an error body
+of another shape still ends as a FacebookError, with no token in its text.
 """
 
 from types import SimpleNamespace
@@ -94,3 +95,34 @@ def test_insight_value_handles_both_shapes():
     assert insight_value({"total_value": {"value": 5}}) == 5
     assert insight_value({"values": [{"value": 1}, {"value": 2}]}) == 2
     assert insight_value({}) is None
+
+
+def test_a_connection_failure_raises_a_facebook_error_without_the_token(monkeypatch):
+    """requests quotes the request URL in a connection error, and the token rides in
+    its query string; the FacebookError keeps the path and drops the query."""
+    import socket
+    import traceback
+
+    def no_dns(*a, **k):
+        raise socket.gaierror(-2, "Name or service not known")
+
+    monkeypatch.setattr(socket, "getaddrinfo", no_dns)
+    s = FacebookSession("FAKE-TOKEN-0123456789", app_secret="fake-secret")
+    s.session.trust_env = False
+    with pytest.raises(FacebookError) as e:
+        s.page
+    shown = "".join(traceback.format_exception(e.type, e.value, e.tb))
+    assert "/me/accounts" in str(e.value)
+    assert "FAKE-TOKEN" not in shown
+    assert appsecret_proof("FAKE-TOKEN-0123456789", "fake-secret") not in shown
+    assert e.value.__cause__ is None and e.value.__suppress_context__
+
+
+@pytest.mark.parametrize("body", [{"error": "unauthorized"}, "unauthorized"])
+def test_raise_handles_an_error_body_that_is_not_a_graph_error(body):
+    s = FacebookSession("tok")
+    r = SimpleNamespace(status_code=401, text="unauthorized", json=lambda: body)
+    with pytest.raises(FacebookError) as e:
+        s._raise(r)
+    assert "unauthorized" in str(e.value)
+    assert e.value.status == 401

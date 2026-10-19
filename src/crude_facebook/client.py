@@ -18,6 +18,9 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
+
+import requests
 
 from crude_common import asof
 from crude_common.httpapi import HttpSession
@@ -56,6 +59,10 @@ def insight_rows(data: list) -> list:
     ]
 
 
+# A URL's query string, where the access_token and appsecret_proof ride.
+_QUERY = re.compile(r"\?[^\s'\"]*")
+
+
 def appsecret_proof(token: str, app_secret: str) -> str:
     """The Graph appsecret_proof: HMAC-SHA256 of the token, keyed by the app secret."""
     return hmac.new(app_secret.encode(), token.encode(), hashlib.sha256).hexdigest()
@@ -92,7 +99,15 @@ class FacebookSession(HttpSession):
         return p
 
     def _call(self, method, path, token, *, params=None):
-        return self._request(method, path, params=self._params(token, params))
+        """One Graph request; a transport failure raises FacebookError, query cut.
+
+        requests quotes the full URL, token included, in a connection error, so the
+        message is rebuilt without any query string and the original is not chained.
+        """
+        try:
+            return self._request(method, path, params=self._params(token, params))
+        except requests.RequestException as e:
+            raise FacebookError(_QUERY.sub("", str(e))) from None
 
     def get(self, path, *, params=None, token=None):
         return self._call("GET", path, token or self.page_token, params=params)
@@ -112,8 +127,13 @@ class FacebookSession(HttpSession):
 
     def _raise(self, r) -> None:
         try:
-            err = r.json().get("error", {})
+            body = r.json()
         except ValueError:
+            body = None
+        err = body.get("error") if isinstance(body, dict) else None
+        if isinstance(err, str):
+            err = {"message": err}
+        elif not isinstance(err, dict):
             err = {}
         code = err.get("code")
         msg = err.get("message") or f"HTTP {r.status_code}: {r.text[:200]}"
