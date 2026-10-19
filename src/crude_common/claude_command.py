@@ -47,6 +47,8 @@ allowed-tools: Bash
 
 crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`, `[wise]`). Add `--json` to any read command for machine-readable output.
 
+Leave `config.toml` and the cached token files under `$XDG_STATE_HOME/crude/` (default `~/.local/state/crude/`) unread, even to diagnose a failure: what you read stays in the transcript. Check credentials with the site's `status` or `login` command instead (`crude-xero tenants`, `crude-deputy me`; crude-rezdy and crude-sonas have neither, so run a small read).
+
 A `timezone` key in the config (an IANA name; top level for every site, or inside a site's section, where it wins) is the zone typed dates are read in and times are shown in; the machine's zone applies when none is set.
 
 A site can hold several accounts. The bare `[site]` section is the default account; a `[site.<name>]` subtable is a named one. Select it with `--account/-a <name>` before the resource (or `$CRUDE_ACCOUNT`), e.g. `crude-rezdy --account es booking cancellations --from 2026-05-03`. Without `--account`, the default account is used.
@@ -245,7 +247,7 @@ Appointment --type takes a name or number: ShowAround, Meeting, Holiday, OpenDay
 
 ## crude-xero (xero.com)
 
-Xero accounting over the official OAuth2 APIs. Credentials in `[xero]` (`client_id`, `redirect_uri` = a localhost loopback, `scopes`, plus `client_secret` only when riding a Web-app registration); tokens cache in `~/.config/crude/xero_token.json` and refresh automatically. One Xero login can reach several organisations (tenants); pick one with `--tenant/-t <name|id>` (distinct from `--account`, which picks the connection). Writes need write scopes enabled on the Xero app, then a fresh `crude-xero auth`. Tables and record views show Xero's `/Date(ms)/` dates as days and its `...UTC` stamps as times in the config's `timezone`; `--json` keeps Xero's form.
+Xero accounting over the official OAuth2 APIs. Credentials in `[xero]` (`client_id`, `redirect_uri` = a localhost loopback, `scopes`, plus `client_secret` only when riding a Web-app registration); tokens cache in `$XDG_STATE_HOME/crude/xero_token.json` (default `~/.local/state/crude/`) and refresh automatically. One Xero login can reach several organisations (tenants); pick one with `--tenant/-t <name|id>` (distinct from `--account`, which picks the connection). Writes need write scopes enabled on the Xero app, then a fresh `crude-xero auth`. Tables and record views show Xero's `/Date(ms)/` dates as days and its `...UTC` stamps as times in the config's `timezone`; `--json` keeps Xero's form.
 
     crude-xero auth [--manual] [--no-browser]      # one-time browser consent
     crude-xero tenants                              # list reachable organisations
