@@ -34,7 +34,7 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import requests
 
-from crude_common.statestore import atomic_write, state_path
+from crude_common.statestore import state_path, write_or_exit
 from crude_xero.client import XeroAuthError
 
 AUTHORIZE_URL = "https://login.xero.com/identity/connect/authorize"
@@ -322,8 +322,12 @@ def load_tokens(account, xero_section) -> dict | None:
 
 
 def save_tokens(account, tokens) -> None:
-    """Persist a token set atomically (mode 0600) to the durable side file."""
-    atomic_write(token_store_path(account), json.dumps(tokens, indent=2))
+    """Persist a token set atomically (mode 0600) to the durable side file.
+
+    A file that cannot be written ends the command with one line naming it,
+    after a refresh as well, though the rotated token is then in memory only.
+    """
+    write_or_exit(token_store_path(account), json.dumps(tokens, indent=2))
 
 
 @contextlib.contextmanager

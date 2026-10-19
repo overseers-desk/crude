@@ -17,6 +17,8 @@ import os
 import tempfile
 from pathlib import Path
 
+import typer
+
 
 def state_path(name: str, account: str | None = None) -> Path:
     """The durable state file ``name`` for ``account`` under ``$XDG_STATE_HOME``.
@@ -51,3 +53,17 @@ def atomic_write(path: Path, text: str) -> None:
         except OSError:
             pass
         raise
+
+
+def write_or_exit(path: Path, text: str) -> None:
+    """``atomic_write``, or end the command with one line naming ``path``.
+
+    For a credential write with no ``try`` around it: an unwritable state
+    directory would otherwise end the command in a traceback, and an AI agent's
+    transcript keeps whatever a traceback prints.
+    """
+    try:
+        atomic_write(path, text)
+    except OSError:
+        typer.echo(f"Error: could not write {path}", err=True)
+        raise typer.Exit(1)
