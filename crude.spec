@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.4
+Version:        1.6.5
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -96,6 +96,31 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Mon Oct 19 2026 Weiwu Zhang <a@colourful.land> - 1.6.5-1
+- A crash in any crude binary no longer prints its local variables. Under
+  Typer 0.15, which Debian ships and which shows locals by default, a crash
+  printed the whole config.toml with every site's credentials.
+- crude-facebook: a connection, DNS or SSL failure no longer prints the
+  access token, and an error body whose error is a plain string ends with a
+  FacebookError.
+- A token or session file that cannot be saved ends the command with one
+  line naming the file, instead of a traceback.
+- crude-atdw login and crude-skal login no longer print part of the token or
+  session cookie.
+- The Claude command tells agents to leave config.toml and the token files
+  unread and to check credentials with a site's status or login command, and
+  gives the Xero token's real path.
+- An expired Xero login while resolving the tenant ends any crude-xero
+  command with one line, as crude-xero tenants does.
+- A crude-xero, crude-airwallex or crude-clover write builds its client
+  before the [y/N] prompt, so a config it cannot be built from ends the
+  command with its own error first.
+- A config or tenant helper's own exit ends the command with only its
+  message.
+- A read-only Claude Code tree no longer fails the command the user ran: the
+  per-run refresh of the Claude Code command file skips a write it cannot
+  make.
+
 * Sun Oct 11 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.6.4-1
 - crude-xero: the `employee` help says it is the Accounting API record and
   points payroll staff at `pay-employee`; the Claude command lists the
