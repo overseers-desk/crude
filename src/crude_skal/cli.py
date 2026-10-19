@@ -24,7 +24,11 @@ from crude_common.localtime import format_local
 from crude_common.output import emit_list, emit_record
 from crude_common.statestore import atomic_write
 
-app = typer.Typer(help="crude-skal — Skål Australia member portal.")
+app = typer.Typer(
+    help="crude-skal — Skål Australia member portal.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
+)
 member_app = typer.Typer(help="Skål members.")
 club_app = typer.Typer(help="Skål clubs.")
 event_app = typer.Typer(help="Skål events.")

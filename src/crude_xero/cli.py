@@ -77,7 +77,9 @@ DEFAULT_SCOPES = (
 
 app = typer.Typer(
     help="crude-xero — Xero accounting (and Payroll, Files, Assets, Projects, "
-    "BankFeeds, Finance) over the public APIs."
+    "BankFeeds, Finance) over the public APIs.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
 )
 
 # The --tenant selection for this invocation, set by the root callback. Process

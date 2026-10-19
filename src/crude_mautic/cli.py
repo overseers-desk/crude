@@ -18,6 +18,8 @@ from crude_mautic.client import MauticSession
 
 app = typer.Typer(
     help="crude-mautic — Mautic forms, submissions, contacts, segments and campaigns.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
 )
 
 register_claude_command(app)

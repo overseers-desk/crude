@@ -18,6 +18,8 @@ from crude_facebook.client import FacebookSession
 
 app = typer.Typer(
     help="crude-facebook — Facebook Page posts, insights, and comments over the Graph API.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
 )
 
 register_claude_command(app)

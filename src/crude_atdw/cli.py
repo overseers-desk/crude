@@ -22,7 +22,11 @@ from crude_common.localtime import format_local
 from crude_common.output import emit_list
 from crude_common.statestore import atomic_write
 
-app = typer.Typer(help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.")
+app = typer.Typer(
+    help="crude-atdw — ATDW (Australian Tourism Data Warehouse) listings.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
+)
 listing_app = typer.Typer(help="ATDW listings — list, get, create, update, submit.")
 app.add_typer(listing_app, name="listing")
 console = Console()

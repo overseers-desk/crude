@@ -18,6 +18,8 @@ from crude_clover.client import CloverClient, CloverSession
 
 app = typer.Typer(
     help="crude-clover — AP Clover POS orders, catalog, and Square-shape export over the REST API.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
 )
 
 register_claude_command(app)

@@ -32,7 +32,11 @@ from crude_common.config import (
 from crude_common.ldif import LdifSink, PersonMap
 from crude_common.output import emit_list, emit_record
 
-app = typer.Typer(help="crude-deputy — Deputy rostering, timesheets, leave, employees.")
+app = typer.Typer(
+    help="crude-deputy — Deputy rostering, timesheets, leave, employees.",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
+)
 employee_app = typer.Typer(help="Deputy employees.")
 roster_app = typer.Typer(help="Deputy rosters (shifts).")
 area_app = typer.Typer(help="Deputy areas (operational units).")

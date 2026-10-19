@@ -26,7 +26,11 @@ from crude_common.localtime import format_local, localize, parse_iso_utc
 from crude_common.output import emit_list, emit_record
 from crude_common.writeio import do_write, merge_update, read_data
 
-app = typer.Typer(help="crude-rezdy — Rezdy Supplier API (products, availability, bookings, and more).")
+app = typer.Typer(
+    help="crude-rezdy — Rezdy Supplier API (products, availability, bookings, and more).",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
+)
 product_app = typer.Typer(help="Rezdy products — list, get, create, update, delete, image-add, image-remove, pickups.")
 availability_app = typer.Typer(help="Rezdy availability (sessions) — list, create, update, delete, batch.")
 booking_app = typer.Typer(help="Rezdy bookings — list, cancellations, get, quote, create, update, cancel.")

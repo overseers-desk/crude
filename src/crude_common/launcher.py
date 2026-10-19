@@ -20,6 +20,8 @@ from crude_common.claude_command import (
 
 app = typer.Typer(
     help="crude — index of the per-site CLIs (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas, crude-xero, crude-airwallex, crude-clover, crude-facebook, crude-mautic, crude-wise).",
+    # A traceback must not print frame locals, here as in every site binary.
+    pretty_exceptions_show_locals=False,
 )
 
 # (binary, one-line description) for the no-argument listing. This is the index

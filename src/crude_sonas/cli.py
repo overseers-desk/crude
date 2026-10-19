@@ -39,7 +39,11 @@ from crude_sonas.client import (
     to_ejson_date_end,
 )
 
-app = typer.Typer(help="crude-sonas — Sonas wedding-venue software (app.sonas.events).")
+app = typer.Typer(
+    help="crude-sonas — Sonas wedding-venue software (app.sonas.events).",
+    # A traceback must not print frame locals: they hold the config's secrets.
+    pretty_exceptions_show_locals=False,
+)
 event_app = typer.Typer(help="Events (weddings and other bookings).")
 app.add_typer(event_app, name="event")
 guest_app = typer.Typer(help="An event's named guests and its headcount.")
