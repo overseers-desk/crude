@@ -324,8 +324,9 @@ def load_tokens(account, xero_section) -> dict | None:
 def save_tokens(account, tokens) -> None:
     """Persist a token set atomically (mode 0600) to the durable side file.
 
-    A file that cannot be written ends the command with one line naming it,
-    after a refresh as well, though the rotated token is then in memory only.
+    A file that cannot be written ends the command with one line naming it.
+    After a refresh that loses the rotated refresh token, which was in memory
+    only; whether to carry on with it instead is open.
     """
     write_or_exit(token_store_path(account), json.dumps(tokens, indent=2))
 

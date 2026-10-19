@@ -1,9 +1,9 @@
 """A token or session that cannot be saved ends the command with one line.
 
-These writes sat outside any ``try``, so an unwritable state directory (a
-read-only sandbox, a full disk) ended the command in a traceback, and an AI
-agent's transcript keeps whatever a traceback prints. Each now ends the command
-with a line naming the file that could not be written. The tests run real
+No caller of these writes catches an OSError, so an unwritable state directory
+(a read-only sandbox, a full disk) must not end the command in a traceback, which
+an AI agent's transcript keeps. Each write ends the command instead with a line
+naming the file that could not be written. The tests run real
 commands against a config on disk, with the state directory made read-only and
 the login or token grant replaced by a fake, so nothing reaches a network.
 """

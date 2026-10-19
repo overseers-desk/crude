@@ -1,8 +1,8 @@
 """Every crude binary's root app keeps frame locals out of its tracebacks.
 
 crude is run by AI agents, whose transcripts keep whatever a crash prints. Typer's
-rich traceback shows each frame's local variables, by default in the Typer this
-host runs (0.15), and a frame there holds the parsed config, every site's password
+rich traceback shows each frame's local variables, by default in Typer 0.15 at
+least, and a frame there holds the parsed config, every site's password
 and token included. So each root app named in ``[project.scripts]`` must pass
 ``pretty_exceptions_show_locals=False`` itself. The check reads the ``Typer(...)``
 call in the source rather than the app's attribute: under a Typer whose default is

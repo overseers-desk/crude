@@ -1,8 +1,8 @@
 """A login prints no part of the credential it obtained.
 
-crude-atdw login printed the JWT's first 40 characters and crude-skal login the
-session cookie's first 16, into the transcript of the AI agent that ran it. The
-login itself is a fake here, so nothing reaches a network.
+The transcript of the AI agent that runs crude-atdw or crude-skal keeps whatever
+the login prints, the JWT or session cookie included. The login itself is a fake
+here, so nothing reaches a network.
 """
 
 import pytest
