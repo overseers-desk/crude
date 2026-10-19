@@ -99,7 +99,6 @@ def login():
     cache = token_path()
     write_or_exit(cache, token)
     typer.echo(f"Login successful. Token cached in {cache}")
-    typer.echo(f"Token (first 40 chars): {token[:40]}...")
 
 
 @listing_app.command("list")

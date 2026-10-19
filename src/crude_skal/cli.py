@@ -186,7 +186,6 @@ def login():
     _write_config(config_path, config)
 
     typer.echo(f"Login successful. Session cached in {cache}")
-    typer.echo(f"Session ID: {session_id[:16]}...")
 
 
 @member_app.command("list")
