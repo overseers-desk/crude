@@ -1,4 +1,4 @@
-"""crude-business-profile — your own Google Business Profile over Google's APIs.
+"""crude-business-profile: your own Google Business Profile over Google's APIs.
 
 Reads the locations a Google account manages and their reviews, and writes the
 business's reply to a review, in the ``crude-business-profile <resource> <verb>``

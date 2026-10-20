@@ -1,4 +1,4 @@
-"""The shared consent capture (crude_common.oauth_consent) — no browser, no network.
+"""The shared consent capture (crude_common.oauth_consent): no browser, no network.
 
 Pins what the two consent paths promise their callers: the loopback server
 serves one request on the redirect URI's port and hands back the code only when
