@@ -39,7 +39,7 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), wise.com (Wise Business balances, statements, transfers, recipients), business.google.com (your own Google Business Profile: the locations you manage, their reviews, your replies to them), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), wise.com (Wise Business balances, statements, transfers, recipients), business.google.com (Google Business Profile: Google reviews, replies, locations), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
 allowed-tools: Bash
 ---
 

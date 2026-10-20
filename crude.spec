@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.6
+Version:        1.6.7
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -100,6 +100,10 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Tue Oct 20 2026 Weiwu Zhang <a@colourful.land> - 1.6.7-1
+- The Claude command's description names Google reviews outright for
+  crude-business-profile, as tightly as the other sites' entries.
+
 * Tue Oct 20 2026 Weiwu Zhang <a@colourful.land> - 1.6.6-1
 - Add crude-business-profile: your own Google Business Profile over Google's
   Business Profile APIs: the locations a Google account manages with their
