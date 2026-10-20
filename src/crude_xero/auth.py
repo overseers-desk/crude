@@ -18,22 +18,24 @@ naive datetime.
 
 from __future__ import annotations
 
-import base64
 import contextlib
 import fcntl
-import hashlib
 import json
 import os
-import secrets
 import time
-import webbrowser
 from datetime import datetime
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 import requests
 
+from crude_common.oauth_consent import (  # noqa: F401  (re-exported for callers and tests)
+    generate_pkce_verifier,
+    generate_state,
+    loopback_code,
+    manual_code,
+    pkce_challenge,
+)
 from crude_common.statestore import state_path, write_or_exit
 from crude_xero.client import XeroAuthError
 
@@ -48,22 +50,6 @@ _ACCESS_TTL = 1800
 def _scope_str(scopes) -> str:
     """Coerce scopes (list or pre-joined string) to a space-separated string."""
     return scopes if isinstance(scopes, str) else " ".join(scopes)
-
-
-def generate_state() -> str:
-    """A CSRF state token for the authorize round-trip."""
-    return secrets.token_urlsafe(24)
-
-
-def generate_pkce_verifier() -> str:
-    """A one-shot PKCE code_verifier (86 URL-safe chars, within the 43-128 range)."""
-    return secrets.token_urlsafe(64)
-
-
-def pkce_challenge(verifier) -> str:
-    """The S256 code_challenge for a verifier: base64url(sha256(verifier)), unpadded."""
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
 def build_authorize_url(client_id, redirect_uri, scopes, state, code_challenge=None) -> str:
@@ -158,68 +144,26 @@ def list_connections(access_token) -> list:
 # ----------------------------------------------------------------------
 
 
+def _consent_url(client_id, redirect_uri, scopes, client_secret):
+    """(state, verifier, url) for one consent: PKCE for a public client, none with a secret."""
+    state = generate_state()
+    verifier = None if client_secret else generate_pkce_verifier()
+    challenge = pkce_challenge(verifier) if verifier else None
+    return state, verifier, build_authorize_url(client_id, redirect_uri, scopes, state, challenge)
+
+
 def loopback_authorize(client_id, redirect_uri, scopes, *, client_secret=None,
                        open_browser=True, timeout=300) -> dict:
     """Run the loopback consent flow and return a token set.
 
-    Parses host/port from the redirect_uri (must be http://localhost:PORT/...),
-    serves one callback request, validates the returned state against the one
-    sent, and exchanges the captured code: with a PKCE verifier for a public
-    client, with the secret for a confidential web app.
+    The shared loopback server (crude_common.oauth_consent) serves one callback
+    on the redirect_uri's localhost port and validates the state; the captured
+    code is exchanged with a PKCE verifier for a public client, with the secret
+    for a confidential web app.
     """
-    parsed = urlparse(redirect_uri)
-    if parsed.scheme != "http" or parsed.hostname not in ("localhost", "127.0.0.1"):
-        raise XeroAuthError(
-            f"Loopback auth needs a redirect_uri like http://localhost:PORT/path; "
-            f"got {redirect_uri!r}. Use the manual flow for a headless box."
-        )
-    host = parsed.hostname
-    port = parsed.port or 80
-    state = generate_state()
-    verifier = None if client_secret else generate_pkce_verifier()
-    challenge = pkce_challenge(verifier) if verifier else None
-    url = build_authorize_url(client_id, redirect_uri, scopes, state, challenge)
-
-    captured: dict = {}
-
-    class _Handler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            q = parse_qs(urlparse(self.path).query)
-            captured["code"] = (q.get("code") or [None])[0]
-            captured["state"] = (q.get("state") or [None])[0]
-            captured["error"] = (q.get("error") or [None])[0]
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.end_headers()
-            self.wfile.write(
-                b"<html><body><h2>crude-xero</h2>"
-                b"<p>Authorization received. You can close this tab.</p>"
-                b"</body></html>"
-            )
-
-        def log_message(self, *args):
-            pass
-
-    server = HTTPServer((host, port), _Handler)
-    server.timeout = timeout
-    try:
-        if open_browser:
-            webbrowser.open(url)
-        else:
-            print(f"Open this URL to authorize:\n{url}")
-        server.handle_request()
-    finally:
-        server.server_close()
-
-    if not captured:
-        raise XeroAuthError(f"No authorization callback received within {timeout}s.")
-    if captured.get("error"):
-        raise XeroAuthError(f"Authorization failed: {captured['error']}.")
-    if captured.get("state") != state:
-        raise XeroAuthError("State mismatch on callback (possible CSRF); aborting.")
-    code = captured.get("code")
-    if not code:
-        raise XeroAuthError("Callback carried no authorization code.")
+    state, verifier, url = _consent_url(client_id, redirect_uri, scopes, client_secret)
+    code = loopback_code(url, redirect_uri, state, error=XeroAuthError,
+                         open_browser=open_browser, timeout=timeout, title="crude-xero")
     return exchange_code(client_id, code, redirect_uri, verifier,
                          client_secret=client_secret)
 
@@ -229,26 +173,8 @@ def manual_authorize(client_id, redirect_uri, scopes, *, client_secret=None) -> 
 
     Accepts either the full pasted redirect URL (state validated) or a bare code.
     """
-    state = generate_state()
-    verifier = None if client_secret else generate_pkce_verifier()
-    challenge = pkce_challenge(verifier) if verifier else None
-    url = build_authorize_url(client_id, redirect_uri, scopes, state, challenge)
-    print("Open this URL in a browser, authorize, then paste the redirect URL "
-          "(or the bare code) back here:")
-    print(url)
-    print(f"(expected state: {state})")
-    raw = input("redirect URL or code: ").strip()
-    returned_state = None
-    if raw.startswith(("http://", "https://")) or "code=" in raw:
-        q = parse_qs(urlparse(raw).query)
-        code = (q.get("code") or [None])[0]
-        returned_state = (q.get("state") or [None])[0]
-    else:
-        code = raw
-    if returned_state is not None and returned_state != state:
-        raise XeroAuthError("State mismatch on the pasted redirect (possible CSRF); aborting.")
-    if not code:
-        raise XeroAuthError("No authorization code found in the pasted value.")
+    state, verifier, url = _consent_url(client_id, redirect_uri, scopes, client_secret)
+    code = manual_code(url, state, error=XeroAuthError)
     return exchange_code(client_id, code, redirect_uri, verifier,
                          client_secret=client_secret)
 
