@@ -1,11 +1,8 @@
 """Typer CLI root for Google Business Profile: crude-business-profile.
 
-The credential is the token side file; ``[business-profile]`` in
-config is read by ``auth`` alone, for the OAuth client's id and secret, and by
-the review commands for ``default_location``. The root wires the shared
---version/--account/install surface, ``auth`` and ``status`` sit on it, and the
-resource groups (``location``, ``review``) give the
-``crude-business-profile <resource> <verb>`` grammar.
+The credential is the token side file; ``[business-profile]`` in config is read
+by ``auth`` alone (the OAuth client) and by the review commands
+(``default_location``).
 """
 
 from __future__ import annotations

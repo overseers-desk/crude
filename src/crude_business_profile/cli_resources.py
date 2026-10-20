@@ -1,14 +1,8 @@
 """Business Profile resources for crude-business-profile: locations and reviews.
 
-The read surface is what a business owner asks from a terminal: which locations
-the account manages, what customers wrote and when, and which reviews still
-await the business's reply. The one write is that reply, and its removal.
-
-A location is named with ``--location/-l`` (a title substring, a store code, or
-the resource name) or by ``default_location`` in config; an account managing a
-single location needs neither. Timestamps arrive as ISO-8601 UTC and render in
-the timezone the config names, the machine's when it names none; a typed
-``--since`` date is read as a day in the same zone.
+Timestamps arrive as ISO-8601 UTC and render in the timezone the config names,
+the machine's when it names none; a typed ``--since`` date is read as a day in
+the same zone.
 """
 
 from __future__ import annotations

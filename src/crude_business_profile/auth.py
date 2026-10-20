@@ -4,10 +4,9 @@ The durable credential is a refresh token of a Google account that manages the
 business, scope ``business.manage``. Google does not rotate it on use, so the
 side file under the XDG state dir is written by ``auth`` alone and only read
 afterwards; the hour-long access token lives in memory. The file's
-shape is the authorised-user JSON google-auth writes and reads (``token``,
-``refresh_token``, ``token_uri``, ``client_id``, ``client_secret``, ``scopes``,
-``expiry``), so a token made elsewhere with that library copies into place
-unchanged, and one made here serves a program using that library.
+shape is the authorised-user JSON google-auth writes and reads, so a token made
+elsewhere with that library copies into place unchanged, and one made here
+serves a program using that library.
 
 The consent is Google's installed-app flow: a Desktop-app OAuth client (its id
 and secret in config; Google treats the secret of an installed app as not

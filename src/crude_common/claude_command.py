@@ -340,7 +340,7 @@ A second Wise account sits as `[wise.<name>]`, selected with `--account <name>`.
 
 ## crude-business-profile (business.google.com)
 
-Your own Google Business Profile over Google's Business Profile APIs: the locations a Google account manages, their reviews, and the business's reply to each. The credential is a token file, `$XDG_STATE_HOME/crude/business_profile_token.json` (default `~/.local/state/crude/`), written once by `crude-business-profile auth` or copied from a working google-auth token file; `[business-profile]` holds the OAuth client's `client_id` and `client_secret`, read by `auth` alone, and `default_location`. Only locations the signed-in account manages are reachable: another business's reviews are not, so a third party's review timeline is another tool's job.
+Your own Google Business Profile over Google's Business Profile APIs: the locations a Google account manages, their reviews, and the business's reply to each. The credential is a token file, `$XDG_STATE_HOME/crude/business_profile_token.json` (default `~/.local/state/crude/`), written once by `crude-business-profile auth` or copied from a working google-auth token file; `[business-profile]` holds the OAuth client's `client_id` and `client_secret`, read by `auth` alone, and `default_location`. Only locations the signed-in account manages are reachable: another business's reviews are not, so a third party's review timeline is not available here.
 
     crude-business-profile status                      # token check; the Google account and the accounts it manages
     crude-business-profile location list               # title, store code, address, Place ID, resource name

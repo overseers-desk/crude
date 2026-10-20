@@ -79,8 +79,8 @@ its store code, its `locations/<id>` name, or the full
 used, and with neither, the one location the account manages; several
 locations and no name is an error that lists them.
 
-`review list` pages through every review of the location, newest update first,
-and keeps up to `--limit` (25) of them, or every one with `--all`. `--since`
+`review list` pages newest update first and stops at `--limit` (25) reviews,
+or runs to the last page with `--all`. `--since`
 keeps reviews written on or after the date, read as a day in the config's
 `timezone` (the machine's when none is set). `--unreplied` keeps reviews
 awaiting the business's reply; a reply Google rejected is not public, so that
@@ -90,7 +90,7 @@ Add `--json` to any read for Google's own record. Writes prompt unless `--yes`.
 
 ## The APIs
 
-Three hosts under one token:
+The hosts, all under one token:
 
 | Call | Endpoint |
 |---|---|
@@ -115,8 +115,8 @@ to the file.
 
 Under a bound, `review list` drops reviews written after the cutoff and flags
 those updated after it; `review get` refuses a review written after it. The
-location list and the account list are current state, served flagged. Both
-writes refuse.
+location list and the account list are current state, served flagged. Every
+write refuses.
 
 ## Troubleshooting
 
@@ -125,5 +125,5 @@ writes refuse.
 | `no Google token at ...` | The token file is missing: copy a working one there, or run `auth`. |
 | `invalid_grant` on refresh | The refresh token was revoked, or expired because the consent screen is in Testing. Publish the screen and run `auth` again. |
 | `Business Profile API returned 403` | Google's message names the cause: an API not enabled in the Cloud project, a quota of zero (the project lacks Business Profile API access), or an account without access to the location. |
-| `the token's accounts manage no locations` | The signed-in Google account manages nothing; sign in as the owner or a manager of the profile. A profile that is not verified lists no reviews. |
+| `the token's accounts manage no locations` | The signed-in Google account manages nothing; sign in as the owner or a manager of the profile. |
 | `several locations; pass --location` | The account manages more than one; name one with `-l` or set `default_location`. |

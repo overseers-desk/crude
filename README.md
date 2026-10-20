@@ -217,7 +217,7 @@ crude-wise activity list --from 2026-09-01
 
 ## Business Profile usage (`crude-business-profile`)
 
-Google Business Profile authenticates with an OAuth user token of a Google account that manages the business, kept as a file at `~/.local/state/crude/business_profile_token.json` (google-auth's authorised-user JSON, so a working token made with that library copies into place). To mint one instead, put a Desktop-app OAuth client's `client_id` and `client_secret` under `[business-profile]` and run `crude-business-profile auth` once; the Cloud project needs Business Profile API access and the Account Management, Business Information and Google My Business APIs enabled. Only locations the account manages are reachable. `default_location` in the section names the location the review commands act on when `-l` is not passed. The full setup is in [docs/business-profile.md](docs/business-profile.md).
+Google Business Profile authenticates with an OAuth user token of a Google account that manages the business, kept as a file at `~/.local/state/crude/business_profile_token.json` (google-auth's authorised-user JSON, so a working token made with that library copies into place). To mint one instead, put a Desktop-app OAuth client's `client_id` and `client_secret` under `[business-profile]` and run `crude-business-profile auth` once; the Google Cloud project behind the OAuth client needs Business Profile API access and the Account Management, Business Information and Google My Business APIs enabled. Only locations the account manages are reachable. `default_location` in the section names the location the review commands act on when `-l` is not passed. The full setup is in [docs/business-profile.md](docs/business-profile.md).
 
 ```
 crude-business-profile status

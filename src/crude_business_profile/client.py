@@ -1,13 +1,13 @@
-"""Business Profile transport: a bearer session over three Google API hosts.
+"""Business Profile transport: a bearer session over Google's Business Profile API hosts.
 
 One BusinessProfileSession carries the authorised-user token record (the side
 file's JSON) and mints the hour-long access token from its refresh token when
 the one in the record has expired or a call answers 401. The refresh token does
 not rotate on use, so nothing is written back; the record is read-only here.
 
-The APIs sit on three hosts under one token: accounts on Account Management v1,
-locations on Business Information v1, and reviews on the v4 endpoint, which is
-the one that still serves them. Each list pages through ``nextPageToken`` at its
+The APIs sit on separate hosts under one token: accounts on Account Management
+v1, locations on Business Information v1, and reviews on the v4 endpoint, which
+the v1 APIs have no counterpart for. Each list pages through ``nextPageToken`` at its
 API's largest page size. A review's location is named for v4 as
 ``accounts/<id>/locations/<id>``, the account's name joined to the location's.
 """
@@ -121,7 +121,7 @@ class BusinessProfileSession(HttpSession):
     # -- transport ----------------------------------------------------------
 
     def _build_url(self, path) -> str:
-        return path  # every path here is an absolute URL on one of the three hosts
+        return path  # every path here is an absolute URL on one of the API hosts
 
     def _auth_headers(self, extra):
         headers = {"Authorization": f"Bearer {self.access_token}"}
