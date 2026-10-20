@@ -118,3 +118,20 @@ def test_xero_token_seeded_from_config(tree):
     write_config(XERO + f'refresh_token = "{FAKE}"\n')
     state.chmod(0o500)
     _ends_with_the_path(runner.invoke(app, ["tenants"]), state / "xero_token.json")
+
+
+BUSINESS_PROFILE = '[business-profile]\nclient_id = "fake-client"\nclient_secret = "fake-secret"\n'
+
+
+def test_business_profile_auth_token_write(tree, monkeypatch):
+    import crude_business_profile.cli
+    from crude_business_profile.cli import app
+
+    write_config, state = tree
+    write_config(BUSINESS_PROFILE)
+    record = {"token": FAKE, "refresh_token": FAKE, "client_id": "fake-client",
+              "client_secret": "fake-secret"}
+    monkeypatch.setattr(crude_business_profile.cli, "manual_authorize", lambda *a, **k: record)
+    state.chmod(0o500)
+    _ends_with_the_path(runner.invoke(app, ["auth", "--manual"]),
+                        state / "business_profile_token.json")
