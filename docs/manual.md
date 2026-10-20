@@ -186,6 +186,7 @@ body is best-effort current state, disclosed as such. The per-backend boundary
 | Xero | accounting `where UpdatedDateUTC<=`; journals exact; report date params | projects/payroll etc. where stamps exist | reports (computed-now); stamp-less lists | PDF / attachment of a post-cutoff record |
 | Sonas | — (DDP) | `createdAt`-family per collection; export bundles | event doc bodies | — |
 | Facebook | posts `until` | posts, comments by `created_time` | `page get` | insights, scheduled posts |
+| Business Profile | — | reviews by `createTime`; `updateTime`>bound | `location list`, `status` | — |
 | Mautic | — | every list, by `dateAdded` (submissions by `dateSubmitted`) | `email` reads (send counts); `dateModified`>bound | — |
 | Wise | statement `intervalEnd`; transfers `createdDateEnd`; activities `until` | statement `date`; transfers `created`; activities `createdOn` | profiles, recipients (no stamps); `updatedAt`/`updatedOn`>bound | `balance list` |
 | ATDW | — | — | listings; `updatedOn`>bound | — |

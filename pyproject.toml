@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "crude"
-version = "1.6.5"
+version = "1.6.6"
 description = "CRUD-Engine: a lightweight CLI for read/write access to one's own data on sites without a usable public API"
 readme = "README.md"
 license = {text = "MIT"}
@@ -36,6 +36,7 @@ crude-clover = "crude_clover.cli:app"
 crude-facebook = "crude_facebook.cli:app"
 crude-mautic = "crude_mautic.cli:app"
 crude-wise = "crude_wise.cli:app"
+crude-business-profile = "crude_business_profile.cli:app"
 
 [project.optional-dependencies]
 test = ["pytest>=7"]

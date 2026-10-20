@@ -33,7 +33,9 @@ Description: CRUD-style command-line clients for sites without a public API
  crude-airwallex (Airwallex global payments and transactions), crude-clover
  (Clover POS orders and catalog), crude-facebook (Facebook Pages:
  posts, insights, comments), crude-mautic (a self-hosted Mautic
- instance: marketing forms, submissions, contacts, campaigns), and
- crude-wise (Wise Business balances, statement, transfers, recipients).
+ instance: marketing forms, submissions, contacts, campaigns),
+ crude-wise (Wise Business balances, statement, transfers, recipients),
+ and crude-business-profile (your own Google Business Profile: locations,
+ reviews, replies).
  The crude command
  lists them and carries the shared --version and install-claude-command flags.

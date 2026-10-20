@@ -52,6 +52,17 @@ page_id = "..."        # the Facebook Page id
 # Page writes need a Page access token. For a Page managed in Business Manager, use a System
 # User token with the Page assigned and set page_id; see docs/facebook.md for the steps.
 
+[business-profile]
+# Google Business Profile: the credential is a token file, not a key here. A working
+# authorised-user token (google-auth's JSON: refresh_token, client_id, client_secret,
+# token_uri, scopes) copied to ~/.local/state/crude/business_profile_token.json serves
+# as it is. To mint one instead, set the Desktop-app OAuth client below and run
+# `crude-business-profile auth`; only `auth` reads these two keys. See docs/business-profile.md.
+# client_id = "....apps.googleusercontent.com"
+# client_secret = "..."
+# redirect_uri = "http://localhost:8911/"   # the loopback `auth` listens on; any localhost port
+# default_location = "Riverside Cafe"       # a title substring, store code, or accounts/<id>/locations/<id>
+
 [mautic]
 base_url = "https://mautic.example.com"   # your Mautic instance, no /api suffix
 username = "your-mautic-username"

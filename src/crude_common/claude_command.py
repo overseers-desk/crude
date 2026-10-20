@@ -39,13 +39,13 @@ ACCOUNT_HELP = (
 # sites come up; how to drive the CLIs is the body below, not the description.
 COMMAND = """---
 name: crude
-description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), wise.com (Wise Business balances, statements, transfers, recipients), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
+description: Read and edit your own data on atdw-online.com.au (ATDW tourism listings), australia.skal.org (Skal Australia member portal), rezdy.com (products, availability, bookings), deputy.com (rostering, timesheets, leave, employees), app.sonas.events (Sonas wedding-venue events), xero.com (Xero accounting), airwallex.com (Airwallex payments and transactions), clover.com (Clover POS orders and catalog), graph.facebook.com (Facebook Pages: posts, insights, comments), wise.com (Wise Business balances, statements, transfers, recipients), business.google.com (your own Google Business Profile: the locations you manage, their reviews, your replies to them), and a self-hosted Mautic instance (marketing forms and who submitted them, contacts, segments, campaigns, email send counts).
 allowed-tools: Bash
 ---
 
 # crude
 
-crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`, `[wise]`). Add `--json` to any read command for machine-readable output.
+crude provides command-line clients for reading and editing your own data on a handful of sites, each through one `crude-<site> <resource> <verb>` grammar. Some sites lack a usable public API and are reached through their internal endpoints; others ride a documented one. Each site is its own binary. Configuration for all of them lives in `~/.config/crude/config.toml` (sections `[atdw]`, `[skal]`, `[rezdy]`, `[deputy]`, `[sonas]`, `[xero]`, `[airwallex]`, `[clover]`, `[facebook]`, `[mautic]`, `[wise]`, `[business-profile]`). Add `--json` to any read command for machine-readable output.
 
 Leave `config.toml` and the cached token files under `$XDG_STATE_HOME/crude/` (default `~/.local/state/crude/`) unread, even to diagnose a failure: what you read stays in the transcript. Check credentials with the site's `status` or `login` command instead (`crude-xero tenants`, `crude-deputy me`; crude-rezdy and crude-sonas have neither, so run a small read).
 
@@ -337,6 +337,19 @@ Wise Business over the documented REST API. A personal API token in `[wise]` (`a
     crude-wise activity list [--from] [--to] [--status] [--limit]
 
 A second Wise account sits as `[wise.<name>]`, selected with `--account <name>`. Statement windows span at most 469 days. Activity amounts are display strings (`1,220 AUD`); the statement's are numbers.
+
+## crude-business-profile (business.google.com)
+
+Your own Google Business Profile over Google's Business Profile APIs: the locations a Google account manages, their reviews, and the business's reply to each. The credential is a token file, `$XDG_STATE_HOME/crude/business_profile_token.json` (default `~/.local/state/crude/`), written once by `crude-business-profile auth` or copied from a working google-auth token file; `[business-profile]` holds the OAuth client's `client_id` and `client_secret`, read by `auth` alone, and `default_location`. Only locations the signed-in account manages are reachable: another business's reviews are not, so a third party's review timeline is another tool's job.
+
+    crude-business-profile status                      # token check; the Google account and the accounts it manages
+    crude-business-profile location list               # title, store code, address, Place ID, resource name
+    crude-business-profile review list [-l <loc>] [--since YYYY-MM-DD] [--unreplied] [--all] [--limit N]
+    crude-business-profile review get <id> [-l <loc>]
+    crude-business-profile review reply <id> -m <text> [-l <loc>] [--yes]   # publishes; replaces an existing reply
+    crude-business-profile review unreply <id> [-l <loc>] [--yes]
+
+`-l/--location` takes a title substring, a store code or `accounts/<id>/locations/<id>`; with one location managed it can be left out. Reviews list newest update first, every review when `--all`; `--since` keeps those written on or after the date, read in the config's `timezone`. The `<id>` is the review's `reviewId`, the ID column of `review list`. A reply Google rejected counts as none, so that review still shows unreplied. Writes prompt unless `--yes`.
 """
 
 

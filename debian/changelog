@@ -1,3 +1,19 @@
+crude (1.6.6) unstable; urgency=medium
+
+  * Add crude-business-profile: your own Google Business Profile over
+    Google's Business Profile APIs. Lists the locations a Google account
+    manages with their Place IDs, lists a location's reviews (newest update
+    first, --since, --unreplied, --all) and shows one, and writes or removes
+    the business's reply. The credential is a google-auth authorised-user
+    token file in the state directory, made once by `auth` or copied from a
+    working token; only `auth` reads [business-profile] client_id and
+    client_secret.
+  * The browser half of an OAuth consent (the loopback callback and the
+    paste-based fallback) lives in crude_common, shared by crude-xero and
+    crude-business-profile.
+
+ -- Weiwu Zhang <a@colourful.land>  Tue, 20 Oct 2026 10:30:02 +1000
+
 crude (1.6.5) unstable; urgency=medium
 
   * A crash in any crude binary no longer prints its local variables. Under

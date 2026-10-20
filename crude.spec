@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.5
+Version:        1.6.6
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -29,8 +29,10 @@ crude-sonas (Sonas wedding-venue software), crude-xero (Xero accounting),
 crude-airwallex (Airwallex global payments and transactions), crude-clover
 (Clover POS orders and catalog), crude-facebook (Facebook Pages:
 posts, insights, comments), crude-mautic (a self-hosted Mautic
-instance: marketing forms, submissions, contacts, campaigns), and
-crude-wise (Wise Business balances, statement, transfers, recipients).
+instance: marketing forms, submissions, contacts, campaigns),
+crude-wise (Wise Business balances, statement, transfers, recipients),
+and crude-business-profile (your own Google Business Profile: locations,
+reviews, replies).
 The crude command
 lists them and carries the shared --version and install-claude-command flags.
 
@@ -66,7 +68,8 @@ for spec in \
     crude-clover:crude_clover.cli \
     crude-facebook:crude_facebook.cli \
     crude-mautic:crude_mautic.cli \
-    crude-wise:crude_wise.cli; do
+    crude-wise:crude_wise.cli \
+    crude-business-profile:crude_business_profile.cli; do
     name=${spec%%:*}
     module=${spec##*:}
     cat > %{buildroot}/usr/bin/${name} << ENTRY
@@ -92,10 +95,22 @@ done
 /usr/bin/crude-facebook
 /usr/bin/crude-mautic
 /usr/bin/crude-wise
+/usr/bin/crude-business-profile
 /usr/lib/python*/site-packages/crude_*/
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Tue Oct 20 2026 Weiwu Zhang <a@colourful.land> - 1.6.6-1
+- Add crude-business-profile: your own Google Business Profile over Google's
+  Business Profile APIs: the locations a Google account manages with their
+  Place IDs, a location's reviews (newest update first, --since, --unreplied,
+  --all), and the business's reply, written or removed. The credential is a
+  google-auth authorised-user token file in the state directory, made once by
+  `auth` or copied from a working token.
+- The browser half of an OAuth consent (loopback callback, paste-based
+  fallback) lives in crude_common, shared by crude-xero and
+  crude-business-profile.
+
 * Mon Oct 19 2026 Weiwu Zhang <a@colourful.land> - 1.6.5-1
 - A crash in any crude binary no longer prints its local variables. Under
   Typer 0.15, which Debian ships and which shows locals by default, a crash

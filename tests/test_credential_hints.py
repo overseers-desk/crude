@@ -33,3 +33,10 @@ def test_the_sonas_hash_hint_reads_the_password_from_stdin():
     out = subprocess.run(["bash", "-c", hint], input="fake pass\n",
                          capture_output=True, text=True, check=True).stdout.strip()
     assert out == hashlib.sha256(b"fake pass").hexdigest()
+
+
+def test_the_command_gives_the_business_profile_token_path_the_code_uses(monkeypatch):
+    from crude_business_profile.auth import token_store_path
+
+    monkeypatch.setenv("XDG_STATE_HOME", "$XDG_STATE_HOME")
+    assert str(token_store_path(None)) in claude_command.COMMAND

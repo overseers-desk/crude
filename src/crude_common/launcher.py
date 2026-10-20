@@ -1,7 +1,7 @@
 """The crude umbrella command: an index of the per-site CLIs.
 
 crude has no resources of its own. Run with no arguments it lists the site
-commands (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas, crude-xero, crude-airwallex, crude-clover, crude-facebook, crude-mautic, crude-wise) and the shared flags;
+commands (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas, crude-xero, crude-airwallex, crude-clover, crude-facebook, crude-mautic, crude-wise, crude-business-profile) and the shared flags;
 each site is a binary driven directly. It carries the same --version, --help, and
 install-claude-command surface as the site CLIs.
 """
@@ -19,7 +19,7 @@ from crude_common.claude_command import (
 )
 
 app = typer.Typer(
-    help="crude — index of the per-site CLIs (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas, crude-xero, crude-airwallex, crude-clover, crude-facebook, crude-mautic, crude-wise).",
+    help="crude — index of the per-site CLIs (crude-atdw, crude-skal, crude-rezdy, crude-deputy, crude-sonas, crude-xero, crude-airwallex, crude-clover, crude-facebook, crude-mautic, crude-wise, crude-business-profile).",
     # A traceback must not print frame locals, here as in every site binary.
     pretty_exceptions_show_locals=False,
 )
@@ -39,6 +39,7 @@ SITES = [
     ("crude-facebook", "Facebook Pages — posts, insights, comments (graph.facebook.com)"),
     ("crude-mautic", "Mautic forms, submissions, contacts, campaigns (self-hosted)"),
     ("crude-wise", "Wise Business balances, statements, transfers, recipients (wise.com)"),
+    ("crude-business-profile", "Google Business Profile — locations, reviews, replies (business.google.com)"),
 ]
 
 
@@ -55,7 +56,7 @@ def _root(
         return
     typer.echo("crude — per-site CLIs:\n")
     for name, desc in SITES:
-        typer.echo(f"  {name:<12} {desc}")
+        typer.echo(f"  {name:<22} {desc}")
     typer.echo("\nRun a site command for usage, e.g. `crude-rezdy --help`.")
     typer.echo("Flags: --version, --help, install-claude-command, config-sample")
 

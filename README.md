@@ -19,6 +19,7 @@ The clients ship as their own console binaries:
 - `crude-facebook`: Facebook Page posts, insights, and comments over the Graph API (REST, Page or System User token).
 - `crude-mautic`: a self-hosted Mautic instance: website forms and their submissions, contacts, segments, campaigns (REST, HTTP basic auth).
 - `crude-wise`: Wise Business balances, the balance statement, transfers, recipients, and the activity feed (REST, personal API token).
+- `crude-business-profile`: your own Google Business Profile: the locations a Google account manages, their reviews, and the business's reply (REST, OAuth2 user token with automatic refresh).
 
 Running `crude` with no arguments lists these commands. `--version`, `--help`, and `install-claude-command` work on `crude` and on every site binary.
 
@@ -55,11 +56,11 @@ From source with pip:
 pip install -e .
 ```
 
-Any of these put `crude` and the site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, `crude_clover`, `crude_facebook`, `crude_mautic`, `crude_wise`, and `crude_common.launcher` for the `crude` index).
+Any of these put `crude` and the site binaries (`crude-atdw`, `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`, `crude-business-profile`) on your PATH. During development you can also run them without installing, from the `src/` directory, as `python3 -m crude_atdw <command>` (likewise `crude_skal`, `crude_rezdy`, `crude_deputy`, `crude_sonas`, `crude_xero`, `crude_airwallex`, `crude_clover`, `crude_facebook`, `crude_mautic`, `crude_wise`, `crude_business_profile`, and `crude_common.launcher` for the `crude` index).
 
 ### Claude Code command
 
-The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering every site) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
+The CLIs install a Claude Code command at `~/.claude/commands/crude.md` (covering every site) and keep it current automatically: every run rewrites the file when it is missing or differs from the bundled version. Run `crude-atdw install-claude-command` (or `crude-skal`, `crude-rezdy`, `crude-deputy`, `crude-sonas`, `crude-xero`, `crude-airwallex`, `crude-clover`, `crude-facebook`, `crude-mautic`, `crude-wise`, `crude-business-profile`) to write it explicitly. A same-named skill, if you keep one, takes precedence and the command is left alone.
 
 ## Dependencies
 
@@ -213,6 +214,19 @@ crude-wise activity list --from 2026-09-01
 ```
 
 `transaction list` is the balance statement, the ledger behind one balance over a window of at most 469 days. Wise puts the statement behind strong customer authentication for profiles registered outside the US, Australia, New Zealand, Singapore, Canada and Malaysia: the call answers 403 with a one-time token, and crude resends it signed when `private_key` names an RSA private key whose public half is uploaded on the account's API tokens page (Manage public keys). Generate the pair with `openssl genrsa -out ~/.config/crude/wise-sca.pem 2048` and `openssl rsa -in ~/.config/crude/wise-sca.pem -pubout -out wise-sca.pub`, upload `wise-sca.pub`, and set `private_key` to the `.pem` path; signing runs through the `openssl` binary, so the key never enters the process. Without the key the command reports these steps; the other reads need no key. The client reads; it does not create transfers or recipients.
+
+## Business Profile usage (`crude-business-profile`)
+
+Google Business Profile authenticates with an OAuth user token of a Google account that manages the business, kept as a file at `~/.local/state/crude/business_profile_token.json` (google-auth's authorised-user JSON, so a working token made with that library copies into place). To mint one instead, put a Desktop-app OAuth client's `client_id` and `client_secret` under `[business-profile]` and run `crude-business-profile auth` once; the Cloud project needs Business Profile API access and the Account Management, Business Information and Google My Business APIs enabled. Only locations the account manages are reachable. `default_location` in the section names the location the review commands act on when `-l` is not passed. The full setup is in [docs/business-profile.md](docs/business-profile.md).
+
+```
+crude-business-profile status
+crude-business-profile location list
+crude-business-profile review list --unreplied
+crude-business-profile review list -l "Riverside Cafe" --since 2026-10-01 --all
+crude-business-profile review get <review-id>
+crude-business-profile review reply <review-id> -m "Thank you for visiting." --yes
+```
 
 ## Further reference
 
