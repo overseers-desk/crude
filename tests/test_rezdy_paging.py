@@ -182,7 +182,7 @@ def test_availability_list_needs_exactly_one_way_to_name_products(api, flags):
 
 
 def packed(first_id, day, n, minutes=1):
-    """n one-minute sessions on one day, a minute apart from 08:00."""
+    """n half-minute sessions on one day, `minutes` apart from 08:00."""
     out = []
     for i in range(n):
         at = datetime.combine(day, datetime.min.time()) + timedelta(hours=8, minutes=i * minutes)
@@ -201,7 +201,6 @@ def test_resource_sessions_all_walks_past_100_and_keeps_each_once(api):
     got = run("resource", "sessions", "5", "--from", "2026-03-01", "--to", "2026-04-30", "--all", "--json")
     assert sorted(s["id"] for s in got) == sorted(s["id"] for s in rows)
     assert len({s["id"] for s in got}) == len(got) == 280
-    # In start order.
     assert [s["startTimeLocal"] for s in got] == sorted(s["startTimeLocal"] for s in got)
     # No page of the walk leans on offset: Rezdy ignores it.
     assert all(c[2]["limit"] == 100 for c in api.calls)

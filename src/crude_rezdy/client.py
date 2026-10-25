@@ -30,11 +30,11 @@ STAGING_BASE = "https://api.rezdy-staging.com"
 # using it. The client keeps to 80, so the other users of the key have room before
 # a long walk tips the count over.
 REQUESTS_PER_MINUTE = 80
-# Retries after the first attempt, and the back-off between them: 2, 4, 8, 16, 32
-# seconds unless Rezdy names a wait itself with Retry-After (never more than 120).
+# Retries after the first attempt, with a doubling back-off between them unless
+# Rezdy names a wait itself with Retry-After.
 MAX_RETRIES = 5
 BACKOFF_FIRST = 2.0
-BACKOFF_CAP = 60.0
+BACKOFF_CAP = 60.0   # not reached at five retries; holds if MAX_RETRIES is raised
 RETRY_AFTER_CAP = 120.0
 # Rezdy's internal-call failure on a read: HTTP 500 with this name in the body.
 DOWNSTREAM_FAILURE = "DOWNSTREAM_CALL_FAILURE"
@@ -151,9 +151,8 @@ class RezdyClient:
         in the body (a success flag plus an error message). A write that returns no
         body (e.g. 204 on DELETE) yields an empty dict.
 
-        Requests are paced to REQUESTS_PER_MINUTE, and a refusal for the minute's
-        count, or a downstream failure on a read (see _retry_wait), is tried again with back-off up to
-        MAX_RETRIES times before it is raised.
+        Requests are paced to REQUESTS_PER_MINUTE, and what _retry_wait calls
+        retryable is tried again up to MAX_RETRIES times before it is raised.
         """
         params = {k: v for k, v in (params or {}).items() if v is not None}
         retries = 0
@@ -613,8 +612,8 @@ class RezdyClient:
         is cut in half until each returns fewer. Rezdy gives only the sessions that
         start and end inside a window, so a session running over a cut would lie in
         neither half; neighbouring windows therefore overlap by a margin, a day at the
-        month cuts and elsewhere the longest session seen so far (an hour at least,
-        twelve hours at most), which puts such a session whole inside one of them. A
+        month cuts and elsewhere the longest session seen so far, which puts such a
+        session whole inside one of them. A
         longer session running over a cut can still be missed. Sessions are kept once
         by id and come back in start order.
 
