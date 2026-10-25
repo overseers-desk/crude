@@ -213,12 +213,14 @@ def list_products(
     search: Optional[str] = typer.Option(None, "--search", help="Filter by name, product code, or internal code."),
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List products."""
     client = _client()
     try:
-        items = client.list_products(search=search, limit=limit, offset=offset)
+        items = (client.all_products(search=search) if fetch_all
+                 else client.list_products(search=search, limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching products: {e}", err=True)
         raise typer.Exit(1)
@@ -356,15 +358,23 @@ def product_pickups(
 
 @availability_app.command("list")
 def list_availability(
-    product: str = typer.Option(..., "--product", help="Product code to check availability for."),
+    product: Optional[List[str]] = typer.Option(None, "--product", help="Product code to check availability for; repeat for several."),
+    all_products: bool = typer.Option(False, "--all-products", help="Every product of the account (instead of --product)."),
     from_: str = typer.Option(..., "--from", help="Start of range, local time 'YYYY-MM-DD HH:mm:ss'."),
     to: str = typer.Option(..., "--to", help="End of range, local time 'YYYY-MM-DD HH:mm:ss'."),
     min_availability: Optional[int] = typer.Option(None, "--min-availability", help="Only sessions with at least this many seats."),
-    limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
-    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results (per product)."),
+    offset: int = typer.Option(0, "--offset", help="Number of results to skip (per product)."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page of each product (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
-    """List availability sessions for a product within a date range."""
+    """List availability sessions for one or more products within a date range.
+
+    Several products (--product repeated, or --all-products) are listed as one
+    set of sessions, each carrying its productCode.
+    """
+    if bool(product) == all_products:
+        raise typer.BadParameter("give --product (repeat it for several) or --all-products, not both or neither")
     if asof.active():
         # Availability is a live seat count. Rezdy keeps no history of past
         # remaining-seats, so a window reaching at/past the cutoff is
@@ -381,27 +391,36 @@ def list_availability(
                         "the cutoff has no as-of answer")
     client = _client()
     try:
-        items = client.list_availability(
-            product, from_, to, min_availability=min_availability, limit=limit,
-            offset=offset,
-        )
+        codes = list(client.product_names()) if all_products else list(dict.fromkeys(product))
+        items = []
+        for code in codes:
+            if fetch_all or all_products:
+                items.extend(client.all_availability(
+                    code, from_, to, min_availability=min_availability))
+            else:
+                items.extend(client.list_availability(
+                    code, from_, to, min_availability=min_availability, limit=limit,
+                    offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching availability: {e}", err=True)
         raise typer.Exit(1)
     items = asof.current_state(items, "availability (seat counts are live values)")
-    if not output_json:
+    if not output_json and len(codes) == 1:
         # Confirm which product the code names, resolving best-effort.
         try:
-            label = client.product_names().get(product)
+            label = client.product_names().get(codes[0])
         except Exception:
             label = None
-        typer.echo(f"Product: {label} ({product})" if label else f"Product: {product}")
-    emit_list(items, [
+        typer.echo(f"Product: {label} ({codes[0]})" if label else f"Product: {codes[0]}")
+    columns = [
         ("Session ID", "id"),
         ("Start", "startTimeLocal"),
         ("End", "endTimeLocal"),
         ("Seats", "seatsAvailable"),
-    ], "session", output_json, header_style="bold green")
+    ]
+    if len(codes) > 1:
+        columns.insert(0, ("Product", "productCode"))
+    emit_list(items, columns, "session", output_json, header_style="bold green")
 
 
 @availability_app.command("create")
@@ -769,6 +788,7 @@ def list_customers(
     search: Optional[str] = typer.Option(None, "--search", help="Filter by name or email."),
     limit: int = typer.Option(20, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
     ldif: bool = typer.Option(False, "--ldif", help="Output LDIF (inetOrgPerson) instead of a table."),
 ):
@@ -776,7 +796,8 @@ def list_customers(
     config = read_config(find_config())
     client = _make_client(config)
     try:
-        items = client.list_customers(search=search, limit=limit, offset=offset)
+        items = (client.all_customers(search=search) if fetch_all
+                 else client.list_customers(search=search, limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching customers: {e}", err=True)
         raise typer.Exit(1)
@@ -840,16 +861,32 @@ def delete_customer(
 
 @extra_app.command("list")
 def list_extras(
-    search: Optional[str] = typer.Option(None, "--search", help="Filter by extra name; omit for all."),
+    search: Optional[str] = typer.Option(None, "--search", help="Filter by extra name (a prefix, any case); omit for all."),
+    fetch_all: bool = typer.Option(False, "--all", help="Reach every extra: Rezdy answers at most 100 and has no paging, so each first letter and digit is searched in turn (about 40 requests)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
-    """List extras (add-ons)."""
+    """List extras (add-ons).
+
+    Rezdy returns at most 100 extras and cannot page the list. A list that
+    reaches 100 is therefore probably cut short; --all searches each first
+    letter and digit to reach the rest.
+    """
+    from crude_rezdy.client import EXTRA_CAP
     client = _client()
     try:
-        items = client.list_extras(search=search or "")
+        if fetch_all:
+            items, capped = client.all_extras(search=search or "")
+        else:
+            items, capped = client.list_extras(search=search or ""), []
     except Exception as e:
         typer.echo(f"Error fetching extras: {e}", err=True)
         raise typer.Exit(1)
+    if capped:
+        typer.echo("Warning: more than 100 extras start with " + ", ".join(repr(c) for c in capped)
+                   + "; some are missing.", err=True)
+    elif not fetch_all and len(items) >= EXTRA_CAP:
+        typer.echo(f"Note: Rezdy lists at most {EXTRA_CAP} extras and has no paging, so this list "
+                   "may be cut short; add --all to reach the rest.", err=True)
     items = asof.current_state(items, "extras")
     emit_list(items, [
         ("ID", "id"),
@@ -1016,12 +1053,14 @@ def list_categories(
     visible: Optional[bool] = typer.Option(None, "--visible/--private", help="Only public (--visible) or only private (--private) categories; both when omitted."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List categories."""
     client = _client()
     try:
-        items = client.list_categories(search=search, visible=visible, limit=limit, offset=offset)
+        items = (client.all_categories(search=search, visible=visible) if fetch_all
+                 else client.list_categories(search=search, visible=visible, limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching categories: {e}", err=True)
         raise typer.Exit(1)
@@ -1054,12 +1093,14 @@ def category_products(
     category_id: str = typer.Argument(..., help="Category id."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List the products in a category."""
     client = _client()
     try:
-        items = client.list_category_products(category_id, limit=limit, offset=offset)
+        items = (client.all_category_products(category_id) if fetch_all
+                 else client.list_category_products(category_id, limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching category products: {e}", err=True)
         raise typer.Exit(1)
@@ -1178,12 +1219,14 @@ def rate_remove_product(
 def list_resources(
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List resources."""
     client = _client()
     try:
-        items = client.list_resources(limit=limit, offset=offset)
+        items = (client.all_resources() if fetch_all
+                 else client.list_resources(limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching resources: {e}", err=True)
         raise typer.Exit(1)
@@ -1201,32 +1244,64 @@ def resource_sessions(
     resource_id: str = typer.Argument(..., help="Resource id."),
     from_: Optional[str] = typer.Option(None, "--from", help="Window start, a local day or time (YYYY-MM-DD or 'YYYY-MM-DD HH:mm:ss')."),
     to: Optional[str] = typer.Option(None, "--to", help="Window end, a local day or time (a bare date runs to the end of that day)."),
-    limit: int = typer.Option(100, "--limit", help="Maximum number of results (Rezdy returns at most 100 a page)."),
-    offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    limit: int = typer.Option(100, "--limit", help="Maximum number of results (Rezdy returns at most 100, whatever this says)."),
+    offset: int = typer.Option(0, "--offset", help="Ignored by Rezdy on this list; use --all to get past 100."),
+    fetch_all: bool = typer.Option(False, "--all", help="Walk the window in date windows (months, halved where one returns 100) and keep each session once. Needs --from and --to; ignores --limit and --offset."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List the sessions assigned to a resource.
 
     With --from/--to, Rezdy returns the sessions that both start and end inside
-    the window, so a session running past --to is left out.
+    the window, so a session running past --to is left out. Rezdy answers at
+    most 100 sessions and does not page this list (--offset has no effect), so
+    --all splits the window by date instead.
     """
     client = _client()
+    start_local = _local_bound(from_, end=False)
+    end_local = _local_bound(to, end=True)
+    gaps = []
+    if fetch_all:
+        if not (start_local and end_local):
+            typer.echo("Error: --all needs both --from and --to, the window to walk.", err=True)
+            raise typer.Exit(1)
+        try:
+            window = [datetime.strptime(v, "%Y-%m-%d %H:%M:%S") for v in (start_local, end_local)]
+        except ValueError:
+            typer.echo("Error: --from and --to must be a date (YYYY-MM-DD) or a time "
+                       "(YYYY-MM-DD HH:mm:ss).", err=True)
+            raise typer.Exit(1)
+        if window[0] > window[1]:
+            typer.echo("Error: --from is after --to.", err=True)
+            raise typer.Exit(1)
     try:
-        items = client.list_resource_sessions(
-            resource_id,
-            start_time_local=_local_bound(from_, end=False),
-            end_time_local=_local_bound(to, end=True),
-            limit=limit, offset=offset,
-        )
+        if fetch_all:
+            items, gaps = client.all_resource_sessions(resource_id, start_local, end_local)
+        else:
+            items = client.list_resource_sessions(
+                resource_id, start_time_local=start_local, end_time_local=end_local,
+                limit=limit, offset=offset,
+            )
     except Exception as e:
         typer.echo(f"Error fetching resource sessions: {e}", err=True)
         raise typer.Exit(1)
+    if not fetch_all:
+        if offset:
+            typer.echo("Note: Rezdy ignores --offset on this list; add --all to walk past 100.",
+                       err=True)
+        if len(items) >= 100:
+            typer.echo("Note: Rezdy answers at most 100 sessions here, so there may be more; "
+                       "narrow the window or add --all.", err=True)
     items = asof.current_state(items, "resource sessions")
     emit_list(items, [
         ("Session ID", "id"),
         ("Start", "startTimeLocal"),
         ("End", "endTimeLocal"),
     ], "session", output_json)
+    if gaps:
+        typer.echo("Error: 100 or more sessions fall in " + "; ".join(f"{a} to {b}" for a, b in gaps)
+                   + ", too short to cut further, so sessions are missing from the list above.",
+                   err=True)
+        raise typer.Exit(1)
 
 
 @resource_app.command("for-session")
@@ -1397,12 +1472,14 @@ def list_vouchers(
     search: Optional[str] = typer.Option(None, "--search", help="Filter by voucher code; omit for all."),
     limit: int = typer.Option(100, "--limit", help="Maximum number of results."),
     offset: int = typer.Option(0, "--offset", help="Number of results to skip."),
+    fetch_all: bool = typer.Option(False, "--all", help="Fetch every page (ignores --limit and --offset)."),
     output_json: bool = typer.Option(False, "--json", help="Print raw JSON instead of a table."),
 ):
     """List vouchers. (Creating vouchers is not in the public API; see docs/rezdy.md.)"""
     client = _client()
     try:
-        items = client.list_vouchers(search=search or "", limit=limit, offset=offset)
+        items = (client.all_vouchers(search=search or "") if fetch_all
+                 else client.list_vouchers(search=search or "", limit=limit, offset=offset))
     except Exception as e:
         typer.echo(f"Error fetching vouchers: {e}", err=True)
         raise typer.Exit(1)
@@ -1467,6 +1544,7 @@ def find_company(
         raise typer.Exit(1)
     item = asof.current_state(item, "this company record")
     _show(item, output_json)
+
 
 
 if __name__ == "__main__":

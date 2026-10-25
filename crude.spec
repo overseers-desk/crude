@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.7
+Version:        1.6.8
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -100,6 +100,20 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.6.8-1
+- crude-rezdy: a whole-account read now reaches the end of every list. --all on
+  the product, customer, voucher, category, category products, resource and
+  availability lists fetches every page. Rezdy cannot page resource sessions or
+  extras (it answers at most 100 and ignores offset and limit): resource
+  sessions --all --from --to walks the window by date, extra list --all
+  searches by each first letter and digit, and both say on stderr when a plain
+  call may have been cut at 100. availability list takes --product more than
+  once, or --all-products.
+- crude-rezdy: requests are kept to 80 a minute and retried with back-off when
+  Rezdy refuses for the count (HTTP 406, not 429) and, on a read, on its
+  downstream-call failure.
+- docs/rezdy.md no longer says resource sessions pages with --offset.
+
 * Tue Oct 20 2026 Weiwu Zhang <a@colourful.land> - 1.6.7-1
 - The Claude command's description names Google reviews outright for
   crude-business-profile, as tightly as the other sites' entries.

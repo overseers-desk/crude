@@ -2,7 +2,7 @@
 
 Reference for `crude-rezdy`. Source: the Rezdy **Supplier** API, documented at `https://developers.rezdy.com/rezdyapi/index-supplier.html` (OpenAPI 3.0, ReDoc-rendered). Unlike the ATDW and Sonas clients, this one rides a documented public API, so this document covers the CLI surface, the write conventions, and the boundary of what the API exposes, rather than a reverse-engineered protocol.
 
-`crude_rezdy` implements every resource the Supplier API exposes. The non-live unit suite (`tests/test_rezdy_writes.py`, `tests/test_accounts_and_timezone.py`) pins the transport, the read-merge-write, the booking notification default, and the resolver; the live read paths run under `pytest -m live` when a config is present.
+`crude_rezdy` implements every resource the Supplier API exposes. The non-live unit suite (`tests/test_rezdy_writes.py`, `tests/test_accounts_and_timezone.py`, `tests/test_rezdy_retry.py`, `tests/test_rezdy_paging.py`) pins the transport and its back-off, the read-merge-write, the booking notification default, the resolver and the whole-list walks; the live read paths run under `pytest -m live` when a config is present.
 
 ---
 
@@ -21,30 +21,47 @@ environment = "production"                # optional; "staging" hits api.rezdy-s
 
 ## 2. Transport and auth
 
-Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent in the `apiKey` request header, which keeps it out of request URLs and so out of any error message that quotes one. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `Rezdy API error`. Rate limit is 100 requests/minute. List endpoints page by `offset`/`limit` (limit max 100, except the availability search, which returns up to 1000 sessions a call); `booking list --all` walks the pages.
+Base `https://api.rezdy.com/v1` (`https://api.rezdy-staging.com/v1` for staging). The API key is sent in the `apiKey` request header, which keeps it out of request URLs and so out of any error message that quotes one. Rezdy reports failure on two channels — the HTTP status and a `requestStatus` object in the body — and the client surfaces either as a `Rezdy API error`. Rate limit is 100 requests/minute: the client spaces its requests to at most 80 in any minute (the limit counts every program using the key, so the rest is left to them), and retries with back-off (2, 4, 8, 16, 32 seconds, or the wait Rezdy names in `Retry-After`, five retries at most) when Rezdy refuses for the minute's count and on the HTTP 500 it gives when a call of its own fails (`DOWNSTREAM_CALL_FAILURE`). Rezdy's refusal for the count is not an HTTP 429: it arrives as HTTP 406 with `errorCode` 3 and the message `Too Many Requests (limit=100, current count=…)`, and crude retries both. The 500 is retried for reads only: on a write it does not say whether the change landed, and sending it again could book twice. Any other error is raised at once. The pacing is per process, so two commands running together share Rezdy's limit and can still meet the refusal, which the retry absorbs.
+
+How each list answers is not the same, and a list that does not page cuts off silently:
+
+| List | Paging |
+|------|--------|
+| `product`, `customer`, `voucher`, `category`, `category products`, `resource` lists | `offset`/`limit`, at most 100 a page |
+| `availability list` | `offset`/`limit`, at most 1000 a page |
+| `booking list` | `offset`/`limit`, at most 100 a page |
+| `resource sessions` | **none.** Rezdy answers at most 100 sessions and ignores both `limit` and `offset` (checked against the live API, October 2026): every "page" is the same first 100. The only way past 100 is a smaller date window. |
+| `extra list` | **none.** Rezdy answers a search with at most 100 extras and ignores `limit` and `offset`. The search string is a prefix match that ignores case; an empty one returns 100, the newest first. |
+| `rate list`, `pickup-list list`, `product pickups` | take search terms only, as documented; no sign of a cap (an account with fewer than 100 cannot show one) |
+
+`--all` on a list verb walks it to the end: `product`, `customer`, `voucher`, `category`, `category products`, `resource` and `availability` list walk the pages (`--limit` and `--offset` are ignored), stopping on a short page or on a full page with nothing new in it, which is what an endpoint that ignores `offset` would answer; `resource sessions --all` and `extra list --all` use the means below.
 
 ## 3. Command surface
 
 | Resource | Verbs |
 |----------|-------|
-| `product` | list, get, create, update, delete, image-add, image-remove, pickups |
-| `availability` | list, create, update, delete, batch |
+| `product` | list *(`--all`)*, get, create, update, delete, image-add, image-remove, pickups |
+| `availability` | list *(`--product` repeats; `--all-products`; `--all`)*, create, update, delete, batch |
 | `booking` | list, cancellations, get, quote, create, update, cancel |
-| `customer` | list, get, create, delete |
-| `extra` | list *(`--search`)*, get, create, update, delete |
+| `customer` | list *(`--all`)*, get, create, delete |
+| `extra` | list *(`--search`, `--all`; no paging)*, get, create, update, delete |
 | `pickup-list` | list *(`--search`)*, get, create, update, delete |
-| `category` | list, get, products, add-product, remove-product |
+| `category` | list *(`--all`)*, get, products *(`--all`)*, add-product, remove-product |
 | `rate` | list *(`--name`, `--product`)*, get, add-product, remove-product |
-| `resource` | list, sessions, for-session, add-session, remove-session |
+| `resource` | list *(`--all`)*, sessions *(`--all`)*, for-session, add-session, remove-session |
 | `manifest` | order-status, order-set, order-remove, session-status, session-set, session-remove |
-| `voucher` | list *(`--search`; empty returns all)*, get *(by code, read-only)* |
+| `voucher` | list *(`--search`; empty returns all; `--all`)*, get *(by code, read-only)* |
 | `company` | get *(by alias)*, find *(by name)* |
 
-`booking list` follows the booking search as Rezdy's changelog entry of 16 June 2026 defines it. `--search` is a slow prefix match on customer names and payment or voucher codes; matching an order number or an agent code through it is deprecated, so an order goes to `booking get` and an agent's bookings to `--source-channel <agent code>`. `--reseller-reference` (the agent's own booking number), `--role` and a repeated `--product` are the other server-side filters. `category list` takes `--search` and `--visible/--private`. `resource sessions` takes a local `--from/--to` window, in which Rezdy returns the sessions that both start and end inside it, and pages with `--limit/--offset` at up to 100 a page; `availability list` pages with `--offset`.
+`booking list` follows the booking search as Rezdy's changelog entry of 16 June 2026 defines it. `--search` is a slow prefix match on customer names and payment or voucher codes; matching an order number or an agent code through it is deprecated, so an order goes to `booking get` and an agent's bookings to `--source-channel <agent code>`. `--reseller-reference` (the agent's own booking number), `--role` and a repeated `--product` are the other server-side filters. `category list` takes `--search` and `--visible/--private`. `resource sessions` takes a local `--from/--to` window, in which Rezdy returns the sessions that both start and end inside it, at most 100 of them; it does not page, so `--offset` has no effect (crude says so on stderr when it is given, and when a call returns the full 100). `resource sessions --all` needs both bounds and walks the window in months, halving any window that returns 100, until each returns fewer; sessions are kept once by id and come back in start order. Rezdy returns the earliest 100 of a window, and only sessions that start and end inside it, so a session running over a cut would lie whole in neither half: neighbouring windows overlap by a margin, a day at the month cuts and elsewhere the longest session seen so far (an hour at least, twelve hours at most). A session longer than the margin that runs over a cut can still be missed. A window under four margins that still returns 100 cannot be cut further: crude prints what it has, names the window on stderr and exits 1.
+
+`extra list` cannot be paged either. `extra list --all` takes the means the API allows: a search that fills the 100 is split by the next character (a to z, 0 to 9) and each part searched in turn, to eight characters deep, about 40 requests for an account of a few hundred extras. An extra whose name starts with anything but a letter or a digit is out of that walk's reach unless it is among the unfiltered first 100, but a search for the whole name does reach them (`extras_named` in the client).
+
+`availability list --product` repeats for several products, or `--all-products` lists every product of the account; several products give one flat list of sessions, each carrying its `productCode` (a Product column in the table). `--all-products` walks every page of every product, as `--all` does for the products named.
 
 `category` and `rate` writes assign or unassign a product to an existing category/rate; the categories and rates themselves are read-only in the API. `resource` writes assign or unassign a session; resources themselves are read-only — the API has no endpoint to create one, so a new resource (vehicle, room, guide, animal, …) is added in the dashboard and then assigned here.
 
-A few paths are not the obvious guess and follow the spec: a session is mutated by product code and local start time (`availability update --product P1 --start-local "..."`), not a session id; `manifest *-set` toggles check-in (`--checkin/--no-checkin`) for an order-session or a whole session, keyed by `--product` and `--start`/`--start-local`; `rate list` and the search-based `extra`/`pickup-list` lists take their documented query terms rather than offset paging. Custom booking questions are not a separate resource: they are the product's `bookingFields` array, edited through `product update` — and because that overlay replaces the list wholesale rather than merging it, you send the complete set of fields, not just the new one.
+A few paths are not the obvious guess and follow the spec: a session is mutated by product code and local start time (`availability update --product P1 --start-local "..."`), not a session id; `manifest *-set` toggles check-in (`--checkin/--no-checkin`) for an order-session or a whole session, keyed by `--product` and `--start`/`--start-local`; `rate list` and the search-based `extra`/`pickup-list` lists take their documented query terms rather than offset paging (for the extras, see above). Custom booking questions are not a separate resource: they are the product's `bookingFields` array, edited through `product update` — and because that overlay replaces the list wholesale rather than merging it, you send the complete set of fields, not just the new one.
 
 ## 4. Time bounds
 

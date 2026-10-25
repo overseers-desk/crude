@@ -661,7 +661,7 @@ def test_rezdy_vouchers_drop_issued_after_cutoff(bound, monkeypatch, capsys):
     ]
     stub = SimpleNamespace(list_vouchers=lambda search="", limit=100, offset=0: list(vouchers))
     monkeypatch.setattr(rcli, "_client", lambda: stub)
-    rcli.list_vouchers(search=None, limit=100, offset=0, output_json=True)
+    rcli.list_vouchers(search=None, limit=100, offset=0, fetch_all=False, output_json=True)
     out = json.loads(capsys.readouterr().out)
     assert [v["code"] for v in out] == ["V1"]
 

@@ -42,7 +42,7 @@ def wired(monkeypatch):
 
 
 def test_list_ldif_emits_parseable_entry(wired, capsys):
-    cli.list_customers(search=None, limit=20, offset=0, output_json=False, ldif=True)
+    cli.list_customers(search=None, limit=20, offset=0, fetch_all=False, output_json=False, ldif=True)
     out = capsys.readouterr().out
     lines = out.splitlines()
     assert lines[0] == f"dn: uid=rezdy-7,{BASE}"
@@ -67,7 +67,7 @@ def test_get_ldif_emits_parseable_entry(wired, capsys):
 
 
 def test_list_json_unchanged(wired, capsys):
-    cli.list_customers(search=None, limit=20, offset=0, output_json=True, ldif=False)
+    cli.list_customers(search=None, limit=20, offset=0, fetch_all=False, output_json=True, ldif=False)
     out = capsys.readouterr().out
     assert json.loads(out) == wired
 

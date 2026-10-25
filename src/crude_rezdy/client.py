@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import time
 from collections import deque
+from datetime import datetime, timedelta, time as _time
 from urllib.parse import quote
 
 import requests
@@ -41,6 +42,22 @@ DOWNSTREAM_FAILURE = "DOWNSTREAM_CALL_FAILURE"
 # with errorCode "3" and a message beginning with this.
 RATE_LIMIT_TEXT = "Too Many Requests"
 
+# Records a page can hold at most. The availability search alone goes to 1000.
+PAGE = 100
+AVAILABILITY_PAGE = 1000
+
+# Local times as Rezdy takes them on the session endpoints.
+_LOCAL = "%Y-%m-%d %H:%M:%S"
+# Where a resource's sessions are cut in two, the halves overlap by the longest
+# session seen so far, between these bounds.
+_MARGIN_LEAST = timedelta(hours=1)
+_MARGIN_MOST = timedelta(hours=12)
+# /extra answers a search with at most this many extras and pages by nothing.
+EXTRA_CAP = 100
+# The search on /extra is a case-insensitive prefix match; these are the next
+# characters a capped prefix is split by.
+_PREFIX_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789"
+_PREFIX_DEPTH = 8
 
 
 def _payload(data):
@@ -525,6 +542,164 @@ class RezdyClient:
 
     def get_company_by_name(self, company_name: str) -> dict:
         return self._one(f"/companies/name/{_seg(company_name)}")
+
+    # ------------------------------------------------------------------
+    # Whole-list walks: every record of a list, however many pages it takes
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _record_key(record):
+        """What makes a record the same record again: its id, else all of it."""
+        if isinstance(record, dict) and record.get("id") is not None:
+            return ("id", record["id"])
+        return ("all", json.dumps(record, sort_keys=True, default=str))
+
+    def walk(self, fetch, page: int = PAGE) -> list:
+        """Every record of a list that pages by offset.
+
+        `fetch(limit, offset)` returns one page. The walk ends on a short page, and
+        also on a full page with nothing new in it, which is what an endpoint that
+        ignores `offset` answers with (the same first page, however far on one
+        asks); without that stop such a list would never end. A record seen twice
+        is kept once.
+        """
+        seen, out, offset = set(), [], 0
+        while True:
+            got = fetch(page, offset)
+            fresh = 0
+            for record in got:
+                key = self._record_key(record)
+                if key not in seen:
+                    seen.add(key)
+                    out.append(record)
+                    fresh += 1
+            if len(got) < page or fresh == 0:
+                return out
+            offset += page
+
+    def all_products(self, search: str = None) -> list:
+        return self.walk(lambda n, o: self.list_products(search=search, limit=n, offset=o))
+
+    def all_customers(self, search: str = None) -> list:
+        return self.walk(lambda n, o: self.list_customers(search=search, limit=n, offset=o))
+
+    def all_vouchers(self, search: str = "") -> list:
+        return self.walk(lambda n, o: self.list_vouchers(search=search, limit=n, offset=o))
+
+    def all_categories(self, search: str = None, visible: bool = None) -> list:
+        return self.walk(lambda n, o: self.list_categories(
+            search=search, visible=visible, limit=n, offset=o))
+
+    def all_category_products(self, category_id: str) -> list:
+        return self.walk(lambda n, o: self.list_category_products(category_id, limit=n, offset=o))
+
+    def all_resources(self) -> list:
+        return self.walk(lambda n, o: self.list_resources(limit=n, offset=o))
+
+    def all_availability(self, product_code: str, start_time_local: str, end_time_local: str,
+                         min_availability: int = None) -> list:
+        """Every session of a product in a local-time window (pages of 1000)."""
+        return self.walk(lambda n, o: self.list_availability(
+            product_code, start_time_local, end_time_local,
+            min_availability=min_availability, limit=n, offset=o), page=AVAILABILITY_PAGE)
+
+    def all_resource_sessions(self, resource_id: str, start_time_local: str,
+                              end_time_local: str) -> tuple:
+        """Every session of a resource in a local-time window: (sessions, gaps).
+
+        /resources/{id}/sessions answers at most 100 sessions, the earliest of the
+        window, and ignores both `limit` and `offset`, so the only way past 100 is a
+        smaller window. The range is cut into months, and a window that returns 100
+        is cut in half until each returns fewer. Rezdy gives only the sessions that
+        start and end inside a window, so a session running over a cut would lie in
+        neither half; neighbouring windows therefore overlap by a margin, a day at the
+        month cuts and elsewhere the longest session seen so far (an hour at least,
+        twelve hours at most), which puts such a session whole inside one of them. A
+        longer session running over a cut can still be missed. Sessions are kept once
+        by id and come back in start order.
+
+        `gaps` lists the (from, to) windows still holding 100 or more sessions that
+        are too short to cut (under four margins, below which a half is hardly
+        shorter than its whole), so sessions in them may be missing.
+        """
+        lo = datetime.strptime(start_time_local, _LOCAL)
+        hi = datetime.strptime(end_time_local, _LOCAL)
+        if lo > hi:
+            raise ValueError(f"window starts after it ends: {start_time_local} > {end_time_local}")
+        found, gaps = {}, []
+        longest = [_MARGIN_LEAST]
+        day = timedelta(days=1)
+
+        def note_lengths(sessions):
+            for s in sessions:
+                try:
+                    length = (datetime.strptime(s["endTimeLocal"], _LOCAL)
+                              - datetime.strptime(s["startTimeLocal"], _LOCAL))
+                except (KeyError, TypeError, ValueError):
+                    continue
+                longest[0] = max(longest[0], min(length, _MARGIN_MOST))
+
+        def window(a, b):
+            got = self.list_resource_sessions(
+                resource_id, a.strftime(_LOCAL), b.strftime(_LOCAL), limit=PAGE)
+            note_lengths(got)
+            if len(got) >= PAGE:
+                margin, span = longest[0], b - a
+                if span >= 4 * margin:
+                    mid = a + timedelta(seconds=int(span.total_seconds() // 2))
+                    window(a, mid + margin)
+                    window(mid - margin, b)
+                    return
+                gaps.append((a.strftime(_LOCAL), b.strftime(_LOCAL)))
+            for session in got:
+                found.setdefault(self._record_key(session), session)
+
+        first = lo.date().replace(day=1)
+        while first <= hi.date():
+            following = (first + timedelta(days=32)).replace(day=1)
+            window(max(lo, datetime.combine(first, _time(0, 0, 0))),
+                   min(hi, datetime.combine(following, _time(0, 0, 0)) + day))
+            first = following
+        ordered = sorted(found.values(),
+                         key=lambda s: (str(s.get("startTimeLocal")), str(s.get("id"))))
+        return ordered, gaps
+
+    def all_extras(self, search: str = "") -> tuple:
+        """Every extra Rezdy will list for a search: (extras, capped).
+
+        /extra takes only a search string, answers with at most 100 extras and has
+        no paging: `limit` and `offset` are ignored. The search is a prefix match
+        that ignores case, so a search that fills the 100 is split by the next
+        character (a to z, 0 to 9) until each part comes back short. An extra whose
+        name starts with anything else is reached only when it is among the first
+        100 of the whole list or is asked for by its name (`extras_named`).
+
+        `capped` lists the prefixes still full at the depth limit.
+        """
+        found, capped = {}, []
+
+        def sweep(prefix, depth):
+            got = self.list_extras(prefix)
+            for extra in got:
+                found.setdefault(self._record_key(extra), extra)
+            if len(got) >= EXTRA_CAP:
+                if depth >= _PREFIX_DEPTH:
+                    capped.append(prefix)
+                    return
+                for ch in _PREFIX_CHARS:
+                    sweep(prefix + ch, depth + 1)
+
+        sweep(search or "", 0)
+        return list(found.values()), capped
+
+    def extras_named(self, names) -> list:
+        """The extras whose names are exactly these, each found by searching its name."""
+        found = {}
+        for name in dict.fromkeys(n for n in names if n):
+            for extra in self.list_extras(name):
+                if extra.get("name") == name:
+                    found.setdefault(self._record_key(extra), extra)
+        return list(found.values())
 
     # ------------------------------------------------------------------
     # Name resolution (id/code -> human name), cached per kind

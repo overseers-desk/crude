@@ -1,3 +1,22 @@
+crude (1.6.8) unstable; urgency=medium
+
+  * crude-rezdy: a whole-account read now reaches the end of every list.
+    `--all` on the product, customer, voucher, category, category products,
+    resource and availability lists fetches every page. Two Rezdy lists cannot
+    be paged at all, because Rezdy answers at most 100 and ignores `offset` and
+    `limit`: `resource sessions --all --from --to` walks the window by date,
+    halving any window that returns 100, and `extra list --all` searches by each
+    first letter and digit. Both now say on stderr when a plain call may have
+    been cut at 100. `availability list` takes `--product` more than once, or
+    `--all-products`.
+  * crude-rezdy: requests are kept to 80 a minute and retried with back-off
+    when Rezdy refuses for the count (it sends HTTP 406, not 429) and, on a
+    read, when a call of Rezdy's own fails (DOWNSTREAM_CALL_FAILURE).
+  * docs/rezdy.md no longer says `resource sessions` pages with `--offset`, and
+    gives each Rezdy list's paging.
+
+ -- Weiwu Zhang <a@colourful.land>  Mon, 26 Oct 2026 03:30:00 +1000
+
 crude (1.6.7) unstable; urgency=medium
 
   * The Claude command's description names Google reviews outright for
