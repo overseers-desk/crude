@@ -13,6 +13,9 @@ startTimeLocal, the manifest check-in pair) are taken from that spec, not assume
 
 from __future__ import annotations
 
+import json
+import time
+from collections import deque
 from urllib.parse import quote
 
 import requests
@@ -21,6 +24,23 @@ from crude_common import asof
 
 PROD_BASE = "https://api.rezdy.com"
 STAGING_BASE = "https://api.rezdy-staging.com"
+
+# Rezdy allows 100 requests a minute for the whole key, and counts every program
+# using it. The client keeps to 80, so the other users of the key have room before
+# a long walk tips the count over.
+REQUESTS_PER_MINUTE = 80
+# Retries after the first attempt, and the back-off between them: 2, 4, 8, 16, 32
+# seconds unless Rezdy names a wait itself with Retry-After (never more than 120).
+MAX_RETRIES = 5
+BACKOFF_FIRST = 2.0
+BACKOFF_CAP = 60.0
+RETRY_AFTER_CAP = 120.0
+# Rezdy's internal-call failure on a read: HTTP 500 with this name in the body.
+DOWNSTREAM_FAILURE = "DOWNSTREAM_CALL_FAILURE"
+# What Rezdy says when the minute's count is passed: in practice HTTP 406 (not 429)
+# with errorCode "3" and a message beginning with this.
+RATE_LIMIT_TEXT = "Too Many Requests"
+
 
 
 def _payload(data):
@@ -54,10 +74,58 @@ class RezdyClient:
              "apiKey": api_key}
         )
         self._name_caches: dict = {}
+        # Send times of the last minute's requests, and the clock and sleep that
+        # pace them (replaced in tests so no test waits).
+        self._sent: deque = deque()
+        self._clock = time.monotonic
+        self._sleep = time.sleep
 
     # ------------------------------------------------------------------
     # Transport
     # ------------------------------------------------------------------
+
+    def _throttle(self) -> None:
+        """Wait, if the last minute already held REQUESTS_PER_MINUTE requests."""
+        now = self._clock()
+        while self._sent and now - self._sent[0] >= 60:
+            self._sent.popleft()
+        if len(self._sent) >= REQUESTS_PER_MINUTE:
+            self._sleep(60 - (now - self._sent[0]))
+            now = self._clock()
+            # The oldest has had its minute, to the last rounding of the clock.
+            self._sent.popleft()
+            while self._sent and now - self._sent[0] >= 60:
+                self._sent.popleft()
+        self._sent.append(now)
+
+    @staticmethod
+    def _retry_wait(method: str, r, attempt: int):
+        """Seconds to wait before trying again, or None when the answer is final.
+
+        A refusal for the minute's count is retried for every verb: Rezdy refused
+        the request unread. It arrives as HTTP 429 or, as Rezdy really sends it,
+        HTTP 406 with "Too Many Requests" in the body. The 500 Rezdy gives when one
+        of its own downstream calls fails is retried for reads only: on a write it
+        does not say whether the change landed, and sending it twice could book
+        twice.
+        """
+        backoff = min(BACKOFF_CAP, BACKOFF_FIRST * 2 ** attempt)
+
+        def body_text():
+            try:
+                return json.dumps(r.json())
+            except ValueError:
+                return getattr(r, "text", "") or ""
+
+        if r.status_code == 429 or (r.status_code == 406 and RATE_LIMIT_TEXT in body_text()):
+            named = (getattr(r, "headers", None) or {}).get("Retry-After")
+            try:
+                return min(RETRY_AFTER_CAP, max(float(named), 1.0))
+            except (TypeError, ValueError):
+                return backoff
+        if r.status_code == 500 and method == "GET" and DOWNSTREAM_FAILURE in body_text():
+            return backoff
+        return None
 
     def _request(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
         """Issue one request to /v1{path}, surfacing Rezdy's two error channels.
@@ -65,12 +133,25 @@ class RezdyClient:
         Rezdy reports failure both via HTTP status and via a requestStatus object
         in the body (a success flag plus an error message). A write that returns no
         body (e.g. 204 on DELETE) yields an empty dict.
+
+        Requests are paced to REQUESTS_PER_MINUTE, and a refusal for the minute's
+        count, or a downstream failure on a read (see _retry_wait), is tried again with back-off up to
+        MAX_RETRIES times before it is raised.
         """
         params = {k: v for k, v in (params or {}).items() if v is not None}
-        r = self.session.request(
-            method, f"{self.base_url}/v1{path}", params=params,
-            json=body if body is not None else None,
-        )
+        retries = 0
+        while True:
+            self._throttle()
+            r = self.session.request(
+                method, f"{self.base_url}/v1{path}", params=params,
+                json=body if body is not None else None,
+            )
+            wait = self._retry_wait(method, r, retries)
+            if wait is None or retries >= MAX_RETRIES:
+                break
+            self._sleep(wait)
+            retries += 1
+        gave_up = f" (still failing after {retries} retries)" if retries else ""
         try:
             data = r.json()
         except ValueError:
@@ -83,7 +164,7 @@ class RezdyClient:
             msg = ""
             if status:
                 msg = (status.get("error") or {}).get("errorMessage", "")
-            raise RuntimeError(f"Rezdy API error: {msg or f'HTTP {r.status_code}'}")
+            raise RuntimeError(f"Rezdy API error: {msg or f'HTTP {r.status_code}'}{gave_up}")
         return data
 
     def _list(self, path: str, params: dict = None) -> list:
