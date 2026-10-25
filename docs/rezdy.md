@@ -2,7 +2,7 @@
 
 Reference for `crude-rezdy`. Source: the Rezdy **Supplier** API, documented at `https://developers.rezdy.com/rezdyapi/index-supplier.html` (OpenAPI 3.0, ReDoc-rendered). Unlike the ATDW and Sonas clients, this one rides a documented public API, so this document covers the CLI surface, the write conventions, and the boundary of what the API exposes, rather than a reverse-engineered protocol.
 
-`crude_rezdy` implements every resource the Supplier API exposes. The non-live unit suite (`tests/test_rezdy_writes.py`, `tests/test_accounts_and_timezone.py`, `tests/test_rezdy_retry.py`, `tests/test_rezdy_paging.py`) pins the transport and its back-off, the read-merge-write, the booking notification default, the resolver and the whole-list walks; the live read paths run under `pytest -m live` when a config is present.
+`crude_rezdy` implements every resource the Supplier API exposes. The non-live unit suite (`tests/test_rezdy_writes.py`, `tests/test_accounts_and_timezone.py`, `tests/test_rezdy_retry.py`, `tests/test_rezdy_paging.py`, `tests/test_rezdy_export.py`) pins the transport and its back-off, the read-merge-write, the booking notification default, the resolver, the whole-list walks and the export; the live read paths run under `pytest -m live` when a config is present.
 
 ---
 
@@ -52,16 +52,36 @@ How each list answers is not the same, and a list that does not page cuts off si
 | `manifest` | order-status, order-set, order-remove, session-status, session-set, session-remove |
 | `voucher` | list *(`--search`; empty returns all; `--all`)*, get *(by code, read-only)* |
 | `company` | get *(by alias)*, find *(by name)* |
+| *(account)* | `export <dir>` *(read-only; see below)* |
 
 `booking list` follows the booking search as Rezdy's changelog entry of 16 June 2026 defines it. `--search` is a slow prefix match on customer names and payment or voucher codes; matching an order number or an agent code through it is deprecated, so an order goes to `booking get` and an agent's bookings to `--source-channel <agent code>`. `--reseller-reference` (the agent's own booking number), `--role` and a repeated `--product` are the other server-side filters. `category list` takes `--search` and `--visible/--private`. `resource sessions` takes a local `--from/--to` window, in which Rezdy returns the sessions that both start and end inside it, at most 100 of them; it does not page, so `--offset` has no effect (crude says so on stderr when it is given, and when a call returns the full 100). `resource sessions --all` needs both bounds and walks the window in months, halving any window that returns 100, until each returns fewer; sessions are kept once by id and come back in start order. Rezdy returns the earliest 100 of a window, and only sessions that start and end inside it, so a session running over a cut would lie whole in neither half: neighbouring windows overlap by a margin, a day at the month cuts and elsewhere the longest session seen so far (an hour at least, twelve hours at most). A session longer than the margin that runs over a cut can still be missed. A window under four margins that still returns 100 cannot be cut further: crude prints what it has, names the window on stderr and exits 1.
 
-`extra list` cannot be paged either. `extra list --all` takes the means the API allows: a search that fills the 100 is split by the next character (a to z, 0 to 9) and each part searched in turn, to eight characters deep, about 40 requests for an account of a few hundred extras. An extra whose name starts with anything but a letter or a digit is out of that walk's reach unless it is among the unfiltered first 100, but a search for the whole name does reach them (`extras_named` in the client).
+`extra list` cannot be paged either. `extra list --all` takes the means the API allows: a search that fills the 100 is split by the next character (a to z, 0 to 9) and each part searched in turn, to eight characters deep, about 40 requests for an account of a few hundred extras. An extra whose name starts with anything but a letter or a digit is out of that walk's reach unless it is among the unfiltered first 100; `export` finds those by the names the products carry (`extras_named` in the client), which a search for the whole name does reach.
 
 `availability list --product` repeats for several products, or `--all-products` lists every product of the account; several products give one flat list of sessions, each carrying its `productCode` (a Product column in the table). `--all-products` walks every page of every product, as `--all` does for the products named.
 
 `category` and `rate` writes assign or unassign a product to an existing category/rate; the categories and rates themselves are read-only in the API. `resource` writes assign or unassign a session; resources themselves are read-only — the API has no endpoint to create one, so a new resource (vehicle, room, guide, animal, …) is added in the dashboard and then assigned here.
 
 A few paths are not the obvious guess and follow the spec: a session is mutated by product code and local start time (`availability update --product P1 --start-local "..."`), not a session id; `manifest *-set` toggles check-in (`--checkin/--no-checkin`) for an order-session or a whole session, keyed by `--product` and `--start`/`--start-local`; `rate list` and the search-based `extra`/`pickup-list` lists take their documented query terms rather than offset paging (for the extras, see above). Custom booking questions are not a separate resource: they are the product's `bookingFields` array, edited through `product update` — and because that overlay replaces the list wholesale rather than merging it, you send the complete set of fields, not just the new one.
+
+### Export
+
+`crude-rezdy export <dir> --from <day> --to <day>` writes the whole account as JSON files in a directory, using only list and get calls. Each file holds what the matching `--json` verb prints, walked to the end by the means above:
+
+| File | Contents |
+|------|----------|
+| `products.json`, `product-detail.json`, `product-pickups.json` | the product list; each product's full record; each product's pickups, keyed by product code |
+| `company.json` | the company record of each `supplierAlias` the products carry, keyed by alias |
+| `availability.json` | every session of every product in the window, keyed by product code |
+| `bookings.json` | every booking, whatever its dates (the window does not apply) |
+| `customers.json`, `vouchers.json` | the full lists |
+| `extras.json` | the extras: the prefix walk, plus any a product carries that the walk could not reach, found by name |
+| `pickup-lists.json`, `pickup-list-detail.json`, `rates.json`, `rate-detail.json` | the lists and each record by id |
+| `categories.json`, `category-products.json` | the categories; each category's products, keyed by id |
+| `resources.json`, `resource-sessions.json` | the resources; each resource's sessions in the window, by `resource sessions --all`, keyed by id |
+| `manifest.json` | when it was made, the timezone, the window (and the parts it applies to), the parts exported, each file's counts, `errors`, `gaps` and `complete` |
+
+`--from/--to` (a local day or time, read as on `resource sessions`) bound the availability and the resource sessions, and are required unless `--only` leaves those parts out. `--only` (repeatable: `products`, `availability`, `bookings`, `customers`, `extras`, `pickup-lists`, `categories`, `rates`, `resources`, `vouchers`, `company`) exports some parts only. A call that still fails after the retries is recorded in `errors` and the export goes on; a window of resource sessions that cannot be cut is recorded in `gaps`. `complete` is true when both are empty, and the exit code is 1 when it is not. The directory is created readable by its owner only, and so are the files: they hold customers and bookings. An export refuses under `WORLD_AS_OF`, since it reads the account as it stands now. The requests are spaced to at most 80 a minute, so a large account takes minutes, not seconds: the resource sessions are the long part (one resource with 23,479 sessions took 680 requests, some eight minutes, against the live API), and each part is reported on stderr as it is written.
 
 ## 4. Time bounds
 

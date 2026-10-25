@@ -155,11 +155,18 @@ crude-rezdy product list --all
 crude-rezdy availability list --all-products --from "2026-05-25 00:00:00" --to "2026-05-31 23:59:59"
 crude-rezdy resource sessions 12345 --from 2026-01-01 --to 2026-12-31 --all
 crude-rezdy extra list --all
+crude-rezdy export ./rezdy-dump --from 2026-01-01 --to 2026-12-31
 ```
 
 `booking list --source-channel` takes the agent code from Rezdy's agents screen and `--reseller-reference` the agent's own booking number; `--product` repeats for several products. An order number goes to `booking get`: Rezdy has deprecated matching order numbers and agent codes through `--search`.
 
 `--all` on the `product`, `customer`, `voucher`, `category`, `category products`, `resource` and `availability` lists fetches every page. Two Rezdy lists cannot be paged at all: `resource sessions` answers at most 100 sessions and ignores `--offset`, and `extra list` answers at most 100 extras and has no paging. For those, `--all` takes other means: `resource sessions --all --from --to` walks the window in months, halving any that returns 100, and `extra list --all` searches by each first letter and digit. `availability list --product` repeats for several products, and `--all-products` lists every product. The client keeps to 80 requests a minute and retries with back-off when Rezdy refuses for the count (it sends HTTP 406, not 429) or reports a failed downstream call on a read.
+
+`crude-rezdy export <dir> --from <day> --to <day>` writes the whole account (products with detail, availability and resource sessions over the window, every booking, customers, extras, pickup lists, categories and their products, rates, resources, vouchers, the company record) as JSON files in the directory, with a `manifest.json` of the window, the counts and anything that could not be read. It only reads, and the files are readable by their owner alone. See `docs/rezdy.md`.
+
+For a single day's bookings, give that day as both bounds: `crude-rezdy booking list --from 2026-05-25 --to 2026-05-25`. Rezdy's search takes UTC instants and would read the bare date as midnight UTC, so crude sends the first and last second of that day in the account's `timezone` instead; the same holds for `--created-from/--created-to`. A bound that carries a time is account-local as well, unless it carries `Z` or an offset. Availability times are local (`YYYY-MM-DD HH:mm:ss`).
+
+`booking cancellations --from/--to` and `booking list --updated-from/--updated-to` filter on the cancellation/update instant, which Rezdy records in UTC, reading a typed date as the account's operational day in the same way. The lower bound is sent to Rezdy and holds across every page; the upper bound is checked only on the pages crude fetches, so add `--all` when using it alone. A booking that was never updated has no update instant and matches neither bound.
 
 ### JSON output
 

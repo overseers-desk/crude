@@ -1546,6 +1546,73 @@ def find_company(
     _show(item, output_json)
 
 
+# ----------------------------------------------------------------------
+# Export (read-only)
+# ----------------------------------------------------------------------
+
+
+@app.command("export")
+def export_account(
+    directory: str = typer.Argument(..., help="Directory to write the files into; created if missing."),
+    from_: Optional[str] = typer.Option(None, "--from", help="Start of the window of sessions (availability, resource sessions): a local day or time."),
+    to: Optional[str] = typer.Option(None, "--to", help="End of the window of sessions: a local day or time (a bare date runs to the end of that day)."),
+    only: Optional[List[str]] = typer.Option(None, "--only", help="Export only this part; repeat for several: products, availability, bookings, customers, extras, pickup-lists, categories, rates, resources, vouchers, company."),
+    output_json: bool = typer.Option(False, "--json", help="Print the manifest as JSON."),
+):
+    """Export the whole account, read-only, as JSON files in a directory.
+
+    Writes what each resource's --json prints, walked to the end: products with
+    their detail and pickups, availability and resource sessions over the
+    --from/--to window, every booking, customers, extras, pickup lists,
+    categories with their products, rates, resources, vouchers and the company
+    record, with a manifest.json of the window, the counts, and anything that
+    could not be read. Only list and get calls are made, paced under Rezdy's
+    limit, so a large account takes some minutes. The files hold customers and
+    bookings and are readable by their owner alone. Exits 1 if the manifest
+    is not complete.
+    """
+    from crude_rezdy.export import STAGES, WINDOWED, export_account as run_export
+
+    if asof.active():
+        asof.refuse("an export reads the account as it stands now, which a bounded replay cannot answer")
+    stages = tuple(dict.fromkeys(only)) if only else STAGES
+    unknown = [s for s in stages if s not in STAGES]
+    if unknown:
+        typer.echo(f"Error: --only {', '.join(unknown)}: the parts are {', '.join(STAGES)}.", err=True)
+        raise typer.Exit(1)
+    start_local, end_local = _local_bound(from_, end=False), _local_bound(to, end=True)
+    if any(s in WINDOWED for s in stages):
+        if not (start_local and end_local):
+            typer.echo("Error: availability and resource sessions need the window: give --from and --to "
+                       "(or leave them out with --only).", err=True)
+            raise typer.Exit(1)
+        try:
+            window = [datetime.strptime(v, "%Y-%m-%d %H:%M:%S") for v in (start_local, end_local)]
+        except ValueError:
+            typer.echo("Error: --from and --to must be a date (YYYY-MM-DD) or a time "
+                       "(YYYY-MM-DD HH:mm:ss).", err=True)
+            raise typer.Exit(1)
+        if window[0] > window[1]:
+            typer.echo("Error: --from is after --to.", err=True)
+            raise typer.Exit(1)
+    config = read_config(find_config())
+    client = _make_client(config)
+    tz = _account_timezone(config)
+    manifest = run_export(
+        client, directory, start_local=start_local, end_local=end_local, stages=stages,
+        timezone_name=str(tz), progress=lambda message: typer.echo(message, err=True),
+    )
+    if output_json:
+        typer.echo(json.dumps(manifest, indent=2))
+    else:
+        typer.echo(f"{len(manifest['files'])} file(s) written to {directory}, with manifest.json.")
+        for error in manifest["errors"]:
+            typer.echo(f"Error: {error['what']}: {error['error']}", err=True)
+        for gap in manifest["gaps"]:
+            typer.echo(f"Gap: {gap}", err=True)
+    if not manifest["complete"]:
+        raise typer.Exit(1)
+
 
 if __name__ == "__main__":
     app()

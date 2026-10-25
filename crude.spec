@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.6.8
+Version:        1.7.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -100,6 +100,14 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.7.0-1
+- crude-rezdy: new export <dir> verb: the whole account as JSON files in a
+  directory (products with detail and pickups, availability and resource
+  sessions over a --from/--to window, every booking, customers, extras, pickup
+  lists, categories and their products, rates, resources, vouchers, the company
+  record) with a manifest.json of the window, the counts and anything that could
+  not be read. Read-only; the files are readable by their owner alone.
+
 * Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.6.8-1
 - crude-rezdy: a whole-account read now reaches the end of every list. --all on
   the product, customer, voucher, category, category products, resource and

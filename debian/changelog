@@ -1,3 +1,15 @@
+crude (1.7.0) unstable; urgency=medium
+
+  * crude-rezdy: new `export <dir>` verb. It writes the whole account as JSON
+    files in a directory (products with detail and pickups, availability and
+    resource sessions over a --from/--to window, every booking, customers,
+    extras, pickup lists, categories and their products, rates, resources,
+    vouchers, the company record) with a manifest.json of the window, the counts
+    and anything that could not be read. It only reads, the files are readable
+    by their owner alone, and it exits 1 when the manifest is not complete.
+
+ -- Weiwu Zhang <a@colourful.land>  Mon, 26 Oct 2026 03:40:00 +1000
+
 crude (1.6.8) unstable; urgency=medium
 
   * crude-rezdy: a whole-account read now reaches the end of every list.
