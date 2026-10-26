@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.7.0
+Version:        1.8.0
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -100,6 +100,16 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.8.0-1
+- crude-deputy: new history verb. employee|roster|area|timesheet|leave history
+  <id>, and resource history <Object> <id> for any object, print the record's
+  change log from Deputy: every field change with its time, old and new value
+  and who made it. The Claude command and the new docs/deputy.md say what
+  Deputy keeps and what it does not: a deleted record answers Object not found
+  on every read, its publish events survive in SystemUsageTracking, and
+  "Unauthorized resource requested!" means an unknown name as much as a
+  forbidden one (the error now says so).
+
 * Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.7.0-1
 - crude-rezdy: new export <dir> verb: the whole account as JSON files in a
   directory (products with detail and pickups, availability and resource

@@ -99,9 +99,20 @@ def _day(value):
     return m.group(1) if m else value
 
 
+def _stamp(value):
+    """A change-log stamp, which Deputy sends as ISO-8601 with the install's
+    offset, as a clock time in the configured timezone, to the second."""
+    try:
+        when = datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return value
+    return when.astimezone(site_timezone("deputy")).strftime("%Y-%m-%d %H:%M:%S")
+
+
 # Fields a table or a record view shows converted, on whatever object carries them.
 _SHOWN_AS = {"StartTime": _clock, "EndTime": _clock,
-             "Date": _day, "DateStart": _day, "DateEnd": _day}
+             "Date": _day, "DateStart": _day, "DateEnd": _day,
+             "DtChanged": _stamp}
 
 
 def _show(item, output_json: bool, ldif: Optional[LdifSink] = None) -> None:
@@ -318,6 +329,44 @@ def _curated_get(obj, id, output_json, what, ldif: bool = False):
     _show(item, output_json, ldif=_person_sink(config) if ldif else None)
 
 
+_HISTORY_COLUMNS = ["DtChanged", "Field", "OldValue", "NewValue", "CreatorName"]
+
+
+def _history_shown(row: dict) -> dict:
+    """A change-log row for the table: the old and new value converted as the
+    changed field is in a record view. Deputy sends them as strings, so a
+    Unix-seconds field is coerced to a number before its clock converter."""
+    convert = _SHOWN_AS.get(row.get("Field"))
+    if convert is None:
+        return row
+    shown = dict(row)
+    for key in ("OldValue", "NewValue"):
+        value = shown.get(key)
+        if isinstance(value, str) and value.isdigit():
+            value = int(value)
+        shown[key] = convert(value)
+    return shown
+
+
+def _curated_history(obj, id, output_json, what):
+    client = _make_client(read_config(find_config()))
+    try:
+        rows = client.history_resource(obj, id)
+    except Exception as e:
+        typer.echo(f"Error fetching {what} {id} history: {e}", err=True)
+        raise typer.Exit(1)
+    rows = sorted(rows, key=lambda r: r.get("DtChanged") or "")
+    # A change made after the cutoff is a record created after it.
+    rows = asof.bound_records(rows, "DtChanged", what="change")
+    if not output_json:
+        rows = [_history_shown(r) for r in rows]
+    _emit(rows, output_json, columns=_HISTORY_COLUMNS)
+
+
+_HISTORY_HELP = ("Every change to the record: when, which field, old and new value, "
+                 "by whom. A deleted record answers 'Object not found' here as on get.")
+
+
 @employee_app.command("list")
 def employee_list(
     limit: int = typer.Option(50, "--limit", help="Maximum number of results."),
@@ -343,6 +392,14 @@ def employee_get(
 ):
     """Show a single employee."""
     _curated_get("Employee", id, output_json, "employee", ldif=ldif)
+
+
+@employee_app.command("history", help=_HISTORY_HELP)
+def employee_history(
+    id: str = typer.Argument(..., help="Employee Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history("Employee", id, output_json, "employee")
 
 
 @roster_app.command("list")
@@ -382,6 +439,14 @@ def roster_get(
     _curated_get("Roster", id, output_json, "roster")
 
 
+@roster_app.command("history", help=_HISTORY_HELP)
+def roster_history(
+    id: str = typer.Argument(..., help="Roster Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history("Roster", id, output_json, "roster")
+
+
 @area_app.command("list")
 def area_list(
     fetch_all: bool = typer.Option(False, "--all", help="Fetch all pages."),
@@ -402,6 +467,14 @@ def area_get(
 ):
     """Show a single area (operational unit)."""
     _curated_get("OperationalUnit", id, output_json, "area")
+
+
+@area_app.command("history", help=_HISTORY_HELP)
+def area_history(
+    id: str = typer.Argument(..., help="OperationalUnit Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history("OperationalUnit", id, output_json, "area")
 
 
 @timesheet_app.command("list")
@@ -438,6 +511,14 @@ def timesheet_get(
     _curated_get("Timesheet", id, output_json, "timesheet")
 
 
+@timesheet_app.command("history", help=_HISTORY_HELP)
+def timesheet_history(
+    id: str = typer.Argument(..., help="Timesheet Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history("Timesheet", id, output_json, "timesheet")
+
+
 @leave_app.command("list")
 def leave_list(
     employee: Optional[int] = typer.Option(None, "--employee", help="Employee Id to filter by."),
@@ -461,6 +542,14 @@ def leave_get(
 ):
     """Show a single leave record."""
     _curated_get("Leave", id, output_json, "leave")
+
+
+@leave_app.command("history", help=_HISTORY_HELP)
+def leave_history(
+    id: str = typer.Argument(..., help="Leave Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history("Leave", id, output_json, "leave")
 
 
 # ----------------------------------------------------------------------
@@ -507,6 +596,15 @@ def resource_get(
         raise typer.Exit(1)
     item = asof.check_record(item, "Created", "Modified", what=obj)
     _show(item, output_json)
+
+
+@resource_app.command("history", help=_HISTORY_HELP)
+def resource_history(
+    obj: str = typer.Argument(..., help="Deputy object name."),
+    id: str = typer.Argument(..., help="Record Id."),
+    output_json: bool = typer.Option(False, "--json", help="Print raw JSON."),
+):
+    _curated_history(obj, id, output_json, obj)
 
 
 @resource_app.command("query")

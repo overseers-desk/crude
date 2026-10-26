@@ -246,3 +246,4 @@ crude-business-profile review reply <review-id> -m "Thank you for visiting." --y
 - `docs/sonas.md`: Sonas resource map and DDP protocol
 - `docs/xero.md`: Xero command surface, auth, and tenant model
 - `docs/airwallex.md`: Airwallex command surface, auth, and the verified API behaviour
+- `docs/deputy.md`: Deputy command surface and API boundary

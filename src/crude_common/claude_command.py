@@ -137,11 +137,13 @@ Deputy rostering, timesheets, leave. Permanent token in `[deputy]` (`deputy_api_
     crude-deputy area list          # area == OperationalUnit
     crude-deputy timesheet list [--from] [--to] [--employee <id>] [--all]
     crude-deputy leave list [--employee <id>] [--all]
+    crude-deputy employee|roster|area|timesheet|leave history <id>    # the record's change log: when, which field, old and new value, by whom
 
 Deputy's Resource API is uniform across ~60 objects, so any object is reachable generically:
 
     crude-deputy resource list <Object> [--limit] [--start] [--all]
     crude-deputy resource get <Object> <id>
+    crude-deputy resource history <Object> <id>
     crude-deputy resource query <Object> [--where "Field op value" ...] [--sort "Field:asc|desc"] [--join Name ...] [--max] [--all]
     crude-deputy resource info <Object>
     crude-deputy resource create <Object> (--data '<json>' | -f file | stdin)
@@ -149,6 +151,8 @@ Deputy's Resource API is uniform across ~60 objects, so any object is reachable 
     crude-deputy resource delete <Object> <id> [--yes]
 
 `<Object>` is the literal Deputy object name (Employee, Roster, OperationalUnit, Timesheet, Leave, Memo, ...); there is no list-all endpoint, so consult Deputy's docs or use `resource <Object> info` to discover fields. --where operators: eq ne gt ge lt le lk nk in nn is ns (in/nn take a comma-separated value); --json-query passes a full Deputy QUERY body. delete is irreversible and prompts unless --yes.
+
+What Deputy keeps, and what it does not (checked on a live install, October 2026). A record's `Modified` is the time of its last write and says nothing of what changed (a shift's is overwritten at clock-in); `history` is the per-field change log, every change with its time, old and new value and who made it, and it is the answer to "when was this shift's start changed, and by whom". A deleted record is gone from every API read: get, query and history all answer `Object not found` for its id, and nothing the API serves records who deleted it or when (Deputy's web Shift Audit report, an Analytics+ subscription, is the only route). What survives of a deleted shift is its publish events in `SystemUsageTracking`: `resource query SystemUsageTracking --where "UsageType eq 11" --where "Created ge YYYY-MM-DD" --all` lists every publish with the shift id (`UsageRecordId`), the employee (`EmpId`), the shift's `Date` and who published it (`Creator`). `Unauthorized resource requested!` from `resource info` or `list` means either that no object of that name exists or that the token may not read it, and does not say which, so a guessed name proves nothing; the names are in Deputy's API reference. An Employee's `Id` and its `UserId` are different numbers (`employee list --json` carries both).
 
 ## crude-sonas (app.sonas.events)
 

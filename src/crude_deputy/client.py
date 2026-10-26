@@ -13,6 +13,15 @@ from crude_common.httpapi import HttpSession
 
 PAGE_MAX = 500  # Deputy's default and hard cap of records per page.
 
+# Deputy's one answer for an object name it does not know and for one the
+# token may not read; said so, since a probe for a guessed name cannot tell
+# a missing object from a refused one by this error alone.
+UNAUTHORIZED_RESOURCE = "Unauthorized resource requested!"
+UNAUTHORIZED_RESOURCE_NOTE = (
+    "Deputy answers this both for an object name that does not exist and for "
+    "one the token may not read"
+)
+
 
 class DeputyClient(HttpSession):
     def __init__(self, api_token: str, install: str, geo: str):
@@ -44,6 +53,8 @@ class DeputyClient(HttpSession):
                 msg = data.get("message", "")
         except ValueError:
             pass
+        if msg == UNAUTHORIZED_RESOURCE:
+            msg = f"{msg} ({UNAUTHORIZED_RESOURCE_NOTE})"
         raise RuntimeError(f"Deputy API error: {msg or f'HTTP {r.status_code}'}")
 
     # ------------------------------------------------------------------
@@ -60,6 +71,12 @@ class DeputyClient(HttpSession):
 
     def get_resource(self, obj: str, id: str) -> dict:
         return self._get(f"/resource/{obj}/{id}")
+
+    def history_resource(self, obj: str, id: str) -> list:
+        """The record's change log: one row per field change, with the time,
+        the old and new value and who made it. A deleted record has none to
+        give, and answers "Object not found" as get does."""
+        return self._get(f"/resource/{obj}/{id}/HISTORY")
 
     @staticmethod
     def _bounded_search(search: dict) -> dict:
