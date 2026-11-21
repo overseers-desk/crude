@@ -77,13 +77,52 @@ fingerprint, with the Meteor resume token cached under `$XDG_STATE_HOME/crude`
 (default `~/.local/state/crude/sonas_token`, mode `0600`) and reused. Read the
 code for the wire details.
 
-Operational note: a login from a device
-fingerprint or network the server has not seen returns a `verification-error` and
-emails a one-time link; opening it once trusts that device, after which logins
-resume silently. `sonas_login` detects this and prints guidance. A
-`too-many-requests` rate limiter also exists, which the cached resume token
-avoids. The cache is durable, so a reboot does not discard the resume token and
-re-trigger that verification email.
+What Sonas does with a login **[live]**, observed on app v4.64.2, 2026-11-20:
+
+- **A session lasts 25 hours from its login.** The login result carries the end
+  as `tokenExpires`. A resume returns the same end and does not move it. Each
+  password login starts a new session with its own 25 hours and leaves the
+  earlier ones valid, so a session is kept alive past a day only by logging in
+  again.
+- **A resume is never challenged; a password login is.** Sonas accepts a password
+  login only where it holds a verified trust record for the fingerprint and that
+  record's location is the one the login comes from. Otherwise it refuses with
+  the DDP error `verification-error` and emails the account a link, valid four
+  hours. The email names a browser, an OS, an IP address and a country. A
+  further refused login inside five minutes sends nothing ("Log in again in N
+  minute(s) to resend it"); after that the email is sent again ("We have
+  re-sent you an email").
+- **Fetching the link is the whole verification.** A plain GET answers with a
+  redirect to `/sign-in?verified=true`; no cookie or browser state is involved.
+  From then on password logins from that fingerprint and location succeed
+  with no email (the result's `type` is `fingerprint`).
+- **There is one trust record per fingerprint, and it holds one location.** A
+  password login from any other location is refused and replaces the record
+  with a pending one for itself, so the location verified before is no longer
+  trusted. While the record is pending, every login under the fingerprint is
+  refused. The email a later refused login triggers shows that login's
+  address, and its link still verifies the location whose login created the
+  record.
+
+The last point is why each install mints its own fingerprint
+(`client.device_fingerprint`, kept as `sonas_fingerprint` beside the token; a
+`[sonas] fingerprint` in the config overrides it). Up to 1.8.0 every install
+sent one built-in constant. Two machines on one account then undid each other's
+trust with every login, and a machine that polls kept a record pending for all
+of them: verification took two rounds, the first link verifying the other
+machine's location, and the trust was gone by the next day's login. With a
+fingerprint of its own a machine is verified in one round and nothing another
+machine does touches its record. An install upgrading from the constant keeps
+its cached session until that ends; its next password login is a new device to
+Sonas and takes the one verification.
+
+Not yet observed: how long a verified record stands when nothing replaces it,
+and whether "location" is the exact IP address or something coarser. A machine
+whose address changes should expect the email again until that is known.
+
+`sonas_login` raises on `verification-error` with Sonas's own sentence in the
+message. A `too-many-requests` rate limiter also exists, which the cached resume
+token avoids.
 
 ---
 
@@ -674,9 +713,11 @@ Trial any new write per the §11 policy.
 ## 10. Setup
 
 1. Fill in the `[sonas]` section following the `crude config-sample` output.
-2. The first run from a new device or network triggers the one-time
-   device-verification email (§3); open the link once, and later runs resume from
-   the cached token.
+2. The first run mints this install's device fingerprint, and Sonas answers its
+   login with the verification email (§3). Open the newest link once and re-run.
+   Runs resume from the cached token for the session's 25 hours; a later run
+   logs in again, with no email while Sonas still trusts this machine at this
+   location.
 
 ---
 

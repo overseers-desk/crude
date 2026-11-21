@@ -1,10 +1,11 @@
 """Sonas login over DDP — a customised Meteor accounts-password flow.
 
 Sonas renames the password field to ``fpPassword`` (same ``{digest, algorithm}``
-value) and requires a non-empty ``fpIds`` device fingerprint. A fingerprint the
-server has not seen triggers an email device-verification step; once the emailed
-link is opened the fingerprint is trusted and subsequent logins succeed. See
-``docs/sonas.md`` for the full protocol and the one-time setup.
+value) and requires a non-empty ``fpIds`` device fingerprint. A password login
+from a fingerprint and location the server does not trust is refused with a
+``verification-error`` and a link emailed to the account; once the link is
+opened, password logins from there succeed. A resume is not checked this way.
+See ``docs/sonas.md`` §3 for what was observed and the one-time setup.
 """
 
 from __future__ import annotations
@@ -26,12 +27,18 @@ def sonas_login(conn, user: str, digest: str, fingerprint: str) -> dict:
             "fpIds": [fingerprint],
         }])
     except RuntimeError as e:
+        detail = e.args[0] if e.args and isinstance(e.args[0], dict) else {}
         text = str(e).lower()
-        if "verification" in text or "verify this" in text or "sent you an email" in text:
+        if detail.get("error") == "verification-error" or "verification" in text \
+                or "verify this" in text or "sent you an email" in text:
+            # Sonas's own sentence says whether it sent, re-sent or held back the
+            # email and how long the link lasts, so it is passed on, not paraphrased.
+            said = (detail.get("reason") or "").strip()
             raise RuntimeError(
-                "Sonas sent a device-verification email for this login. Open the "
-                "link in it once (it trusts this machine's fingerprint), then re-run. "
-                "One-time setup; see docs/sonas.md.")
+                "Sonas refused this login until it is verified by email"
+                + (f' ("{said}")' if said else "") + ". Open the newest link sent "
+                "to the account's address once, then re-run; later logins from this "
+                "machine and network then pass. See docs/sonas.md §3.")
         if "fingerprint" in text:
             raise RuntimeError(
                 "Login rejected: set a non-empty [sonas] fingerprint in config.toml. "

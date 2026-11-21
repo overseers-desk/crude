@@ -26,8 +26,9 @@ timezone = "Australia/Brisbane"  # required (IANA name): rezdy reads every typed
 [sonas]
 username = "your-email@example.com"
 password_hash = "sha256-hex-of-your-password"  # read -rs P; printf '%s' "$P" | sha256sum | cut -d' ' -f1
-# fingerprint = "..."  # optional device id (Meteor fpIds); a default is built in. A new
-#                      # device triggers a one-time verification email; see docs/sonas.md.
+# fingerprint = "..."  # optional device id (Meteor fpIds), 32 hex digits. Left out, each
+#                      # install mints and keeps its own. Never share one between machines:
+#                      # Sonas trusts one location per fingerprint. See docs/sonas.md §3.
 # tenant = "..."       # optional; auto-discovered from your user record otherwise.
 
 [xero]

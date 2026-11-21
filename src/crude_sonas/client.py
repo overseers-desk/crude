@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import base64
 import os
+import secrets
 import socket
 import ssl
 import struct
@@ -39,11 +40,30 @@ UA = ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
 EPOCH_1900_MS = -2208988800000
 EPOCH_2100_MS = 4102444800000
 
-# The device fingerprint sent as Meteor's fpIds. It is not a secret — any stable
-# value works, trusted once per account via the email step (see docs/sonas.md) —
-# so it has a package default and only needs a [sonas] fingerprint override to use
-# a different one. A shared default is fine: device-trust is keyed per account.
-DEFAULT_FINGERPRINT = "0123456789abcdef0123456789abcdef"
+# Sonas trusts one location per device fingerprint (Meteor's fpIds), and a login
+# under a fingerprint it trusts elsewhere is refused and left pending, which then
+# refuses that fingerprint's logins from the trusted place too. So no two machines
+# may present the same one: each install mints its own (docs/sonas.md §3).
+def fingerprint_path() -> Path:
+    """Durable side file holding this install's device fingerprint for the account."""
+    return state_path("sonas_fingerprint", account())
+
+
+def device_fingerprint() -> str:
+    """This install's device fingerprint, minted on first use and kept.
+
+    It is an identifier, not a secret: 32 random hex digits that stand for this
+    machine and nothing else. Losing the file costs one verification email, the
+    same as a new machine.
+    """
+    path = fingerprint_path()
+    if path.exists():
+        kept = path.read_text().strip()
+        if kept:
+            return kept
+    minted = secrets.token_hex(16)
+    atomic_write(path, minted)
+    return minted
 
 
 # ----------------------------------------------------------------------
@@ -268,9 +288,8 @@ def token_path() -> Path:
     """Durable side file caching the Meteor resume token, namespaced by account.
 
     Lives under ``$XDG_STATE_HOME/crude`` (see ``crude_common.statestore``) so a
-    reboot does not discard it — losing the resume token forces a fresh login,
-    which from an unseen device or network re-triggers the one-time
-    device-verification email (docs/sonas.md §3).
+    reboot does not discard it: losing the resume token forces a password login,
+    the one kind Sonas may answer with a verification email (docs/sonas.md §3).
     """
     return state_path("sonas_token", account())
 
@@ -295,11 +314,11 @@ class SonasClient:
     login, then selectTenant).
     """
 
-    def __init__(self, user: str, digest: str, fingerprint: str = DEFAULT_FINGERPRINT,
+    def __init__(self, user: str, digest: str, fingerprint: str = None,
                  tenant: str = None):
         self.user = user
         self.digest = digest
-        self.fingerprint = fingerprint or DEFAULT_FINGERPRINT
+        self._fingerprint = fingerprint or None   # None: this install's own, minted at login
         self.tenant = tenant or None
         self.conn = None
         self._token = None
@@ -315,7 +334,8 @@ class SonasClient:
         token = cache.read_text().strip() if cache.exists() else ""
         res = sonas_resume(self.conn, token) if token else None
         if not res:
-            res = sonas_login(self.conn, self.user, self.digest, self.fingerprint)
+            res = sonas_login(self.conn, self.user, self.digest,
+                              self._fingerprint or device_fingerprint())
             token = res.get("token") or ""
             if token:
                 atomic_write(cache, token)

@@ -156,7 +156,7 @@ What Deputy keeps, and what it does not (checked on a live install, October 2026
 
 ## crude-sonas (app.sonas.events)
 
-Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_hash` = the SHA-256 hex of the password; optional `fingerprint`, `tenant`). Sonas has no public API; crude speaks its Meteor DDP backend directly. The first login from a new machine triggers a one-time device-verification email; open the link once to trust the device (full setup and the protocol are in the crude repo docs/sonas.md).
+Sonas wedding-venue software. Credentials in `[sonas]` (`username`, `password_hash` = the SHA-256 hex of the password; optional `fingerprint`, `tenant`). Sonas has no public API; crude speaks its Meteor DDP backend directly. A session lasts 25 hours and is resumed from a cached token; the login after that needs no email while Sonas still trusts this machine at this location. Otherwise the login is refused and Sonas emails the account a verification link, valid four hours: opening the newest one once restores it, and that takes a person with the account's mailbox (the protocol and what was observed are in the crude repo docs/sonas.md §3).
 
     crude-sonas event list [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--status <name|number>]
     crude-sonas event leads --source <name|categoryId> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--status <name|number>] [--list] [--json]   # count enquiries by lead source, by enquiry date

@@ -78,7 +78,7 @@ register_claude_command(app)
 
 
 def _make_client(config: dict):
-    from crude_sonas.client import SonasClient, DEFAULT_FINGERPRINT
+    from crude_sonas.client import SonasClient
     sonas = resolve_account(config, "sonas", account())
     user = sonas.get("username")
     digest = sonas.get("password_hash")
@@ -89,8 +89,7 @@ def _make_client(config: dict):
             err=True,
         )
         raise typer.Exit(1)
-    fingerprint = sonas.get("fingerprint") or DEFAULT_FINGERPRINT
-    return SonasClient(user, digest, fingerprint, tenant=sonas.get("tenant"))
+    return SonasClient(user, digest, sonas.get("fingerprint"), tenant=sonas.get("tenant"))
 
 
 def _zone():
