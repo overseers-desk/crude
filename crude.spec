@@ -1,5 +1,5 @@
 Name:           crude
-Version:        1.8.0
+Version:        1.8.1
 Release:        1%{?dist}
 Summary:        CRUD-style command-line clients for sites without a public API
 License:        MIT
@@ -100,6 +100,18 @@ done
 /usr/lib/python*/site-packages/crude-*.dist-info/
 
 %changelog
+* Sat Nov 21 2026 Rivermill Webmaster <pt7535886@gmail.com> - 1.8.1-1
+- crude-sonas: each install presents its own device fingerprint to Sonas,
+  minted on first use and kept as sonas_fingerprint in the state directory,
+  one per account; a [sonas] fingerprint line in the config still overrides
+  it. Every install used to send one built-in fingerprint, and Sonas trusts
+  one location per fingerprint, so two machines on one account undid each
+  other's trust with every login and verification took two emailed links; a
+  machine with its own fingerprint is verified by one. An upgraded install
+  keeps its cached session until that ends, and its next password login is a
+  new device to Sonas, verified once. The verification refusal now carries
+  Sonas's own sentence.
+
 * Mon Oct 26 2026 Weiwu Zhang <a@colourful.land> - 1.8.0-1
 - crude-deputy: new history verb. employee|roster|area|timesheet|leave history
   <id>, and resource history <Object> <id> for any object, print the record's

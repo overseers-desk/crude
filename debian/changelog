@@ -1,3 +1,18 @@
+crude (1.8.1) unstable; urgency=medium
+
+  * crude-sonas: each install presents its own device fingerprint to Sonas,
+    minted on first use and kept as `sonas_fingerprint` in the state
+    directory, one per account; a `[sonas] fingerprint` line in the config
+    still overrides it. Every install used to send one built-in fingerprint,
+    and Sonas trusts one location per fingerprint, so two machines on one
+    account undid each other's trust with every login and verification took
+    two emailed links; a machine with its own fingerprint is verified by one.
+    An upgraded install keeps its cached session until that ends, and its next
+    password login is a new device to Sonas, verified once. The verification
+    refusal now carries Sonas's own sentence.
+
+ -- Rivermill Webmaster <pt7535886@gmail.com>  Sat, 21 Nov 2026 23:43:26 +1000
+
 crude (1.8.0) unstable; urgency=medium
 
   * crude-deputy: new `history` verb. `employee|roster|area|timesheet|leave
