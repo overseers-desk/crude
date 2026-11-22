@@ -457,7 +457,12 @@ that reason (O-class, public-widget visibility); shapes from the chunk:
   `minTimeBeforeBooking` 0–999.
 - `updateAvailability({availabilityId, modifier})`: modifier over
   AvailabilityUpdateSchema (the core minus venueId/availableFor/defaultStaffId);
-  exceptions must fall inside `$set.from`..`$set.to`.
+  exceptions must fall inside `$set.from`..`$set.to`. **[live from the web
+  app's own connection]** A `$set` of `availability` alone is refused with
+  `Error with updateAvailability`; it succeeds with `title`, `from`, `to` and
+  `exceptions` set alongside it at their current values. A standalone DDP
+  client (crude) is refused with `updateAvailability.outdatedClient` ("Your app
+  version is outdated"), so `availability update` cannot write.
 - `deleteAvailability({availabilityId})`.
 - `getVenueAvailability({venueId, eventId, startDate, endDate, eventType})` (read).
 
@@ -783,8 +788,10 @@ retires them together.
 - Availability writes (`createAvailability`, `updateAvailability`,
   `deleteAvailability`) and tasting bookings (`eventAddTastingBooking`,
   `eventCancelBooking`) ship unverified (§6.2): windows surface on the public
-  booking widget, and a tasting booking may mail the couple. To verify: observe
-  the real UI actions' WS frames.
+  booking widget, and a tasting booking may mail the couple. `updateAvailability`
+  is the one observed: Sonas refuses it from crude as an outdated client, and
+  accepts it from the web app with the full `$set` §6.2 describes. To verify the
+  rest: observe the real UI actions' WS frames.
 - T3 catalog reads are live (§6.4); the catalog write-method args remain
   unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.
