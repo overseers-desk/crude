@@ -55,8 +55,19 @@ Out of scope (§8): reviews, platform-contracts, workflows, forms, `document add
 - **Connect handshake**: send `{"msg":"connect","version":"1","support":["1","pre2","pre1"]}`;
   server replies `{"msg":"connected","session":"..."}`.
 - **Heartbeats**: server sends `{"msg":"ping","id":...}`; reply `{"msg":"pong","id":...}`.
+- **Client version**: right after `connected`, before login, the web app calls the
+  not-logged-in method `setClientVersion` with `[{"version": "<v>"}]` and repeats it on
+  every reconnect **[observed in the web app's frames, 2026-11-23]**. `<v>` is
+  `Meteor.settings.public.version`, published on the index page as `PUBLIC_SETTINGS.version`
+  in `__meteor_runtime_config__` (4.64.2 on 2026-11-23). Every `PermissionMethod` carries
+  `hasMatchingVersionMixin`, which refuses a call with `<method>.outdatedClient` when the
+  connection's client version differs from the server's **[read from the shipped client
+  code; that `setClientVersion` stores the version on the connection is inferred]**. crude
+  sends no `setClientVersion`, so its `PermissionMethod` calls are refused (§11);
+  subscriptions and the accounts login method are unaffected.
 - **Version coupling**: Meteor autoupdate (`meteor_autoupdate_clientVersions`) hot-pushes
-  a matched client to browsers and force-reloads stale ones. A standalone DDP client
+  a matched client to browsers and force-reloads stale ones; the outdated-client refusal
+  above is a separate check on the version a client declares. A standalone DDP client
   is exposed to silent server-side changes on each Sonas release; treat the method
   and pub shapes here as a snapshot of v4.58.6. Monti APM (`engine.montiapm.com`) records
   client traffic, so automated use is visible to the vendor.
@@ -794,12 +805,16 @@ retires them together.
   is the one observed: Sonas refuses it from crude as an outdated client, and
   accepts it from the web app with the full `$set` §6.2 describes. To verify the
   rest: observe the real UI actions' WS frames.
-- Outdated-client refusals: Sonas refuses `updateAvailability` (2026-11-21) and
-  `calendarEventDelete` (2026-11-23) from crude's standalone DDP client with
-  `<method>.outdatedClient` ("Your app version is outdated"), while the same
-  calls from the web app's own connection succeed. `calendarEventDelete` had
-  worked from crude before, so the check is newer than crude's live tests; which
-  other write methods it now covers is unverified.
+- Outdated-client refusals: crude sends no `setClientVersion` (§2), so Sonas
+  refuses its `PermissionMethod` calls with `<method>.outdatedClient` ("Your app
+  version is outdated"), observed for `updateAvailability` (2026-11-21) and
+  `calendarEventDelete` (2026-11-23) while the same calls from the web app's own
+  connection succeed. Every write method crude sends is a `PermissionMethod`, as
+  is the read-style `eventCanChangeStatus`, so all are expected to be refused;
+  subscriptions are unaffected. `calendarEventDelete` had worked from crude
+  before, so the check came with a recent release. Calling `setClientVersion`
+  with the live version after `connected`, and again on reconnect, is the
+  expected fix; it is untested.
 - T3 catalog reads are live (§6.4); the catalog write-method args remain
   unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.
