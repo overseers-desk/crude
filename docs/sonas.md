@@ -437,7 +437,9 @@ Appointments (collection `calendar-events`):
   CalendarEventSchema fields, but the server needs `$set.start` and `$set.end`
   together in every modifier; a title-only or start-only `$set` passes schema
   validation and then fails with an opaque `method-exec-err`.
-- `calendarEventDelete({id})` **[live]**,
+- `calendarEventDelete({id})` **[live]**; refused from crude as
+  `calendarEventDelete.outdatedClient` on 2026-11-23, when the same call from the
+  web app's own connection succeeded (see §11 on outdated-client refusals),
   `calendarEventSetAttendance({calendarEventId, eventId, attended, noteText})`,
   `eventCreateCalendarEvent({eventId, data})`, `eventUpdateCalendarEvent({calendarEventId, modifier})`,
   `eventDeleteCalendarEvent({calendarEventId})`, `eventCancelAppointment({calendarEventId, eventId})`.
@@ -792,6 +794,12 @@ retires them together.
   is the one observed: Sonas refuses it from crude as an outdated client, and
   accepts it from the web app with the full `$set` §6.2 describes. To verify the
   rest: observe the real UI actions' WS frames.
+- Outdated-client refusals: Sonas refuses `updateAvailability` (2026-11-21) and
+  `calendarEventDelete` (2026-11-23) from crude's standalone DDP client with
+  `<method>.outdatedClient` ("Your app version is outdated"), while the same
+  calls from the web app's own connection succeed. `calendarEventDelete` had
+  worked from crude before, so the check is newer than crude's live tests; which
+  other write methods it now covers is unverified.
 - T3 catalog reads are live (§6.4); the catalog write-method args remain
   unconfirmed.
 - Tabular data-pub signatures vary per table; use the try-in-order approach in §5.
